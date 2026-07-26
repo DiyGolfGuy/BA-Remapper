@@ -11,11 +11,23 @@ CoordMode, Mouse, Screen
 DllCall("SetProcessDPIAware")
 
 ; ============================================================
-;  BA CUSTOM PRODUCTS - CONTROL BOX REMAPPER v4.0
+;  BA CUSTOM PRODUCTS - CONTROL BOX REMAPPER v4.1
 ;  bacustomproducts@gmail.com   GitHub: DiyGolfGuy
 ;
-;  Full rewrite from v3.1.x.  Designed as a proper Windows
-;  app from the ground up.
+;  CHANGES IN v4.1
+;  - Builder window redesigned to mirror the physical control
+;    box panel exactly: 4 across the top, CLUB column on the
+;    left, AIM cluster on the right, TEE POS pair at the
+;    bottom center, RESET AIM / SHOT CAM in the corners.
+;  - Reopen detection rewritten around a Windows mutex.  The
+;    second instance now knows the first is running no matter
+;    what (independent of window titles), signals it, exits.
+;  - Stale trigger file is cleared at launch so the window
+;    can no longer pop open unexpectedly at boot.
+;  - Builder stays in sync when you switch profiles while
+;    it is open (labels, FN dropdown, subtitle all refresh).
+;  - Help text updated for the Startup-folder auto-start
+;    method (shell:startup) introduced late in v4.0.
 ;
 ;  STORAGE
 ;    All data lives in:
@@ -34,26 +46,23 @@ DllCall("SetProcessDPIAware")
 ;  TWO KINDS OF "CURRENT PROFILE"
 ;    Active Profile           the one you're using right now
 ;    Boot Profile             the one auto-loaded at Windows boot
-;    They can be the same or different. ★ in the dropdown marks
-;    the Boot Profile.
+;    [BOOT] in the dropdown marks the Boot Profile.
 ;
 ;  EVERYTHING AUTO-SAVES
 ;    Configure a button       -> profile saved instantly
 ;    Toggle a checkbox        -> settings saved instantly
 ;    Switch profile           -> old saved before new loaded
-;    No more "Save & Close" - just "Close"
 ;
-;  CLEANUP IS A BUTTON
-;    The main window has a Cleanup button that removes the
-;    Windows startup registry entry + all data files in one
-;    click (with confirmation). Solves the "phantom missing
-;    file" boot error completely.
+;  AUTO-START
+;    Uses a shortcut in the Windows Startup folder
+;    (shell:startup) - visible, reliable, easy to remove.
+;    Cleanup button removes it plus all data files.
 ; ============================================================
 
 ; ============================================================
 ;  CONSTANTS / PATHS
 ; ============================================================
-AppVersion := "4.0"
+AppVersion := "4.1"
 MainWinTitle    := "BA Custom Control Box Remapper"
 BuilderWinTitle := "BA Custom Control Box - Button Builder"
 HelpWinTitle    := "BA Custom Control Box - Help"
@@ -299,28 +308,36 @@ MigrateLegacyFiles() {
 }
 
 ; ============================================================
-;  SECOND-INSTANCE HANDLER
+;  SECOND-INSTANCE HANDLER  (mutex-based, v4.1)
 ;
-;  #SingleInstance Off + manual detection via title-only WinExist
-;  + PostMessage AND a temp trigger file for belt-and-suspenders.
+;  A named Windows mutex tells us with 100% certainty whether
+;  another BARemapper instance is already running - no window
+;  title matching involved, works compiled or uncompiled.
 ;
 ;  When user double-clicks the .exe while already running:
-;    1. This block runs in the new instance
-;    2. Finds the running window by title
-;    3. Drops a trigger file + posts WM_SHOWAPP
-;    4. New instance exits immediately
-;    5. Running instance picks up either signal -> shows GUI
+;    1. CreateMutex reports ERROR_ALREADY_EXISTS (183)
+;    2. This (second) instance drops a trigger file AND tries
+;       PostMessage for an instant response
+;    3. Second instance exits
+;    4. Running instance picks up either signal -> shows GUI
+;       (trigger file is polled every 500ms as the fallback)
 ; ============================================================
-DetectHiddenWindows, On
-SetTitleMatchMode, 2
-existingHwnd := WinExist(MainWinTitle)
-DetectHiddenWindows, Off
-if (existingHwnd) {
+MutexHandle := DllCall("CreateMutex", "Ptr", 0, "Int", 0, "Str", "BARemapper_BACustomProducts_SingleInstance", "Ptr")
+if (DllCall("GetLastError") = 183) {   ; ERROR_ALREADY_EXISTS
     FileAppend, show, %TriggerFile%
-    PostMessage, %WM_SHOWAPP%, 0, 0, , ahk_id %existingHwnd%
+    DetectHiddenWindows, On
+    SetTitleMatchMode, 2
+    existingHwnd := WinExist(MainWinTitle)
+    if (existingHwnd)
+        PostMessage, %WM_SHOWAPP%, 0, 0, , ahk_id %existingHwnd%
+    DetectHiddenWindows, Off
     Sleep, 100
     ExitApp
 }
+; We are the first (only) instance.  Clear any stale trigger
+; file left over from a crash so the window doesn't pop open
+; unexpectedly (especially during a hidden boot launch).
+FileDelete, %TriggerFile%
 
 ; Register message handler for future second-instance signals
 OnMessage(WM_SHOWAPP, "ShowMainFromMessage")
@@ -850,7 +867,7 @@ RefreshProfileDropdown() {
 RefreshBootProfileLabel() {
     global StartupProfile
     GuiControl, Main:, BootProfileLabel, %StartupProfile%
-    RefreshProfileDropdown()  ; ★ marker needs to move
+    RefreshProfileDropdown()  ; [BOOT] marker needs to move
 }
 
 ; Pull values from state vars back into main GUI controls
@@ -879,6 +896,7 @@ OnProfileChange:
     ActiveProfile := selected
     LoadProfile(ActiveProfile)
     SaveSettings()
+    RefreshBuilderIfOpen()
 Return
 
 OnNewProfile:
@@ -907,6 +925,7 @@ OnNewProfile:
     ProfileList.Push(newName)
     SaveSettings()
     RefreshProfileDropdown()
+    RefreshBuilderIfOpen()
 Return
 
 OnRenameProfile:
@@ -942,6 +961,7 @@ OnRenameProfile:
     SaveSettings()
     RefreshBootProfileLabel()
     RefreshProfileDropdown()
+    RefreshBuilderIfOpen()
 Return
 
 OnDeleteProfile:
@@ -969,6 +989,7 @@ OnDeleteProfile:
     SaveSettings()
     RefreshBootProfileLabel()
     RefreshProfileDropdown()
+    RefreshBuilderIfOpen()
 Return
 
 OnSetBootProfile:
@@ -1130,21 +1151,22 @@ ShowHelp:
     PROFILES
     Each profile is its own .ini file in the profiles folder.
     Use the dropdown to switch.  Every change auto-saves.
-    The ★ marks your Boot Profile - the one Windows auto-loads
+    The [BOOT] tag marks your Boot Profile - the one auto-loaded
     when "Start with Windows" is checked.
 
     "START WITH WINDOWS"
-    When checked, BARemapper adds itself to the Windows boot
-    sequence (via the registry).  On boot it auto-loads your
-    Boot Profile, turns mapping ON, and hides to the tray.
-    The registry entry refreshes itself to the current .exe
-    path every launch.
+    When checked, a shortcut named BARemapper.lnk is placed
+    in your Windows Startup folder.  See it yourself: press
+    Win+R, type  shell:startup  and press Enter.  On login,
+    Windows runs the shortcut, which loads your Boot Profile,
+    turns mapping ON, and hides to the tray.  The shortcut
+    re-points itself to the current .exe location on every
+    launch, so moving the app never breaks boot.
 
     IMPORTANT: BEFORE YOU DELETE BAREMAPPER
-    Always click Cleanup first, OR uncheck Start with Windows.
-    Otherwise the registry boot entry stays behind and Windows
-    will show "Script file not found" on every boot.  Cleanup
-    can also fix this after the fact.
+    Click Cleanup first, OR uncheck Start with Windows.
+    That removes the startup shortcut so Windows won't try
+    to launch a program that no longer exists.
 
     WHERE ARE MY FILES?
     The "Files are saved at" line on the main window shows the
@@ -1182,17 +1204,16 @@ ShowBuilder:
     }
     Gui, Builder:Destroy
     Gui, Builder:New, +AlwaysOnTop, %BuilderWinTitle%
-    Gui, Builder:Color, 2d5a27
+    Gui, Builder:Color, 1c1c1c   ; near-black, like the physical box
 
-    Gui, Builder:Font, s18 cWhite Bold, Segoe UI
-    Gui, Builder:Add, Text, x20 y15 w920 Center, BA CUSTOM PRODUCTS
+    Gui, Builder:Font, s16 cWhite Bold, Segoe UI
+    Gui, Builder:Add, Text, x20 y10 w940 Center, BA CUSTOM PRODUCTS
     Gui, Builder:Font, s10 cC8E6C2 Normal, Segoe UI
-    Gui, Builder:Add, Text, x20 y45 w920 Center, Button Builder  -  Profile: %ActiveProfile%  (auto-saves)
-    Gui, Builder:Add, Text, x30 y70 w880 0x10
+    Gui, Builder:Add, Text, x20 y40 w940 Center vBuilderSubtitle, Button Builder  -  Profile: %ActiveProfile%  (auto-saves)
 
-    ; FN selector
+    ; FN selector row
     Gui, Builder:Font, s10 cFFFF00 Bold, Segoe UI
-    Gui, Builder:Add, Text, x280 y85 w110 Right, FN BUTTON:
+    Gui, Builder:Add, Text, x280 y68 w110 Right, FN BUTTON:
     Gui, Builder:Font, s10 c000000 Normal, Segoe UI
     fnList := "Reset Aim (A)|Heat Map (Y)|Putt (U)|Flyover (O)|Club Up (I)|Club Down (K)|Tee Left (C)|Tee Right (V)|Shot Cam (J)"
     fnDefault := "Reset Aim (A)"
@@ -1200,49 +1221,87 @@ ShowBuilder:
         if (bId = FnButtonId)
             fnDefault := dispName
     }
-    Gui, Builder:Add, DropDownList, x400 y82 w200 vFnChoice gOnFnChange, %fnList%
+    Gui, Builder:Add, DropDownList, x400 y65 w200 vFnChoice gOnFnChange, %fnList%
     GuiControl, Builder:ChooseString, FnChoice, %fnDefault%
 
-    Gui, Builder:Font, s9 cWhite Bold, Segoe UI
+    Gui, Builder:Add, Text, x30 y98 w920 0x10
 
-    ; Inline button creation - keeps control variables in script
-    ; global scope (no function = no scope issue with v-names).
-    ; Layout:
-    ;   Row 0 (y=125): Mulligan(d) | HeatMap | Putt    | Flyover
-    ;   Row 1 (y=235): ClubUp      |         | Up      |
-    ;   Row 2 (y=345):             | Left    |         | Right
-    ;   Row 3 (y=455): ClubDown    |         | Down    |
-    ;   Row 4 (y=565): ResetAim    | TeeLeft | TeeRight| ShotCam
-    ; Column X positions:  90, 245, 400, 555 ; size 95x95
-    Gui, Builder:Add, Button, x90  y125 w95 h95 Disabled    vBtnMulligan,            MULLIGAN`nCtrl+M
-    Gui, Builder:Add, Button, x245 y125 w95 h95 gBtnHeatmap   vBtnHeatmap,           HEAT MAP`nY
-    Gui, Builder:Add, Button, x400 y125 w95 h95 gBtnPutt      vBtnPutt,              PUTT`nU
-    Gui, Builder:Add, Button, x555 y125 w95 h95 gBtnFlyover   vBtnFlyover,           FLYOVER`nO
-    Gui, Builder:Add, Button, x90  y235 w95 h95 gBtnClubup    vBtnClubup,            CLUB UP`nI
-    Gui, Builder:Add, Button, x400 y235 w95 h95 gBtnUp        vBtnUp,                UP`nArrow
-    Gui, Builder:Add, Button, x245 y345 w95 h95 gBtnLeft      vBtnLeft,              LEFT`nArrow
-    Gui, Builder:Add, Button, x555 y345 w95 h95 gBtnRight     vBtnRight,             RIGHT`nArrow
-    Gui, Builder:Add, Button, x90  y455 w95 h95 gBtnClubdown  vBtnClubdown,          CLUB DN`nK
-    Gui, Builder:Add, Button, x400 y455 w95 h95 gBtnDown      vBtnDown,              DOWN`nArrow
-    Gui, Builder:Add, Button, x90  y565 w95 h95 gBtnResetaim  vBtnResetaim,          RESET AIM`nA
-    Gui, Builder:Add, Button, x245 y565 w95 h95 gBtnTeeleft   vBtnTeeleft,           TEE LEFT`nC
-    Gui, Builder:Add, Button, x400 y565 w95 h95 gBtnTeeright  vBtnTeeright,          TEE RIGHT`nV
-    Gui, Builder:Add, Button, x555 y565 w95 h95 gBtnShotcam   vBtnShotcam,           SHOT CAM`nJ
+    ; --------------------------------------------------------
+    ;  PANEL REPLICA - positions mirror the physical box:
+    ;
+    ;   MULLIGAN    HEAT MAP     PUTT       FLYOVER
+    ;         ^                       ^
+    ;      [CLUB UP]              [AIM UP]
+    ;               BA CUSTOM PRODUCTS
+    ;    CLUB            < [AIM LT]  AIM  [AIM RT] >
+    ;      [CLUB DN]              [AIM DN]
+    ;         v          TEE POS     v
+    ;   RESET AIM   < [TEE L]  [TEE R] >   SHOT CAM
+    ; --------------------------------------------------------
 
-    ; Bottom action buttons - only Reset / Close
-    bottomY := 685   ; 565 + 95 + 25 margin
+    ; Top row
+    Gui, Builder:Font, s9 c000000 Normal, Segoe UI
+    Gui, Builder:Add, Button, x55  y110 w85 h85 Disabled     vBtnMulligan, MULLIGAN`nCtrl+M
+    Gui, Builder:Add, Button, x280 y110 w85 h85 gBtnHeatmap  vBtnHeatmap,  HEAT MAP`nY
+    Gui, Builder:Add, Button, x505 y110 w85 h85 gBtnPutt     vBtnPutt,     PUTT`nU
+    Gui, Builder:Add, Button, x800 y110 w85 h85 gBtnFlyover  vBtnFlyover,  FLYOVER`nO
+
+    ; Up arrows (panel print)
     Gui, Builder:Font, s11 cWhite Bold, Segoe UI
-    Gui, Builder:Add, Button, x350 y%bottomY% w150 h40 gBuilderReset, Reset Profile
-    Gui, Builder:Add, Button, x510 y%bottomY% w150 h40 gBuilderClose, Close
+    Gui, Builder:Add, Text, x222 y198 w20 Center, ^
+    Gui, Builder:Add, Text, x677 y198 w20 Center, ^
 
-    statusY := bottomY + 50
+    ; Second row: CLUB UP (left) and AIM UP (right)
+    Gui, Builder:Font, s9 c000000 Normal, Segoe UI
+    Gui, Builder:Add, Button, x190 y218 w85 h85 gBtnClubup vBtnClubup, CLUB UP`nI
+    Gui, Builder:Add, Button, x645 y218 w85 h85 gBtnUp     vBtnUp,     AIM UP`nUp
+
+    ; Brand center (like the logo on the physical panel)
+    Gui, Builder:Font, s12 c2ECC71 Bold, Segoe UI
+    Gui, Builder:Add, Text, x300 y252 w320 Center, BA CUSTOM PRODUCTS
+
+    ; Middle row: AIM LEFT / AIM text / AIM RIGHT, CLUB label at left
+    Gui, Builder:Font, s16 cWhite Bold, Segoe UI
+    Gui, Builder:Add, Text, x157 y355 w150 Center, CLUB
+    Gui, Builder:Add, Text, x640 y355 w150 Center, AIM
+    Gui, Builder:Font, s14 cWhite Bold, Segoe UI
+    Gui, Builder:Add, Text, x505 y358 w20 Center, <
+    Gui, Builder:Add, Text, x897 y358 w20 Center, >
+    Gui, Builder:Font, s9 c000000 Normal, Segoe UI
+    Gui, Builder:Add, Button, x535 y330 w85 h85 gBtnLeft  vBtnLeft,  AIM LEFT`nLeft
+    Gui, Builder:Add, Button, x805 y330 w85 h85 gBtnRight vBtnRight, AIM RIGHT`nRight
+
+    ; Fourth row: CLUB DOWN (left) and AIM DOWN (right)
+    Gui, Builder:Add, Button, x190 y440 w85 h85 gBtnClubdown vBtnClubdown, CLUB DOWN`nK
+    Gui, Builder:Add, Button, x645 y440 w85 h85 gBtnDown     vBtnDown,     AIM DOWN`nDown
+
+    ; Down arrows + TEE POS panel print
+    Gui, Builder:Font, s11 cWhite Bold, Segoe UI
+    Gui, Builder:Add, Text, x222 y528 w20 Center, v
+    Gui, Builder:Add, Text, x677 y528 w20 Center, v
+    Gui, Builder:Add, Text, x455 y528 w120 Center, TEE POS
+
+    ; Bottom row: corners + tee pair
+    Gui, Builder:Font, s9 c000000 Normal, Segoe UI
+    Gui, Builder:Add, Button, x55  y550 w85 h85 gBtnResetaim vBtnResetaim, RESET AIM`nA
+    Gui, Builder:Add, Button, x385 y550 w85 h85 gBtnTeeleft  vBtnTeeleft,  TEE LEFT`nC
+    Gui, Builder:Add, Button, x560 y550 w85 h85 gBtnTeeright vBtnTeeright, TEE RIGHT`nV
+    Gui, Builder:Add, Button, x800 y550 w85 h85 gBtnShotcam  vBtnShotcam,  SHOT CAM`nJ
+    Gui, Builder:Font, s14 cWhite Bold, Segoe UI
+    Gui, Builder:Add, Text, x352 y580 w20 Center, <
+    Gui, Builder:Add, Text, x652 y580 w20 Center, >
+
+    ; Bottom action buttons
+    Gui, Builder:Font, s11 cWhite Bold, Segoe UI
+    Gui, Builder:Add, Button, x340 y655 w150 h40 gBuilderReset, Reset Profile
+    Gui, Builder:Add, Button, x510 y655 w150 h40 gBuilderClose, Close
+
     Gui, Builder:Font, s9 cC8E6C2 Normal, Segoe UI
-    Gui, Builder:Add, Text, x20 y%statusY% w920 Center vBuilderStatus, Click a button to configure its secondary (FN) function  -  all changes auto-save
+    Gui, Builder:Add, Text, x20 y705 w940 Center vBuilderStatus, Click a button to configure its secondary (FN) function  -  all changes auto-save
 
     UpdateBuilderLabels()
 
-    winH := statusY + 30
-    Gui, Builder:Show, w960 h%winH%
+    Gui, Builder:Show, w980 h735
 Return
 
 OnFnChange:
@@ -1278,15 +1337,15 @@ BtnClubup:
 Return
 
 BtnLeft:
-    ConfigButton("left", "LEFT", "Left Arrow")
+    ConfigButton("left", "AIM LEFT", "Left Arrow")
 Return
 
 BtnUp:
-    ConfigButton("up", "UP", "Up Arrow")
+    ConfigButton("up", "AIM UP", "Up Arrow")
 Return
 
 BtnRight:
-    ConfigButton("right", "RIGHT", "Right Arrow")
+    ConfigButton("right", "AIM RIGHT", "Right Arrow")
 Return
 
 BtnResetaim:
@@ -1294,7 +1353,7 @@ BtnResetaim:
 Return
 
 BtnDown:
-    ConfigButton("down", "DOWN", "Down Arrow")
+    ConfigButton("down", "AIM DOWN", "Down Arrow")
 Return
 
 BtnTeeleft:
@@ -1424,15 +1483,15 @@ UpdateBuilderLabels() {
     UpdateOneLabel("putt",     "BtnPutt",     "PUTT",      "U")
     UpdateOneLabel("flyover",  "BtnFlyover",  "FLYOVER",   "O")
     UpdateOneLabel("clubup",   "BtnClubup",   "CLUB UP",   "I")
-    UpdateOneLabel("left",     "BtnLeft",     "LEFT",      "Arrow")
-    UpdateOneLabel("up",       "BtnUp",       "UP",        "Arrow")
-    UpdateOneLabel("right",    "BtnRight",    "RIGHT",     "Arrow")
+    UpdateOneLabel("left",     "BtnLeft",     "AIM LEFT",  "Left")
+    UpdateOneLabel("up",       "BtnUp",       "AIM UP",    "Up")
+    UpdateOneLabel("right",    "BtnRight",    "AIM RIGHT", "Right")
     UpdateOneLabel("resetaim", "BtnResetaim", "RESET AIM", "A")
-    UpdateOneLabel("down",     "BtnDown",     "DOWN",      "Arrow")
+    UpdateOneLabel("down",     "BtnDown",     "AIM DOWN",  "Down")
     UpdateOneLabel("teeleft",  "BtnTeeleft",  "TEE LEFT",  "C")
     UpdateOneLabel("teeright", "BtnTeeright", "TEE RIGHT", "V")
     UpdateOneLabel("shotcam",  "BtnShotcam",  "SHOT CAM",  "J")
-    UpdateOneLabel("clubdown", "BtnClubdown", "CLUB DN",   "K")
+    UpdateOneLabel("clubdown", "BtnClubdown", "CLUB DOWN", "K")
 }
 
 UpdateOneLabel(btnIdVal, ctrlName, dispName, priKey) {
@@ -1452,6 +1511,23 @@ UpdateOneLabel(btnIdVal, ctrlName, dispName, priKey) {
         }
     }
     GuiControl, Builder:, %ctrlName%, %label%
+}
+
+; Keep the Builder in sync when the profile changes while it
+; is open: subtitle, FN dropdown, and all button labels.
+RefreshBuilderIfOpen() {
+    global BuilderWinTitle, ActiveProfile, FnButtonId, FnChoiceMap
+    if (!WinExist(BuilderWinTitle))
+        return
+    GuiControl, Builder:, BuilderSubtitle, Button Builder  -  Profile: %ActiveProfile%  (auto-saves)
+    for dispName, bId in FnChoiceMap {
+        if (bId = FnButtonId) {
+            GuiControl, Builder:ChooseString, FnChoice, %dispName%
+            break
+        }
+    }
+    UpdateBuilderLabels()
+    GuiControl, Builder:, BuilderStatus, Now editing profile: %ActiveProfile%
 }
 
 ; ============================================================
