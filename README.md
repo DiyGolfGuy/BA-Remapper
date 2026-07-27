@@ -1,151 +1,117 @@
-# BA Custom Control Box Remapper
+# BA Remapper
 
-**Add secondary functions to your BA Custom Golf Simulator Control Box — no drivers, no installs, just one .exe.**
+**Control box software for GSPro — by BA Custom Products**
 
-Built for the [BA Custom Products](https://www.bacustomproducts.com) GSPRO V2 Wireless Golf Simulator Control Box.
+BA Remapper is the companion app for the BA Custom Products wireless control box. Out of the box, every button sends its printed GSPro hotkey with no software at all. BA Remapper adds the FN secondary layer (the yellow print), on-screen Smart Clicks powered by built-in Windows OCR, and an automatic scramble shot picker — all in a single portable .exe with nothing to install.
+
+---
+
+## Download and First Run
+
+1. Download `BARemapper.exe` from the [Releases](../../releases) page (or bacustomproducts.com).
+2. Put it somewhere permanent — recommended: `Documents\BA Custom Products\Remapper\BARemapper.exe`. Don't run it from Downloads long-term; the auto-start shortcut follows the file.
+3. Double-click to run. If Windows SmartScreen appears, click **More info → Run anyway** (the app is not yet code-signed; this prompt appears once per downloaded file).
+4. That first run automatically clears the Windows download flag, so "Start with Windows" launches cleanly at every boot afterward.
+
+**Requirements:** Windows 10 or 11, GSPro. Smart Clicks and Auto-Pick Scramble use the OCR engine built into Windows (standard English installs qualify) — no extra software, no internet, nothing sent anywhere.
 
 ---
 
 ## What It Does
 
-Your BA Custom control box works perfectly out of the box with its 14 default GSPro hotkeys. This remapper is an **optional advanced tool** that adds secondary functions to each button using a hold-to-activate FN key — like a shift key for your control box.
+### Primary keys — always working
+The box's white-printed functions (Heat Map, Putt, Flyover, Club Up/Down, Aim arrows, Tee position, Reset Aim, Shot Cam, Mulligan) work exactly as printed, remapper running or not. Turning the remapper OFF (Ctrl+F12 or the big button) restores plain typing everywhere.
 
-- **FN + Button = Secondary Action** — map any button to a different GSPro hotkey or a screen click
-- **Tap FN Alone = Normal Function** — the FN button still sends its primary key when tapped
-- **Toggle ON/OFF** — press Ctrl+F12 or click the button. Turn it off when you need to type.
-- **Multiple Profiles** — set up different configs for 2-man scramble, solo practice, league play, etc.
-- **Screen Click Mode** — FN + button moves the mouse to a saved position, clicks, then hides the cursor
-- **No drivers or dependencies** — one .exe file, runs from anywhere
+### FN secondary layer
+Hold the FN button (Reset Aim by default) and press any other button to fire its secondary function. Keep FN held and tap repeatedly — consecutive presses of the same Smart Click fire near-instantly, so you can cycle Next Option or walk the ball with Move Forward / Move Back as fast as you can tap.
 
----
+Each button's secondary can be one of three types:
 
-## Download
+| Type | What it does |
+|---|---|
+| **GSPro Hotkey** | Sends any GSPro key, including scramble Select Shot 1–4, Clear View (B), Mulligan, and every standard binding |
+| **Smart Click (OCR)** | Reads the live GSPro screen, finds the menu button by its text, and clicks it — zero setup, works at any resolution, any monitor count, any Windows scaling |
+| **Taught Screen Click** | Clicks a fixed position you capture yourself (the classic method, still available) |
 
-Go to [Releases](../../releases) and download **BARemapper.exe**. That's it — just run it.
+### Smart Clicks
+Five penalty/relief menu actions are built in: **Move Forward, Move Back, Next Option, Drop Ball / Rehit, OB Rehit**. Before any click, the app verifies the entire relief menu — all buttons, in order, evenly spaced, one column — and clicks the verified position inside it. It never clicks a lone matched word, never clicks into an opening or closing animation, and if a button's own text misreads, the surrounding menu still proves where it is. Drop Ball / Rehit clicks the changing second slot whichever word it currently shows; OB Rehit handles both the "You have hit OB!" dialog and the relief menu's rehit option. If the menu genuinely isn't on screen, the app tells you instead of guessing.
 
----
+### Built-in preset: "Basic Secondary"
+Select **Basic Secondary** from the profile dropdown and the yellow print on the box just works — zero programming:
 
-## Quick Start
+| FN + button | Action |
+|---|---|
+| CLUB DOWN | Clear View (B) |
+| TEE LEFT | OB Rehit |
+| AIM UP | Move Forward |
+| AIM DOWN | Move Back |
+| AIM LEFT | Next Option |
+| AIM RIGHT | Drop Ball / Rehit |
 
-1. **Run BARemapper.exe** — a window opens immediately
-2. **Click "Open Button Builder"** — green layout matching your box appears
-3. **Click any button** to set its secondary FN function
-4. **Pick your FN key** — default is Reset Aim (A), change it in the dropdown
-5. **Save & Close** the builder
-6. **Click "Turn ON"** (or press Ctrl+F12) to activate remapping
-7. **Hold FN + press a button** on your control box to fire the secondary action
+The preset is locked so it always matches the print — it can't be edited, reset, or renamed. Pressing **Del** on it restores factory defaults instantly. To customize, create your own profile with **+ New**.
 
-**Turn remapping OFF** (Ctrl+F12) when you need to type course names or use your keyboard normally.
+### Auto-Pick Scramble
+Turn on the checkbox and BA Remapper watches for GSPro's scramble shot-select cards whenever the app is running. After your chosen delay (5 / 10 / 15 / 20 seconds, with an optional on-screen countdown), it picks the best ball by pressing its shot key (1–4):
 
----
+1. **Fewest strokes first** — a 2nd-shot ball always beats a closer 3rd-shot ball from a penalty drop
+2. **Green always wins** among those — a ball on the green beats any distance advantage elsewhere
+3. **Shortest distance** decides the rest
 
-## Features
+Pick manually any time — when the cards close, the countdown cancels silently. If the cards can't be read completely, the picker stands down and leaves the choice to the players; it never guesses. Works with 2, 3, or 4 player groups. The setting is global (all profiles).
 
-### Primary Functions (Always Work)
-| Button | Key | GSPro Function |
-|--------|-----|----------------|
-| Mulligan | Ctrl+M | Mulligan |
-| Heat Map | Y | Heat Map |
-| Putt | U | Putt Toggle |
-| Flyover | O | Flyover |
-| Club Up | I | Club Up |
-| Club Down | K | Club Down |
-| Reset Aim | A | Aim Reset |
-| Tee Left | C | Tee Position Left |
-| Tee Right | V | Tee Position Right |
-| Shot Cam | J | Shot Camera |
-| Arrows | Arrow Keys | Navigation |
-
-### Secondary Functions (FN + Button)
-Two types available per button:
-
-**Key Mode** — FN + button sends a different GSPro hotkey. Example: FN + Tee Left sends B (Camera Clip).
-
-**Click Mode** — FN + button clicks a specific screen location. The mouse moves to the saved position, waits 500ms, clicks, then moves to the top-left corner to get out of the way.
+### Button Builder
+The Builder window mirrors the physical panel — same layout, with each button's current secondary printed in yellow beneath it, exactly like the box. Click any button to set its secondary in one dialog (hotkey list, Smart Click list, position capture, or none). Everything auto-saves the moment you change it.
 
 ### Profiles
-Create named profiles for different game formats. Switch instantly from the main window dropdown.
+Each profile is a plain .ini file in the profiles folder — copy them, back them up, share them. The **Boot Profile** (tagged [BOOT]) is what loads at Windows startup, kept separate from whatever you're experimenting with, so the sim always boots into a known state.
 
-### Other
-- Start with Windows checkbox
-- Remembers window position
-- Minimizes to system tray (click X to minimize, right-click tray to reopen)
-- Help guide built in
-- Phantom key suppression (Windows key, Pause key from box)
+### Start with Windows
+Check the box and BA Remapper launches hidden at every boot — straight to the tray, Boot Profile loaded, mapping ON, nothing to touch. The tray balloon confirms it, and the green BA icon's tooltip shows the live state. The startup chain is self-healing: the app repairs its startup shortcut, re-enables itself if Windows' Startup-apps list has it disabled, clears the download flag that can silently block logon launches, and writes every launch to `launch_log.txt` so boot behavior is never a mystery.
 
 ---
 
-## How FN Works
+## Files and Diagnostics
 
-The FN button has dual behavior:
+Everything lives in `Documents\BA Custom Products\Remapper\` — visible, plain files, no registry data, no hidden folders.
 
-- **Tap alone** — sends its normal primary function (e.g., A = Aim Reset)
-- **Hold + press another button** — fires the secondary function for that button
+| File | Purpose |
+|---|---|
+| `settings.ini` | App-wide preferences |
+| `profiles\*.ini` | One file per profile |
+| `launch_log.txt` | Every app launch: time, manual vs Windows-startup, exe path |
+| `ocr_last_scan.txt` | Written by the **OCR Test** button — everything the OCR currently reads, with coordinates |
+| `ocr_last_miss.txt` | Written when a Smart Click can't find its target — shows exactly what the screen said |
+| `scramble_last_decision.txt` | Written on every auto-pick attempt — each card's lie, shot number, and distance as parsed, and the decision or the reason it stood down |
 
-This means you never lose a button. The FN key still does its job when tapped.
+The **OCR Test** button (main window and tray menu) scans the GSPro window on demand and opens the result in Notepad — the first stop for any "it didn't click" question.
 
----
-
-## Building From Source
-
-### Requirements
-- [AutoHotkey v1.1](https://www.autohotkey.com/) (not v2)
-
-### Run
-Double-click `BARemapper.ahk`
-
-### Compile to .exe
-1. Open `Ahk2Exe.exe` (included with AutoHotkey at `C:\Program Files\AutoHotkey\Compiler\`)
-2. Source: `BARemapper.ahk`
-3. Destination: `BARemapper.exe`
-4. Custom Icon: `BARemapper.ico` (optional)
-5. Click Convert
-
-The compiled .exe runs standalone — customers don't need AutoHotkey installed.
+**Cleanup / Reset** removes the auto-start entry and all data files if you ever want a factory-fresh start or a clean uninstall. Deleting the folder plus the exe removes every trace.
 
 ---
 
-## GSPro Hotkey Reference
+## Troubleshooting
 
-All available GSPro hotkeys that can be assigned as secondary functions:
+**SmartScreen prompt on first run** — click More info → Run anyway. Once per downloaded file; the app clears the flag automatically after that.
 
-| Key | Function | Key | Function |
-|-----|----------|-----|----------|
-| A | Aim Reset | O | Flyover |
-| B | Camera Clip | P | Pin Indicator |
-| C | Tee Left | Q | Minimap Zoom Out |
-| D | Vertical Dots | R | Rangefinder |
-| F | FPS Toggle | S | Map Expand |
-| G | Green Grid | T | Scorecard |
-| H | Hide UI | U | Putt Toggle |
-| I | Club Up | V | Tee Right |
-| J | Shot Cam | W | Minimap Zoom In |
-| K | Club Down | Y | Heat Map |
-| L | Lighting | Z | 3D Grass Toggle |
-| N | Switch Hand | Ctrl+M | Mulligan |
-| F1 | Clear Tracer | Space | Fast Forward |
-| F3 | Aimpoint | Tab | Shortcuts |
-| F5 | Free Look | | |
+**"Smart App Control blocked a file that may be unsafe"** — Windows 11's Smart App Control (a stricter feature than SmartScreen) blocks unsigned apps with no override. Windows Security → App & browser control → Smart App Control settings → Off. Note Windows makes this a one-way switch.
+
+**Didn't start with Windows** — check `launch_log.txt`. No WINDOWS-STARTUP line after a reboot means Windows didn't run it: check Task Manager → Startup apps → BARemapper is Enabled (the app re-enables this itself on next manual run), and see the Smart App Control note above. A WINDOWS-STARTUP line present means it ran — check the tray for the green BA icon.
+
+**A Smart Click missed** — press OCR Test with the menu on screen and read (or send in) `ocr_last_miss.txt` / `ocr_last_scan.txt`. Nearly every miss is wording or layout the dump reveals immediately.
+
+**Typing goes weird in other apps** — mapping is ON and catching your keys. Ctrl+F12 toggles it off instantly.
 
 ---
 
-## Important Notes
+## Version History
 
-- **Turn OFF when typing** — when remapping is ON, box keys are intercepted from all keyboards. Press Ctrl+F12 to toggle off before typing course names or chatting.
-- **Config file** — settings save to `ba_remapper.ini` in the same folder as the .exe. Delete this file to start fresh.
-- **Profiles** — stored in the same .ini file. Each profile has its own FN button and secondary mappings.
+**v5.0** — Smart Clicks (Windows OCR, menu-verified clicking), Basic Secondary built-in preset, Auto-Pick Scramble with penalty-aware best-ball logic and on-screen countdown, Select Shot 1–4 hotkeys, Builder yellow secondary labels, rapid-tap fast paths, self-healing Windows startup, full diagnostics suite.
+
+**v4.x** — Builder redesigned to mirror the physical panel, per-profile .ini storage in Documents, boot profile system, mutex-based reopen, Startup-folder auto-start, auto-save everywhere.
 
 ---
 
 ## Support
 
-**BA Custom Products**
-- Web: [bacustomproducts.com](https://www.bacustomproducts.com)
-- Email: bacustomproducts@gmail.com
-- Phone: (218) 684-3290 (call or text)
-
----
-
-## License
-
-This software is provided by BA Custom Products for use with their golf simulator control boxes. 
+BA Custom Products — bacustomproducts@gmail.com
+Include the relevant file from the Diagnostics table above and it's usually a one-reply fix.
