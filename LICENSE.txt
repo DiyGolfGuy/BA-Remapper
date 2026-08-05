@@ -1,0 +1,31 @@
+BA Remapper - License
+
+Copyright (c) 2026 BA Custom Products. All rights reserved.
+
+BA Remapper is free software provided as a companion to BA Custom
+Products hardware.
+
+You may:
+- Download, install, and use BA Remapper on any number of computers,
+  free of charge.
+- Read the published source code in this repository.
+- Share links to the official download pages (this repository and
+  bacustomproducts.com).
+
+You may not:
+- Sell BA Remapper or bundle it with a commercial product without
+  written permission from BA Custom Products.
+- Distribute modified versions of the software or its installer.
+- Remove or alter the BA Custom Products branding.
+
+No warranty: BA Remapper is provided "as is", without warranty of any
+kind, express or implied. In no event shall BA Custom Products be
+liable for any claim, damages, or other liability arising from the
+use of this software.
+
+The official downloads are this repository's Releases page and
+bacustomproducts.com. Copies obtained anywhere else are not supported
+and may not be authentic - verify the SHA-256 published with each
+release.
+
+Contact: bacustomproducts@gmail.com
