@@ -2,7 +2,7 @@
 
 **Control box software for GSPro — by BA Custom Products**
 
-BA Remapper is the companion app for the BA Custom Products wireless control box. Out of the box, every button sends its printed GSPro hotkey with no software at all. BA Remapper adds the FN secondary layer (the yellow print), on-screen Smart Clicks powered by built-in Windows OCR, and an automatic scramble shot picker — all in a single portable .exe with nothing to install.
+BA Remapper is the companion app for the BA Custom Products wireless control box. Out of the box, every button sends its printed GSPro hotkey with no software at all. BA Remapper adds the FN secondary layer (the yellow print), on-screen Smart Clicks powered by built-in Windows OCR, and an automatic scramble shot picker. Free with your box; installs like any normal Windows program (a portable version is available too).
 
 ---
 
@@ -10,13 +10,15 @@ BA Remapper is the companion app for the BA Custom Products wireless control box
 
 **Recommended — the installer:**
 
-1. Download `BARemapper_Setup_v5.0.zip` from the [Releases](../../releases) page (or bacustomproducts.com) and unzip it.
-2. Run `BARemapper_Setup_v5.0.exe`. If Windows SmartScreen appears, click **More info → Run anyway** (the app is not yet code-signed).
+1. Download the **Setup** zip from the [latest release](../../releases/latest) (or bacustomproducts.com) and unzip it.
+2. Run the `BARemapper_Setup` exe inside. If Windows SmartScreen appears, click **More info → Run anyway** (the app is not yet code-signed).
 3. Follow the wizard — check **"Start BA Remapper with Windows"** for a sim PC and it boots ready forever.
 
 The installer puts BA Remapper in Program Files, adds it to the Start Menu and **Add/Remove Programs** with a proper uninstaller, and keeps your settings and profiles in `Documents\BA Custom Products\Remapper` — uninstalling asks before touching them, so a reinstall picks up right where you left off. Installing a newer version over an older one upgrades in place.
 
-**Portable option:** prefer no installer? Download the portable zip instead, unzip `BARemapper.exe` to a permanent folder of your choosing, and run it — same app, you manage the location.
+**Upgrading:** run the newer Setup right over the installed version — your profiles and settings are kept.
+
+**Portable option:** prefer no installer? Download the portable zip from the same release instead, unzip `BARemapper.exe` to a permanent folder of your choosing, and run it — same app, you manage the location.
 
 **Requirements:** Windows 10 or 11, GSPro. Smart Clicks and Auto-Pick Scramble use the OCR engine built into Windows (standard English installs qualify) — no extra software, no internet, nothing sent anywhere.
 
@@ -39,7 +41,7 @@ Each button's secondary can be one of three types:
 | **Taught Screen Click** | Clicks a fixed position you capture yourself (the classic method, still available) |
 
 ### Smart Clicks
-Five penalty/relief menu actions are built in: **Move Forward, Move Back, Next Option, Drop Ball / Rehit, OB Rehit**. Before any click, the app verifies the entire relief menu — all buttons, in order, evenly spaced, one column — and clicks the verified position inside it. It never clicks a lone matched word, never clicks into an opening or closing animation, and if a button's own text misreads, the surrounding menu still proves where it is. Drop Ball / Rehit clicks the changing second slot whichever word it currently shows; OB Rehit handles both the "You have hit OB!" dialog and the relief menu's rehit option. If the menu genuinely isn't on screen, the app tells you instead of guessing.
+Five penalty/relief menu actions are built in: **Move Forward, Move Back, Next Option, Drop Ball / Rehit, OB Rehit**. Before any click, the app verifies the entire relief menu — the Options counter and the buttons, in order, evenly spaced, one column — and clicks the verified position inside it. It works with mulligans on or off (GSPro hides the Mulligan button when they're off). It never clicks a lone matched word, never clicks into an opening or closing animation, and if a button's own text misreads, the surrounding menu still proves where it is. Drop Ball / Rehit clicks the changing second slot whichever word it currently shows; OB Rehit handles the "You have hit OB!" dialog (with or without its Mulligan button) and the relief menu's rehit option. The app starts reading the screen the moment you press FN, and keeps retrying while a menu is still fading in, so one press is all it takes. If the menu genuinely isn't on screen, the app tells you instead of guessing.
 
 ### Built-in preset: "Basic Secondary"
 Select **Basic Secondary** from the profile dropdown and the yellow print on the box just works — zero programming:
@@ -62,7 +64,7 @@ Turn on the checkbox and BA Remapper watches for GSPro's scramble shot-select ca
 2. **Green always wins** among those — a ball on the green beats any distance advantage elsewhere
 3. **Shortest distance** decides the rest
 
-Pick manually any time — when the cards close, the countdown cancels silently. If the cards can't be read completely, the picker stands down and leaves the choice to the players; it never guesses. Works with 2, 3, or 4 player groups. The setting is global (all profiles).
+Lie and shot number are read from each card's lie row only, so a player name like "Woods" or "Sandy" can never be mistaken for a lie. Pick manually any time — when the cards close, the countdown cancels silently. If a frame can't be read (the animated green grid on the putting green can spoil one), it re-reads the next frames; if the cards still can't be read completely, the picker stands down and leaves the choice to the players. It never guesses. Works with 2, 3, or 4 player groups. The setting is global (all profiles).
 
 ### Button Builder
 The Builder window mirrors the physical panel — same layout, with each button's current secondary printed in yellow beneath it, exactly like the box. Click any button to set its secondary in one dialog (hotkey list, Smart Click list, position capture, or none). Everything auto-saves the moment you change it.
@@ -87,6 +89,8 @@ Everything lives in `Documents\BA Custom Products\Remapper\` — visible, plain 
 | `ocr_last_scan.txt` | Written by the **OCR Test** button — everything the OCR currently reads, with coordinates |
 | `ocr_last_miss.txt` | Written when a Smart Click can't find its target — shows exactly what the screen said |
 | `scramble_last_decision.txt` | Written on every auto-pick attempt — each card's lie, shot number, and distance as parsed, and the decision or the reason it stood down |
+| `ocr_trace.txt` | Every Smart Click press, step by step: received, resolved, clicked or not found |
+| `error_log.txt` | Any internal error the app caught and recovered from, with version and location |
 
 The **OCR Test** button (main window and tray menu) scans the GSPro window on demand and opens the result in Notepad — the first stop for any "it didn't click" question.
 
@@ -102,13 +106,17 @@ The **OCR Test** button (main window and tray menu) scans the GSPro window on de
 
 **Didn't start with Windows** — check `launch_log.txt`. No WINDOWS-STARTUP line after a reboot means Windows didn't run it: check Task Manager → Startup apps → BARemapper is Enabled (the app re-enables this itself on next manual run), and see the Smart App Control note above. A WINDOWS-STARTUP line present means it ran — check the tray for the green BA icon.
 
-**A Smart Click missed** — press OCR Test with the menu on screen and read (or send in) `ocr_last_miss.txt` / `ocr_last_scan.txt`. Nearly every miss is wording or layout the dump reveals immediately.
+**A Smart Click missed** — press OCR Test with the menu on screen and send in `ocr_last_scan.txt`, plus `ocr_trace.txt` and `error_log.txt` if present. Nearly every miss is wording or layout the dump reveals immediately.
+
+**Auto-pick didn't pick** — send `scramble_last_decision.txt`; it names each card as read and the exact reason it stood down.
 
 **Typing goes weird in other apps** — mapping is ON and catching your keys. Ctrl+F12 toggles it off instantly.
 
 ---
 
 ## Version History
+
+**v5.0.4** — Reliability release. Scramble picker reads lie and shot from the lie row only (player names can no longer be mistaken for a lie, so a ball on the green always wins as intended), rejects mangled distance reads, and re-reads frames spoiled by the animated green grid instead of giving up. Smart Clicks: full support for the mulligans-off relief menu and the Rehit-only OB dialog, screen read starts the moment FN is pressed, menus still fading in are waited out, scans never collide, picks the GSPro game window by size so connector apps can't confuse it, on-screen messages appear on the game screen on multi-monitor rigs. Internal errors are logged and recovered from instead of stopping a feature.
 
 **v5.0** — Smart Clicks (Windows OCR, menu-verified clicking), Basic Secondary built-in preset, Auto-Pick Scramble with penalty-aware best-ball logic and on-screen countdown, Select Shot 1–4 hotkeys, Builder yellow secondary labels, rapid-tap fast paths, self-healing Windows startup, full diagnostics suite.
 
