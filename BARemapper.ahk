@@ -11,8 +11,39 @@ CoordMode, Mouse, Screen
 DllCall("SetProcessDPIAware")
 
 ; ============================================================
-;  BA CUSTOM PRODUCTS - CONTROL BOX REMAPPER v5.0.4
+;  BA CUSTOM PRODUCTS - CONTROL BOX REMAPPER v5.0.5
 ;  bacustomproducts@gmail.com   GitHub: DiyGolfGuy
+;
+;  CHANGES IN v5.0.5
+;  - Scramble FIX: the lie row is now every OCR line on the
+;    shot-ordinal row, joined.  Depending on screen size the OCR
+;    engine returns "ROUGH 4TH" as one line or as two; v5.0.4
+;    read only the "4TH" piece, saw no lie and stood down (the
+;    countdown ran out and nothing was picked).  Lie words now
+;    tolerate one misread letter; a misread shot digit is
+;    recovered from its suffix (ZND -> 2).  The distance must be
+;    centered on the card, so the corner badge digit can never
+;    stand in for it.
+;  - Smart Clicks: TWO-FRAME AGREEMENT - a click happens only
+;    when two consecutive reads put the button in the same
+;    place.  A single frame caught while GSPro animates the menu
+;    in could put Next Option's spot between Drop Ball and Move
+;    Back.  The FN-press prefetch is now only the first frame.
+;  - OCR never throws: a failed decode/recognition step returns
+;    an empty read and the next frame is used (the "-4" errors).
+;    No second recognition is ever started on top of another
+;    (OCR Test and warm-up take the lock; deferred presses wait
+;    instead of forcing it; the re-click check releases it
+;    between its two looks).
+;  - Diagnostics FIX: inside a try block AutoHotkey throws when
+;    FileDelete/FileGetSize meet a file that does not exist yet,
+;    so OCR Test always failed on a PC that had never written
+;    ocr_last_scan.txt, and ocr_trace / ocr_last_miss / error_log
+;    were never created on fresh installs.  All file housekeeping
+;    now checks first.  scramble_log.txt keeps the last ~100
+;    pick attempts with what was read on every card; OCR Test
+;    shows what the picker would choose from that frame;
+;    launch_log.txt records the version.
 ;
 ;  CHANGES IN v5.0.4
 ;  - Scramble: lie, GREEN and shot number now come from the
@@ -130,7 +161,7 @@ DllCall("SetProcessDPIAware")
 ; ============================================================
 ;  CONSTANTS / PATHS
 ; ============================================================
-AppVersion := "5.0.4"
+AppVersion := "5.0.5"
 MainWinTitle    := "BA Custom Control Box Remapper"
 BuilderWinTitle := "BA Custom Control Box - Button Builder"
 HelpWinTitle    := "BA Custom Control Box - Help"
@@ -401,12 +432,11 @@ InitConfigPaths()
 ; at boot" from a file instead of a guess.  Newest entries at
 ; the bottom; trimmed when it grows past ~20KB.
 llFile := ConfigDir . "\launch_log.txt"
-FileGetSize, llSize, %llFile%
-if (llSize > 20000)
-    FileDelete, %llFile%
+if (SafeFileSize(llFile) > 20000)
+    SafeFileDelete(llFile)
 llMode := isStartupLaunch ? "WINDOWS-STARTUP" : "manual"
 llLine := A_YYYY . "-" . A_MM . "-" . A_DD . " " . A_Hour . ":" . A_Min . ":" . A_Sec
-llLine .= "  " . llMode . "  " . A_ScriptFullPath . "`n"
+llLine .= "  v" . AppVersion . "  " . llMode . "  " . A_ScriptFullPath . "`n"
 FileAppend, %llLine%, %llFile%
 
 ; Strip our own Mark-of-the-Web.  Downloaded files carry a
@@ -968,6 +998,9 @@ RunOcrAction(actionId) {
     minGap := closesMenu ? 900 : 120
     if (actionId = LastActionId && (now - LastFireTick) < minGap)
         return
+    ; A new press supersedes any pending background re-click of
+    ; the previous closing action.
+    VerifyActionId := ""
     ; A scan in flight (prefetch, watcher, verify) cannot finish
     ; while this keypress thread runs, so never wait here: hand
     ; the press to a timer that fires once the lock is free.
@@ -990,6 +1023,7 @@ RunOcrAction(actionId) {
     ; combo again within 4s -> click the cached spot instantly.
     if (!closesMenu && actionId = LastActionId && LastClickX
         && (now - LastFireTick) < 4000) {
+        OcrTrace("  repeat click at " . LastClickX . "," . LastClickY)
         DpiRepeatClick(LastClickX, LastClickY)
         LastFireTick := A_TickCount
         SetTimer, ParkTick, -1200
@@ -997,40 +1031,58 @@ RunOcrAction(actionId) {
         return
     }
 
-    ; FAST PATH 2 - fresh scan cache: a scan taken within the
-    ; last 1.5s (previous press or the scramble watcher) already
-    ; contains this menu; resolve without re-scanning.
+    ; TWO-FRAME AGREEMENT - a click is authorized only when two
+    ; consecutive reads put the target in the same place.  GSPro
+    ; animates its menus in; a single frame caught mid-animation
+    ; forms a perfectly consistent lattice at the WRONG place (a
+    ; menu zooming in from its middle puts Next Option's spot
+    ; between Drop Ball and Move Back - the field report), and
+    ; the FN-press prefetch made such a frame the one clicked.
+    ; Now the prefetch cache is only frame A; a fresh frame B
+    ; must confirm it.  A settled menu agrees on the first fresh
+    ; read (one scan of delay); a moving one keeps being read
+    ; until it holds still.
     found := false
     cx := 0
     cy := 0
+    prevOk := false
+    px := 0
+    py := 0
     ; Rehit depends on the slot-2 WORD, which changes with Next
-    ; Option, so it always reads fresh; the others click slots
-    ; whose positions don't change while the menu is up.
-    if (actionId != "Rehit" && IsObject(LastScanObj) && (A_TickCount - LastScanTick) <= 2500)
-        found := ResolveOcrTarget(actionId, LastScanObj, cx, cy)
-
-    ; FULL PATH - scan the GSPro window (up to 4 attempts).
-    ; Every attempt requires the verified menu lattice (or the
-    ; OB pair); a mid-animation or partial read just rescans.
-    if (!found) {
-        ; 7 attempts on a tight cadence (~3.5s with scan time).
-        ; The common "it missed, I pressed again and it worked"
-        ; is a menu still fading in: the lattice correctly
-        ; refuses an animating frame, and the old 4-try window
-        ; could expire just before the menu settled.  The app
-        ; now waits the menu out instead of the customer having
-        ; to know to press twice.
-        Loop, 7 {
-            scan := ScanWinClient(GSProWinNeedle, GSProWinExclude)
-            if (!scan.found)
-                scan := ScanScreen()   ; window title fallback
-            LastScanObj := scan
-            LastScanTick := A_TickCount
-            found := ResolveOcrTarget(actionId, scan, cx, cy)
-            if (found)
-                break
-            Sleep, 150
+    ; Option, so its frame A always comes fresh.
+    if (actionId != "Rehit" && IsObject(LastScanObj) && (A_TickCount - LastScanTick) <= 2500) {
+        if (ResolveOcrTarget(actionId, LastScanObj, px, py)) {
+            prevOk := true
+            OcrTrace("  frame A (prefetch): " . px . "," . py . "  " . LastLatticeNote)
         }
+    }
+    Loop, 8 {
+        scan := ScanWinClient(GSProWinNeedle, GSProWinExclude)
+        if (!scan.found)
+            scan := ScanScreen()   ; window title fallback
+        LastScanObj := scan
+        LastScanTick := A_TickCount
+        tx := 0
+        ty := 0
+        ok := ResolveOcrTarget(actionId, scan, tx, ty)
+        OcrTrace("  read " . A_Index . ": " . (ok ? tx . "," . ty : "no target") . "  " . LastLatticeNote)
+        if (ok && prevOk) {
+            agreeTol := LastResolveBand // 4
+            if (agreeTol < 4)
+                agreeTol := 4
+            if (Abs(tx - px) <= agreeTol && Abs(ty - py) <= agreeTol) {
+                found := true
+                cx := tx
+                cy := ty
+                break
+            }
+            OcrTrace("    moved since last read - waiting for the menu to settle")
+        }
+        prevOk := ok
+        px := tx
+        py := ty
+        if (!ok)
+            Sleep, 120
     }
 
     if (found) {
@@ -1070,7 +1122,7 @@ RunOcrAction(actionId) {
         SetTimer, ParkTick, -1200
     } else {
         dispName := OcrActionName.HasKey(actionId) ? OcrActionName[actionId] : actionId
-        OcrTrace("  NOT FOUND (" . LastLatticeNote . ")")
+        OcrTrace("  NOT FOUND (" . LastLatticeNote . ")" . (prevOk ? " - the menu never held still" : ""))
         ShowGsproTip(dispName . " - not found on screen", 1800)
         OcrDumpMiss("SmartClick " . actionId . " (" . LastLatticeNote . ")", scan)
     }
@@ -1244,11 +1296,29 @@ FindMenuLattice(scan) {
         }
     }
     colX := xs[(xs.MaxIndex() + 1) // 2]
+    ; An anchor word read OFF the menu column (the HUD's "SHOT
+    ; OPTIONS" while the menu's own "Options 3/3" misread) is not
+    ; part of the menu: drop it and judge the stack on the rest.
+    ; Fewer than 3 in-column anchors is still a refusal.
+    offCol := []
     for sIdx, a in anch {
-        if (Abs((a.x + a.w // 2) - colX) > wavg * 0.6) {
+        if (Abs((a.x + a.w // 2) - colX) > wavg * 0.6)
+            offCol.Push(sIdx)
+    }
+    for i, sIdx in offCol
+        anch.Delete(sIdx)
+    if (offCol.MaxIndex() != "") {
+        cnt := 0
+        sumW := 0
+        for sIdx, a in anch {
+            cnt += 1
+            sumW += a.w
+        }
+        if (cnt < 3) {
             LastLatticeNote .= " colfail"
             return lat
         }
+        wavg := sumW / cnt
     }
     ; One consistent pitch across known anchors
     order := []
@@ -1309,7 +1379,10 @@ FindMenuLattice(scan) {
     lat.slotY := slotY
     lat.anch := anch
     lat.s2 := s2
-    LastLatticeNote := "anchors=" . cnt . " pitch=" . Round(pitch)
+    an := ""
+    for sIdx, a in anch
+        an .= (an = "" ? "" : " ") . sIdx . ":" . Round(a.y + a.h / 2)
+    LastLatticeNote := "anchors=" . cnt . " [" . an . "] pitch=" . Round(pitch) . " col=" . Round(colX)
     return lat
 }
 
@@ -1699,13 +1772,41 @@ OcrTrace(msg) {
     global ConfigDir
     try {
         f := ConfigDir . "\ocr_trace.txt"
-        FileGetSize, tsz, %f%
-        if (tsz > 40000)
-            FileDelete, %f%
-        b := A_Hour . ":" . A_Min . ":" . A_Sec . "  " . msg . "`n"
+        if (SafeFileSize(f) > 60000)
+            SafeFileDelete(f)
+        b := A_Hour . ":" . A_Min . ":" . A_Sec . "." . A_MSec . "  " . msg . "`n"
         FileAppend, %b%, %f%
     } catch tErr {
     }
+}
+
+; ---- file helpers that can never throw ----
+; Inside any try block (and every function called from one),
+; AutoHotkey turns a command's ErrorLevel failure into a thrown
+; exception.  FileDelete of a file that does not exist yet sets
+; ErrorLevel 1, so "delete the old dump, write the new one"
+; threw on every PC where the dump had never been written - the
+; OCR Test failed, and ocr_trace / ocr_last_miss / error_log
+; were silently never created on a fresh install (v5.0.4 field
+; log: [OcrTest] 1 | what=FileDelete).  Check first, always.
+SafeFileDelete(f) {
+    if (!FileExist(f))
+        return
+    try {
+        FileDelete, %f%
+    } catch sfdErr {
+    }
+}
+SafeFileSize(f) {
+    if (!FileExist(f))
+        return 0
+    sz := 0
+    try {
+        FileGetSize, sz, %f%
+    } catch sfsErr {
+        sz := 0
+    }
+    return sz + 0
 }
 
 ; Show a message ON the GSPro window (any monitor), not the
@@ -1774,9 +1875,8 @@ LogAppError(where, e) {
     global ConfigDir, AppVersion
     try {
         f := ConfigDir . "\error_log.txt"
-        FileGetSize, esz, %f%
-        if (esz > 30000)
-            FileDelete, %f%
+        if (SafeFileSize(f) > 30000)
+            SafeFileDelete(f)
         msg := "unknown error"
         try {
             ; What/Extra name the actual command or function that
@@ -1799,7 +1899,7 @@ OcrDumpMiss(context, scan) {
     global ConfigDir
     try {
     f := ConfigDir . "\ocr_last_miss.txt"
-    FileDelete, %f%
+    SafeFileDelete(f)
     body := "BARemapper OCR diagnostic`n"
     body .= "Time: " . A_YYYY . "-" . A_MM . "-" . A_DD . " " . A_Hour . ":" . A_Min . ":" . A_Sec . "`n"
     body .= "Context: " . context . "`n"
@@ -1851,7 +1951,7 @@ FindAllLinesExact(scan, needle) {
     return out
 }
 
-ScrambleDecide(scan, uses) {
+ScrambleDecide(scan, uses, ctx := "") {
     ; Sort USE buttons left-to-right (position = shot key number)
     n := uses.MaxIndex()
     if (n > 4)
@@ -1881,119 +1981,128 @@ ScrambleDecide(scan, uses) {
         if (minGap // 2 < colHalf)
             colHalf := minGap // 2
     }
-    ; Parse each column: lie + shot number + distance
-    colLie := [], colGreen := [], colShot := [], colDist := []
+    ; Parse each card: lie row (lie + shot number) and distance
+    cards := []
     Loop, %n% {
         c := A_Index
         cx := centers[c]
-        topY := uses[c].y - uses[c].h * 9
-        lieFound := ""
-        isGreen := false
-        shotN := 0
+        useY := uses[c].y
+        useH := uses[c].h
+        useW := uses[c].w
+        topY := useY - useH * 9
+        card := {lie: "", green: false, shot: 0, dist: -1, row: "", distRaw: ""}
+        ; Every OCR line in this card's column, above its USE
+        colLines := []
+        for i, ln in scan.lines {
+            lcx := ln.x + ln.w // 2
+            if (Abs(lcx - cx) > colHalf)
+                continue
+            if (ln.y >= useY || ln.y < topY)
+                continue
+            colLines.Push(ln)
+        }
+        ; ---- Step 1: THE LIE ROW ----
+        ; A card reads NAME / DISTANCE / LIE + SHOT / USE.  The
+        ; row is anchored on the shot ordinal ("4TH") nearest
+        ; above USE - names never carry a whole-word ordinal - or,
+        ; when the ordinal misread, on the line closest above USE.
+        ; Then EVERY line on that row is joined, left to right:
+        ; the OCR engine may return "ROUGH 4TH" as one line or as
+        ; two ("ROUGH" | "4TH") depending on the screen size.
+        ; v5.0.4 read only the ordinal's own line, so on screens
+        ; where the engine split the row it saw "4TH" with no lie
+        ; word and stood down (field log: lie unreadable, shot=4,
+        ; distances fine).  The joined row handles both forms.
+        anchor := ""
+        anchorY := -999999
+        for i, ln in colLines {
+            if (ScrambleOrdinal(ln.text) > 0 && ln.y > anchorY) {
+                anchorY := ln.y
+                anchor := ln
+            }
+        }
+        if (!IsObject(anchor)) {
+            for i, ln in colLines {
+                if (ln.y > anchorY) {
+                    anchorY := ln.y
+                    anchor := ln
+                }
+            }
+        }
+        rowCy := 0
+        rowBand := 0
+        if (IsObject(anchor)) {
+            rowCy := anchor.y + anchor.h / 2
+            rowBand := anchor.h * 0.6
+            rowParts := []
+            for i, ln in colLines {
+                if (Abs((ln.y + ln.h / 2) - rowCy) <= rowBand)
+                    rowParts.Push(ln)
+            }
+            Loop, % rowParts.MaxIndex() - 1 {
+                i := A_Index + 1
+                j := i
+                while (j > 1 && rowParts[j-1].x > rowParts[j].x) {
+                    tmp := rowParts[j-1]
+                    rowParts[j-1] := rowParts[j]
+                    rowParts[j] := tmp
+                    j--
+                }
+            }
+            rowText := ""
+            for i, p in rowParts
+                rowText .= (rowText = "" ? "" : " ") . Trim(p.text)
+            card.row := rowText
+            lieWord := ScrambleLieWord(rowText)
+            if (lieWord != "") {
+                card.lie := lieWord
+                card.green := (lieWord = "green")
+            }
+            card.shot := ScrambleShotNumber(rowText)
+        }
+        ; ---- Step 2: DISTANCE ----
+        ; The tallest digits-only line ABOVE the lie row, centered
+        ; on the card (the corner badge digit sits far off-center),
+        ; taller than the USE text.  Any LETTER in the raw
+        ; text disqualifies it - a mangled "143" read as "!4E" must
+        ; never strip down to "4" and win the comparison.
         distH := 0
         distClean := ""
-        ; ---- Step 1: find THE LIE LINE ----
-        ; A card reads NAME / DISTANCE / LIE+SHOT / USE, so the
-        ; lie row is the line sitting closest above USE, and it
-        ; is the one carrying the ordinal ("FAIRWAY 2ND").
-        ; Reading lie words from ANY line in the column was
-        ; wrong: a player named "DEEP ROUGH DAN" (a real name in
-        ; testing) or Woods / Sandy / Rocky / Pine made the name
-        ; line win, so a ball on the GREEN was scored as rough.
-        ; The badge digit merged into the name ("2 BRUCE G")
-        ; likewise became the shot number.  Names carry no
-        ; ordinal and never sit directly above USE, so both
-        ; failures are now structurally impossible.
-        lieLine := ""
-        lieLineY := -999999
-        ordLine := ""
-        ordLineY := -999999
-        for i, ln in scan.lines {
+        for i, ln in colLines {
             lcx := ln.x + ln.w // 2
-            if (Abs(lcx - cx) > colHalf)
+            if (Abs(lcx - cx) > useW * 0.8)
                 continue
-            if (ln.y >= uses[c].y || ln.y < topY)
+            if (IsObject(anchor) && (ln.y + ln.h / 2) >= rowCy - rowBand)
                 continue
-            if (ln.y > lieLineY) {
-                lieLineY := ln.y
-                lieLine := ln
-            }
-            if (RegExMatch(ln.text, "i)[1-9]\s*(st|nd|rd|th)") && ln.y > ordLineY) {
-                ordLineY := ln.y
-                ordLine := ln
-            }
-        }
-        useLine := IsObject(ordLine) ? ordLine : lieLine
-        if (IsObject(useLine)) {
-            t := LowerStr(useLine.text)
-            if (InStr(t, "green")) {
-                lieFound := "green"
-                isGreen := true
-            } else if (InStr(t, "fairway") || InStr(t, "rough") || InStr(t, "deep")
-                    || InStr(t, "tee") || InStr(t, "sand") || InStr(t, "bunker")
-                    || InStr(t, "fringe") || InStr(t, "waste") || InStr(t, "native")
-                    || InStr(t, "pine") || InStr(t, "recovery") || InStr(t, "fescue")
-                    || InStr(t, "path") || InStr(t, "dirt") || InStr(t, "mulch")
-                    || InStr(t, "hardpan") || InStr(t, "gravel") || InStr(t, "rock")
-                    || InStr(t, "wood") || InStr(t, "leaves") || InStr(t, "grass")
-                    || InStr(t, "straw") || InStr(t, "heather") || InStr(t, "gorse")) {
-                lieFound := Trim(t)
-            }
-            ; Shot number from that same line: the ordinal if it
-            ; read, otherwise any digit on it.
-            if (RegExMatch(useLine.text, "i)([1-9])\s*(st|nd|rd|th)", ordM))
-                shotN := ordM1 + 0
-            else if (RegExMatch(useLine.text, "([1-9])", shotDigit))
-                shotN := shotDigit1 + 0
-        }
-        ; ---- Step 2: distance ----
-        ; Tallest digits-only line in the column, taller than the
-        ; USE text (so badge digits cannot qualify) and never the
-        ; lie line itself (whose "2ND" strips down to a bare "2").
-        for i, ln in scan.lines {
-            lcx := ln.x + ln.w // 2
-            if (Abs(lcx - cx) > colHalf)
-                continue
-            if (ln.y >= uses[c].y || ln.y < topY)
-                continue
-            if (IsObject(useLine) && ln.y = useLine.y && ln.x = useLine.x)
-                continue
-            ; The distance row is pure digits (plus ' and " on the
-            ; green).  Any LETTER in the raw text means this is not
-            ; it - a mangled "143" read as "!4E" would otherwise
-            ; strip down to "4" and win the comparison outright.
             if (RegExMatch(ln.text, "i)[a-z]"))
                 continue
             clean := RegExReplace(ln.text, "[^0-9 ]", " ")
             clean := Trim(RegExReplace(clean, " +", " "))
-            if (clean != "" && RegExMatch(clean, "^\d+( \d+)?$") && ln.h > uses[c].h) {
+            if (clean != "" && RegExMatch(clean, "^\d+( \d+)?$") && ln.h > useH) {
                 if (ln.h > distH) {
                     distH := ln.h
                     distClean := clean
+                    card.distRaw := ln.text
                 }
             }
         }
-        colLie.Push(lieFound)
-        colGreen.Push(isGreen)
-        colShot.Push(shotN)
         ; Convert to inches: green = feet(+inches), else yards
-        d := -1
         if (distClean != "") {
             if (InStr(distClean, " ")) {
                 StringSplit, part, distClean, %A_Space%
-                d := part1 * 12 + part2   ; feet + inches
-            } else if (isGreen) {
-                d := distClean * 12       ; feet
+                card.dist := part1 * 12 + part2   ; feet + inches
+            } else if (card.green) {
+                card.dist := distClean * 12       ; feet
             } else {
-                d := distClean * 36       ; yards
+                card.dist := distClean * 36       ; yards
             }
         }
-        colDist.Push(d)
+        cards.Push(card)
     }
     ; Gate 1: every card's lie must be readable
     Loop, %n% {
-        if (colLie[A_Index] = "") {
-            ScrambleLogDecision(n, colLie, colShot, colDist, 0, 0, "GATE: lie unreadable")
+        if (cards[A_Index].lie = "") {
+            ScrambleLogDecision(n, cards, 0, 0, "GATE: lie unreadable" . ctx)
             return 0
         }
     }
@@ -2002,14 +2111,14 @@ ScrambleDecide(scan, uses) {
     ; SOME read, the comparison would be a guess - stand down.
     knownShots := 0
     Loop, %n% {
-        if (colShot[A_Index] >= 1)
+        if (cards[A_Index].shot >= 1)
             knownShots += 1
     }
     if (knownShots = 0) {
         Loop, %n%
-            colShot[A_Index] := 1
+            cards[A_Index].shot := 1
     } else if (knownShots < n) {
-        ScrambleLogDecision(n, colLie, colShot, colDist, 0, 0, "GATE: shot numbers partial")
+        ScrambleLogDecision(n, cards, 0, 0, "GATE: shot numbers partial" . ctx)
         return 0
     }
     ; PENALTY RULE: the fewest-strokes balls are considered
@@ -2018,13 +2127,13 @@ ScrambleDecide(scan, uses) {
     ; closer, but choosing them costs the group a stroke).
     minShot := 99
     Loop, %n% {
-        if (colShot[A_Index] < minShot)
-            minShot := colShot[A_Index]
+        if (cards[A_Index].shot < minShot)
+            minShot := cards[A_Index].shot
     }
     ; Green check runs among the eligible (fewest-shot) balls
     anyGreen := false
     Loop, %n% {
-        if (colShot[A_Index] = minShot && colGreen[A_Index])
+        if (cards[A_Index].shot = minShot && cards[A_Index].green)
             anyGreen := true
     }
     ; Decision within eligible: green first, then lowest
@@ -2033,22 +2142,96 @@ ScrambleDecide(scan, uses) {
     bestVal := 0x7FFFFFFF
     Loop, %n% {
         c := A_Index
-        if (colShot[c] != minShot)
+        if (cards[c].shot != minShot)
             continue
-        if (anyGreen && !colGreen[c])
+        if (anyGreen && !cards[c].green)
             continue
         ; Gate 2: contender distances must parse
-        if (colDist[c] < 0) {
-            ScrambleLogDecision(n, colLie, colShot, colDist, minShot, 0, "GATE: contender distance unreadable")
+        if (cards[c].dist < 0) {
+            ScrambleLogDecision(n, cards, minShot, 0, "GATE: contender distance unreadable" . ctx)
             return 0
         }
-        if (colDist[c] < bestVal) {
-            bestVal := colDist[c]
+        if (cards[c].dist < bestVal) {
+            bestVal := cards[c].dist
             bestIdx := c
         }
     }
-    ScrambleLogDecision(n, colLie, colShot, colDist, minShot, bestIdx, "OK")
+    ScrambleLogDecision(n, cards, minShot, bestIdx, "OK" . ctx)
     return bestIdx
+}
+
+; Shot number from a whole-word ordinal ("2ND", "3RD", "4TH").
+; Whole word only: a badge digit merged into a name ("2 THOMAS",
+; "1 STEVE") must not read as an ordinal.  Returns 0 if none.
+ScrambleOrdinal(t) {
+    if (RegExMatch(t, "i)(?:^|[^a-z0-9])([1-9])\s?(st|nd|rd|th)(?![a-z])", m))
+        return m1 + 0
+    return 0
+}
+
+; Shot number from the joined lie row.  The clean ordinal first;
+; then a digit with a misread suffix ("4IH"); then a suffix whose
+; digit misread ("ZND" -> 2, "IST" -> 1, "3RO" keeps its 3).
+ScrambleShotNumber(rowText) {
+    s := ScrambleOrdinal(rowText)
+    if (s > 0)
+        return s
+    if (RegExMatch(rowText, "i)(?:^|[^a-z0-9])([1-9])[a-z]{1,2}(?![a-z])", m))
+        return m1 + 0
+    if (RegExMatch(rowText, "i)(?:^|[^a-z0-9])[a-z0-9](nd|rd|st)(?![a-z])", m)) {
+        sfx := LowerStr(m1)
+        if (sfx = "nd")
+            return 2
+        if (sfx = "rd")
+            return 3
+        if (sfx = "st")
+            return 1
+    }
+    return 0
+}
+
+; The lie, as one of GSPro's lie words, read from the joined row.
+; Long words tolerate one misread letter ("R0UGH", "GREFN"); short
+; ones must match exactly.  "green" is returned as exactly
+; "green" - it is the one lie the decision depends on.  An
+; unrecognized row returns "" so the card counts as unreadable
+; (a GREEN misread into noise must stand down, never be scored
+; as an ordinary lie).
+ScrambleLieWord(rowText) {
+    static words := ["green", "fairway", "rough", "deep", "fringe", "collar", "apron", "tee"
+        , "sand", "bunker", "waste", "native", "pine", "straw", "recovery", "fescue"
+        , "path", "cart", "dirt", "mulch", "hardpan", "gravel", "rock", "rocks", "wood"
+        , "woods", "leaves", "grass", "heather", "gorse", "tree", "trees", "hazard"
+        , "water", "drop", "desert", "mud", "first", "cut", "area"]
+    t := LowerStr(rowText)
+    ; A digit misread INSIDE a word splits it ("R0UGH" would read
+    ; as "r" + "ugh"): map the usual look-alikes back to letters,
+    ; and drop any other digit that sits between two letters.
+    t := RegExReplace(t, "(?<=[a-z])0(?=[a-z])", "o")
+    t := RegExReplace(t, "(?<=[a-z])1(?=[a-z])", "i")
+    t := RegExReplace(t, "(?<=[a-z])5(?=[a-z])", "s")
+    t := RegExReplace(t, "(?<=[a-z])[0-9](?=[a-z])", "")
+    t := RegExReplace(t, "[^a-z]+", " ")
+    found := ""
+    Loop, Parse, t, %A_Space%
+    {
+        tok := A_LoopField
+        if (StrLen(tok) < 3)
+            continue
+        for k, w in words {
+            hit := (tok = w)
+            if (!hit && StrLen(w) >= 5 && Abs(StrLen(tok) - StrLen(w)) <= 1)
+                hit := (LevDist(tok, w) <= 1)
+            if (hit) {
+                if (w = "green")
+                    return "green"
+                if (found = "")
+                    found := w
+                break
+            }
+        }
+    }
+    return found
 }
 
 ; ---- diagnostics must never break the feature ----
@@ -2062,17 +2245,28 @@ ScrambleDecide(scan, uses) {
 ; Written on EVERY pick attempt, success or stand-down, so any
 ; wrong or missing pick arrives with its own explanation:
 ; Documents\BA Custom Products\Remapper\scramble_last_decision.txt
-ScrambleLogDecision(n, colLie, colShot, colDist, minShot, winner, note) {
-    global ConfigDir
+; and appended to scramble_log.txt (the last ~100 attempts), so
+; an earlier failure is not lost when a later pick succeeds.
+ScrambleLogDecision(n, cards, minShot, winner, note) {
+    global ConfigDir, AppVersion
     try {
-        f := ConfigDir . "\scramble_last_decision.txt"
-        FileDelete, %f%
-        b := "BARemapper scramble decision`n"
+        b := "BARemapper scramble decision  (v" . AppVersion . ")`n"
         b .= "Time: " . A_YYYY . "-" . A_MM . "-" . A_DD . " " . A_Hour . ":" . A_Min . ":" . A_Sec . "`n"
         b .= "Cards: " . n . "   MinShot: " . minShot . "   Winner: " . winner . "   " . note . "`n"
-        Loop, %n%
-            b .= "  card " . A_Index . ": lie=" . colLie[A_Index] . "  shot=" . colShot[A_Index] . "  dist_inches=" . colDist[A_Index] . "`n"
+        Loop, %n% {
+            cd := cards[A_Index]
+            b .= "  card " . A_Index . ": lie=" . cd.lie . "  green=" . (cd.green ? 1 : 0)
+            b .= "  shot=" . cd.shot . "  dist_inches=" . cd.dist
+            b .= "   read: row=|" . cd.row . "|  distance=|" . cd.distRaw . "|`n"
+        }
+        f := ConfigDir . "\scramble_last_decision.txt"
+        SafeFileDelete(f)
         FileAppend, %b%, %f%
+        lf := ConfigDir . "\scramble_log.txt"
+        if (SafeFileSize(lf) > 60000)
+            SafeFileDelete(lf)
+        lb := b . "`n"
+        FileAppend, %lb%, %lf%
     } catch logErr {
     }
 }
@@ -2561,19 +2755,43 @@ OcrVerifyTick:
         Return
     }
     OcrLockTake()
+    vAgain := false
     try {
         vScan := ScanWinClient(GSProWinNeedle, GSProWinExclude)
         vx := 0
         vy := 0
-        vFound := ResolveOcrTarget(VerifyActionId, vScan, vx, vy)
-        if (vFound && Abs(vy - VerifyY) < VerifyBandPx) {
-            Sleep, 450
-            vScan2 := ScanWinClient(GSProWinNeedle, GSProWinExclude)
-            vFound2 := ResolveOcrTarget(VerifyActionId, vScan2, vx, vy)
-            if (vFound2 && Abs(vy - VerifyY) < VerifyBandPx) {
-                DpiClickAt(vx, vy)
-                ParkMouse()
-            }
+        if (ResolveOcrTarget(VerifyActionId, vScan, vx, vy) && Abs(vy - VerifyY) < VerifyBandPx)
+            vAgain := true
+    } catch appErr {
+        LogAppError("ClickVerify", appErr)
+    }
+    OcrBusy := false
+    ; The lock is released between the two looks, so a press in
+    ; the meantime is never kept waiting behind this check (and a
+    ; press cancels the pending re-click outright).
+    if (vAgain)
+        SetTimer, OcrVerifyTick2, -450
+    else
+        VerifyActionId := ""
+Return
+
+OcrVerifyTick2:
+    if (VerifyActionId = "")
+        Return
+    OcrStaleCheck()
+    if (OcrBusy) {
+        SetTimer, OcrVerifyTick2, -200
+        Return
+    }
+    OcrLockTake()
+    try {
+        vScan2 := ScanWinClient(GSProWinNeedle, GSProWinExclude)
+        vx := 0
+        vy := 0
+        if (ResolveOcrTarget(VerifyActionId, vScan2, vx, vy) && Abs(vy - VerifyY) < VerifyBandPx) {
+            OcrTrace("  verify: " . VerifyActionId . " still on screen - clicked again at " . vx . "," . vy)
+            DpiClickAt(vx, vy)
+            ParkMouse()
         }
     } catch appErr {
         LogAppError("ClickVerify", appErr)
@@ -2616,17 +2834,15 @@ OcrDeferred:
         Return
     OcrStaleCheck()
     if (OcrBusy) {
-        if (A_TickCount - PendingOcrSince < 3000) {
-            SetTimer, OcrDeferred, -80
-            Return
-        }
-        ; Waited long enough: something is holding the lock
-        ; longer than any real scan takes.  Clear it and run
-        ; rather than dropping the press silently - a dropped
-        ; press is indistinguishable from a broken button.
-        OcrBusy := false
-        ScrambleBusy := false
-        OcrTrace("  deferred press forced through (lock held >3s)")
+        ; The scan holding the lock is a single read (well under
+        ; a second); this timer returns between checks so that
+        ; read keeps running.  Forcing the lock open used to start
+        ; a second recognition on top of the first - both could
+        ; fail together (field log: SmartClick + ClickVerify in
+        ; the same second).  A genuinely stuck lock is cleared by
+        ; OcrStaleCheck after 6s, and the press then runs.
+        SetTimer, OcrDeferred, -60
+        Return
     }
     dfAct := PendingOcrAction
     PendingOcrAction := ""
@@ -2728,29 +2944,52 @@ Return
 ; coordinates.  This is the tuning loop for needles and the
 ; scramble trigger on any machine.
 TrayOcrDump:
-    try {
-    dScan := ScanWinClient(GSProWinNeedle, GSProWinExclude)
-    dMode := "GSPro window client area (title contains 'gspro')"
-    if (dScan.found)
-        dMode := "GSPro window '" . dScan.win.title . "' client area " . dScan.win.w . "x" . dScan.win.h . " at " . dScan.win.x . "," . dScan.win.y
-    if (!dScan.found) {
-        dScan := ScanScreen()
-        dMode := "FULL SCREEN (no window title containing 'gspro' was found!)"
+    ; One OCR engine is shared by the watcher, the Smart Clicks
+    ; and this test: wait for any scan in flight instead of
+    ; starting a second recognition underneath it.
+    OcrStaleCheck()
+    if (OcrBusy) {
+        SetTimer, TrayOcrDump, -150
+        Return
     }
+    OcrLockTake()
+    dOk := false
     dFile := ConfigDir . "\ocr_last_scan.txt"
-    FileDelete, %dFile%
-    dBody := "BARemapper OCR test dump`n"
-    dBody .= "Time: " . A_YYYY . "-" . A_MM . "-" . A_DD . " " . A_Hour . ":" . A_Min . ":" . A_Sec . "`n"
-    dBody .= "Scanned: " . dMode . "`n"
-    dBody .= "Lines found: " . (dScan.lines.MaxIndex() = "" ? 0 : dScan.lines.MaxIndex()) . "`n"
-    dBody .= "------------------------------------------`n"
-    for dI, dLn in dScan.lines
-        dBody .= dLn.x . "," . dLn.y . "  " . dLn.w . "x" . dLn.h . "  |" . dLn.text . "|`n"
-    FileAppend, %dBody%, %dFile%
-    TrayTip, BA Remapper, OCR dump written to ocr_last_scan.txt, 4, 1
-    Run, notepad.exe "%dFile%"
+    try {
+        dScan := ScanWinClient(GSProWinNeedle, GSProWinExclude)
+        dMode := "GSPro window client area (title contains 'gspro')"
+        if (dScan.found)
+            dMode := "GSPro window '" . dScan.win.title . "' client area " . dScan.win.w . "x" . dScan.win.h . " at " . dScan.win.x . "," . dScan.win.y
+        if (!dScan.found) {
+            dScan := ScanScreen()
+            dMode := "FULL SCREEN (no window title containing 'gspro' was found!)"
+        }
+        SafeFileDelete(dFile)
+        dBody := "BARemapper OCR test dump  (v" . AppVersion . ")`n"
+        dBody .= "Time: " . A_YYYY . "-" . A_MM . "-" . A_DD . " " . A_Hour . ":" . A_Min . ":" . A_Sec . "`n"
+        dBody .= "Scanned: " . dMode . "`n"
+        dBody .= "Lines found: " . (dScan.lines.MaxIndex() = "" ? 0 : dScan.lines.MaxIndex()) . "`n"
+        dBody .= "------------------------------------------`n"
+        for dI, dLn in dScan.lines
+            dBody .= dLn.x . "," . dLn.y . "  " . dLn.w . "x" . dLn.h . "  |" . dLn.text . "|`n"
+        ; Scramble cards on screen: show what the picker would
+        ; choose from this exact frame (no key is sent).
+        dUses := FindAllLinesExact(dScan, "use")
+        if (dUses.MaxIndex() >= 2) {
+            dWin := ScrambleDecide(dScan, dUses, " (OCR Test, no key sent)")
+            dBody .= "------------------------------------------`n"
+            dBody .= "Scramble cards seen: " . dUses.MaxIndex() . "   would pick: " . (dWin > 0 ? dWin : "NONE - see scramble_last_decision.txt") . "`n"
+        }
+        FileAppend, %dBody%, %dFile%
+        dOk := true
     } catch appErr {
         LogAppError("OcrTest", appErr)
+    }
+    OcrBusy := false
+    if (dOk) {
+        TrayTip, BA Remapper, OCR dump written to ocr_last_scan.txt, 4, 1
+        Run, notepad.exe "%dFile%"
+    } else {
         TrayTip, BA Remapper, OCR Test failed - see error_log.txt, 4, 2
     }
 Return
@@ -2759,8 +2998,19 @@ Return
 ; init; do it in the background at launch, not on the first
 ; real button press at the tee).
 OcrWarmup:
-    OcrRegion(0, 0, 48, 48)
+    OcrStaleCheck()
+    if (OcrBusy) {
+        SetTimer, OcrWarmup, -500
+        Return
+    }
+    OcrLockTake()
+    try {
+        OcrRegion(0, 0, 48, 48)
+    } catch appErr {
+        LogAppError("OcrWarmup", appErr)
+    }
     OcrWarmedUp := true
+    OcrBusy := false
 Return
 
 ScrambleTick:
@@ -3882,10 +4132,29 @@ ocr_words(file) {
     out.lines := []
     out.text  := ""
 
+    ; NULL-SAFE: any failed step returns an EMPTY read (the caller
+    ; simply reads the next frame) instead of calling into a null
+    ; object.  Before, one failed async step made the next DllCall
+    ; target address "" -> ErrorLevel -4 -> thrown inside the
+    ; caller's try, aborting that scan, click or pick outright
+    ; (field log: "-4" entries in SmartClick/ScrambleWatcher).
+    if (!file)
+        return out
     IRandomAccessStream := file
+    BitmapDecoder := 0
     DllCall(NumGet(NumGet(BitmapDecoderStatics + 0) + 14 * A_PtrSize), "ptr", BitmapDecoderStatics, "ptr", IRandomAccessStream, "ptr*", BitmapDecoder)   ; CreateAsync
     WaitForAsync(BitmapDecoder)
+    if (!BitmapDecoder) {
+        OcrDebug("OCR: image decode failed - frame skipped")
+        CleanupStream(IRandomAccessStream)
+        return out
+    }
     BitmapFrame := ComObjQuery(BitmapDecoder, IBitmapFrame := "{72A49A1C-8081-438D-91BC-94ECFC8185C6}")
+    if (!BitmapFrame) {
+        CleanupStream(IRandomAccessStream)
+        ObjRelease(BitmapDecoder)
+        return out
+    }
     DllCall(NumGet(NumGet(BitmapFrame + 0) + 12 * A_PtrSize), "ptr", BitmapFrame, "uint*", width)
     DllCall(NumGet(NumGet(BitmapFrame + 0) + 13 * A_PtrSize), "ptr", BitmapFrame, "uint*", height)
     if (width > MaxDimension) || (height > MaxDimension) {
@@ -3895,12 +4164,40 @@ ocr_words(file) {
         return out
     }
     BitmapFrameWithSoftwareBitmap := ComObjQuery(BitmapDecoder, IBitmapFrameWithSoftwareBitmap := "{FE287C9A-420C-4963-87AD-691436E08383}")
+    if (!BitmapFrameWithSoftwareBitmap) {
+        CleanupStream(IRandomAccessStream)
+        ObjRelease(BitmapDecoder), ObjRelease(BitmapFrame)
+        return out
+    }
+    SoftwareBitmap := 0
     DllCall(NumGet(NumGet(BitmapFrameWithSoftwareBitmap + 0) + 6 * A_PtrSize), "ptr", BitmapFrameWithSoftwareBitmap, "ptr*", SoftwareBitmap)   ; GetSoftwareBitmapAsync
     WaitForAsync(SoftwareBitmap)
+    if (!SoftwareBitmap) {
+        OcrDebug("OCR: bitmap conversion failed - frame skipped")
+        CleanupStream(IRandomAccessStream)
+        ObjRelease(BitmapDecoder), ObjRelease(BitmapFrame), ObjRelease(BitmapFrameWithSoftwareBitmap)
+        return out
+    }
+    OcrResult := 0
     DllCall(NumGet(NumGet(OcrEngine + 0) + 6 * A_PtrSize), "ptr", OcrEngine, "ptr", SoftwareBitmap, "ptr*", OcrResult)   ; RecognizeAsync
     WaitForAsync(OcrResult)
+    if (!OcrResult) {
+        OcrDebug("OCR: recognition failed - frame skipped")
+        CleanupStream(IRandomAccessStream)
+        CleanupBitmap(SoftwareBitmap)
+        ObjRelease(BitmapDecoder), ObjRelease(BitmapFrame), ObjRelease(BitmapFrameWithSoftwareBitmap)
+        return out
+    }
 
+    LinesList := 0
     DllCall(NumGet(NumGet(OcrResult + 0) + 6 * A_PtrSize), "ptr", OcrResult, "ptr*", LinesList)   ; get_Lines
+    if (!LinesList) {
+        CleanupStream(IRandomAccessStream)
+        CleanupBitmap(SoftwareBitmap)
+        ObjRelease(BitmapDecoder), ObjRelease(BitmapFrame), ObjRelease(BitmapFrameWithSoftwareBitmap), ObjRelease(OcrResult)
+        return out
+    }
+    lineCount := 0
     DllCall(NumGet(NumGet(LinesList + 0) + 7 * A_PtrSize), "ptr", LinesList, "int*", lineCount)   ; Size
     loop % lineCount {
         DllCall(NumGet(NumGet(LinesList + 0) + 6 * A_PtrSize), "ptr", LinesList, "int", A_Index - 1, "ptr*", OcrLine)   ; GetAt
@@ -3990,7 +4287,16 @@ DeleteHString(hString) {
 }
 
 WaitForAsync(ByRef Object) {
+    if (!Object) {
+        Object := 0
+        return
+    }
     AsyncInfo := ComObjQuery(Object, IAsyncInfo := "{00000036-0000-0000-C000-000000000046}")
+    if (!AsyncInfo) {
+        ObjRelease(Object)
+        Object := 0
+        return
+    }
     loop {
         DllCall(NumGet(NumGet(AsyncInfo + 0) + 7 * A_PtrSize), "ptr", AsyncInfo, "uint*", status)   ; Status
         if (status != 0) {
@@ -3998,6 +4304,7 @@ WaitForAsync(ByRef Object) {
                 DllCall(NumGet(NumGet(AsyncInfo + 0) + 8 * A_PtrSize), "ptr", AsyncInfo, "uint*", ErrorCode)
                 OcrDebug("OCR async error: " ErrorCode)
                 ObjRelease(AsyncInfo)
+                ObjRelease(Object)
                 Object := 0
                 return
             }
@@ -4006,6 +4313,7 @@ WaitForAsync(ByRef Object) {
         }
         sleep 10
     }
+    ObjectResult := 0
     DllCall(NumGet(NumGet(Object + 0) + 8 * A_PtrSize), "ptr", Object, "ptr*", ObjectResult)   ; GetResults
     ObjRelease(Object)
     Object := ObjectResult

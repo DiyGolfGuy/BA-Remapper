@@ -64,7 +64,7 @@ Turn on the checkbox and BA Remapper watches for GSPro's scramble shot-select ca
 2. **Green always wins** among those — a ball on the green beats any distance advantage elsewhere
 3. **Shortest distance** decides the rest
 
-Lie and shot number are read from each card's lie row only, so a player name like "Woods" or "Sandy" can never be mistaken for a lie. Pick manually any time — when the cards close, the countdown cancels silently. If a frame can't be read (the animated green grid on the putting green can spoil one), it re-reads the next frames; if the cards still can't be read completely, the picker stands down and leaves the choice to the players. It never guesses. Works with 2, 3, or 4 player groups. The setting is global (all profiles).
+Lie and shot number are read from each card's lie row only, so a player name like "Woods" or "Sandy" can never be mistaken for a lie. The row is read whether the screen reader returns it as one piece ("ROUGH 4TH") or two, and a single misread letter ("R0UGH") is tolerated. Pick manually any time — when the cards close, the countdown cancels silently. If a frame can't be read (the animated green grid on the putting green can spoil one), it re-reads the next frames; if the cards still can't be read completely, the picker stands down and leaves the choice to the players. It never guesses. Works with 2, 3, or 4 player groups. The setting is global (all profiles).
 
 ### Button Builder
 The Builder window mirrors the physical panel — same layout, with each button's current secondary printed in yellow beneath it, exactly like the box. Click any button to set its secondary in one dialog (hotkey list, Smart Click list, position capture, or none). Everything auto-saves the moment you change it.
@@ -85,14 +85,15 @@ Everything lives in `Documents\BA Custom Products\Remapper\` — visible, plain 
 |---|---|
 | `settings.ini` | App-wide preferences |
 | `profiles\*.ini` | One file per profile |
-| `launch_log.txt` | Every app launch: time, manual vs Windows-startup, exe path |
+| `launch_log.txt` | Every app launch: time, version, manual vs Windows-startup, exe path |
 | `ocr_last_scan.txt` | Written by the **OCR Test** button — everything the OCR currently reads, with coordinates |
 | `ocr_last_miss.txt` | Written when a Smart Click can't find its target — shows exactly what the screen said |
-| `scramble_last_decision.txt` | Written on every auto-pick attempt — each card's lie, shot number, and distance as parsed, and the decision or the reason it stood down |
-| `ocr_trace.txt` | Every Smart Click press, step by step: received, resolved, clicked or not found |
+| `scramble_last_decision.txt` | Written on every auto-pick attempt — each card's lie, shot number, and distance as parsed, the exact text read on each card, and the decision or the reason it stood down |
+| `scramble_log.txt` | The same record for the last ~100 attempts, so an earlier miss is never lost when a later pick succeeds |
+| `ocr_trace.txt` | Every Smart Click press, step by step: each screen read, where it found the button, the click — or why it held off |
 | `error_log.txt` | Any internal error the app caught and recovered from, with version and location |
 
-The **OCR Test** button (main window and tray menu) scans the GSPro window on demand and opens the result in Notepad — the first stop for any "it didn't click" question.
+The **OCR Test** button (main window and tray menu) scans the GSPro window on demand and opens the result in Notepad — the first stop for any "it didn't click" question. With scramble cards on screen it also shows which card the auto-pick would choose from that exact frame (no key is sent).
 
 **Cleanup / Reset** removes the auto-start entry and all data files if you ever want a factory-fresh start or a clean uninstall. Deleting the folder plus the exe removes every trace.
 
@@ -108,13 +109,15 @@ The **OCR Test** button (main window and tray menu) scans the GSPro window on de
 
 **A Smart Click missed** — press OCR Test with the menu on screen and send in `ocr_last_scan.txt`, plus `ocr_trace.txt` and `error_log.txt` if present. Nearly every miss is wording or layout the dump reveals immediately.
 
-**Auto-pick didn't pick** — send `scramble_last_decision.txt`; it names each card as read and the exact reason it stood down.
+**Auto-pick didn't pick** — send `scramble_last_decision.txt` (or `scramble_log.txt` if it picked later); it shows each card exactly as read and the reason it stood down.
 
 **Typing goes weird in other apps** — mapping is ON and catching your keys. Ctrl+F12 toggles it off instantly.
 
 ---
 
 ## Version History
+
+**v5.0.5** — Fixes auto-pick standing down on screens where the text reader splits a card's lie row in two ("ROUGH" | "4TH") — the v5.0.4 lie-row change only looked at the "4TH" piece. Smart Clicks now click only when two back-to-back screen reads agree on the button's position, so a menu caught mid-animation can never send a click between Drop Ball and Move Back. A failed screen read is skipped instead of aborting the press, and two reads never run on top of each other. Fixes OCR Test failing (and the trace / miss / error logs never being created) on PCs that had not written those files before. New `scramble_log.txt`; OCR Test shows the card auto-pick would choose.
 
 **v5.0.4** — Reliability release. Scramble picker reads lie and shot from the lie row only (player names can no longer be mistaken for a lie, so a ball on the green always wins as intended), rejects mangled distance reads, and re-reads frames spoiled by the animated green grid instead of giving up. Smart Clicks: full support for the mulligans-off relief menu and the Rehit-only OB dialog, screen read starts the moment FN is pressed, menus still fading in are waited out, scans never collide, picks the GSPro game window by size so connector apps can't confuse it, on-screen messages appear on the game screen on multi-monitor rigs. Internal errors are logged and recovered from instead of stopping a feature.
 
