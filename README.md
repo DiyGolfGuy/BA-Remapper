@@ -43,6 +43,8 @@ Each button's secondary can be one of three types:
 ### Smart Clicks
 Five penalty/relief menu actions are built in: **Move Forward, Move Back, Next Option, Drop Ball / Rehit, OB Rehit**. Before any click, the app verifies the entire relief menu — the Options counter and the buttons, in order, evenly spaced, one column — and clicks the verified position inside it. It works with mulligans on or off (GSPro hides the Mulligan button when they're off). It never clicks a lone matched word, never clicks into an opening or closing animation, and if a button's own text misreads, the surrounding menu still proves where it is. Drop Ball / Rehit clicks the changing second slot whichever word it currently shows; OB Rehit handles the "You have hit OB!" dialog (with or without its Mulligan button) and the relief menu's rehit option. The app starts reading the screen the moment you press FN, and keeps retrying while a menu is still fading in, so one press is all it takes. If the menu genuinely isn't on screen, the app tells you instead of guessing.
 
+**Locked spots — fast after the first press.** The first Smart Click on a PC reads the screen twice, checks both reads agree, and locks in where every menu button sits (saved in `settings.ini`). From then on each press reads only that button's small area and clicks right away, with no click positions to program. The spots are tied to the GSPro window size: change the resolution and they are re-learned automatically on the next press. Tray menu → **Reset Smart Click spots** forces a fresh learn.
+
 ### Built-in preset: "Basic Secondary"
 Select **Basic Secondary** from the profile dropdown and the yellow print on the box just works — zero programming:
 
@@ -63,6 +65,8 @@ Turn on the checkbox and BA Remapper watches for GSPro's scramble shot-select ca
 1. **Fewest strokes first** — a 2nd-shot ball always beats a closer 3rd-shot ball from a penalty drop
 2. **Green always wins** among those — a ball on the green beats any distance advantage elsewhere
 3. **Shortest distance** decides the rest
+
+The lie is not judged otherwise — rough, woods and concrete never stop a pick. If the group wants a longer ball from a better lie, they pick it themselves before the countdown ends.
 
 Lie and shot number are read from each card's lie row only, so a player name like "Woods" or "Sandy" can never be mistaken for a lie. The row is read whether the screen reader returns it as one piece ("ROUGH 4TH") or two, and a single misread letter ("R0UGH") is tolerated. Pick manually any time — when the cards close, the countdown cancels silently. If a frame can't be read (the animated green grid on the putting green can spoil one), it re-reads the next frames; if the cards still can't be read completely, the picker stands down and leaves the choice to the players. It never guesses. Works with 2, 3, or 4 player groups. The setting is global (all profiles).
 
@@ -116,6 +120,8 @@ The **OCR Test** button (main window and tray menu) scans the GSPro window on de
 ---
 
 ## Version History
+
+**v5.0.6** — Smart Clicks are fast again: the first press on a PC verifies the menu with two reads and locks in every button's position; later presses read only that button's small area. Spots re-learn automatically when the GSPro window size changes (or via tray → Reset Smart Click spots). A sliding/zooming menu is never clicked; extra Drop Ball taps during a press are dropped; the scramble watcher pauses while FN is held. Auto-pick rule: fewest strokes → green always wins → shortest; the lie no longer stops a pick (5.0.5 stood down on CONCRETE). Green distances parse correctly when the ' mark reads as a 1.
 
 **v5.0.5** — Fixes auto-pick standing down on screens where the text reader splits a card's lie row in two ("ROUGH" | "4TH") — the v5.0.4 lie-row change only looked at the "4TH" piece. Smart Clicks now click only when two back-to-back screen reads agree on the button's position, so a menu caught mid-animation can never send a click between Drop Ball and Move Back. A failed screen read is skipped instead of aborting the press, and two reads never run on top of each other. Fixes OCR Test failing (and the trace / miss / error logs never being created) on PCs that had not written those files before. New `scramble_log.txt`; OCR Test shows the card auto-pick would choose.
 

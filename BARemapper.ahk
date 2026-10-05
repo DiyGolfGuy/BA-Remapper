@@ -11,8 +11,30 @@ CoordMode, Mouse, Screen
 DllCall("SetProcessDPIAware")
 
 ; ============================================================
-;  BA CUSTOM PRODUCTS - CONTROL BOX REMAPPER v5.0.5
+;  BA CUSTOM PRODUCTS - CONTROL BOX REMAPPER v5.0.6
 ;  bacustomproducts@gmail.com   GitHub: DiyGolfGuy
+;
+;  CHANGES IN v5.0.6
+;  - LOCKED SMART CLICK SPOTS: the first verified Smart Click
+;    on a PC saves every relief-menu button position (keyed to
+;    the GSPro window size); later presses read only the
+;    button's small area, confirm the word is there at the
+;    saved size, and click - tens of ms instead of two full
+;    reads (~1s on the field PC).  Re-learned automatically on
+;    a window size change or when the confirm fails; tray menu
+;    "Reset Smart Click spots" forces it.
+;  - The learn path's confirming read covers only the menu
+;    area; the FN prefetch is skipped once spots are locked;
+;    the scramble watcher stands aside while FN is held; extra
+;    taps of Drop Ball / Rehit made during a press are dropped
+;    (they used to run after the drop and search 5s for a menu
+;    that was gone).
+;  - Scramble rule (Ba): fewest strokes -> GREEN always wins ->
+;    shortest distance.  The lie never blocks a pick: v5.0.5
+;    stood down on a card it read perfectly as CONCRETE.  Only a
+;    word that may be a misread GREEN stands down.
+;  - Green distances: the OCR reads the ' mark as "1" (14' 7"
+;    -> "141 7"); feet/inches are now parsed with that in mind.
 ;
 ;  CHANGES IN v5.0.5
 ;  - Scramble FIX: the lie row is now every OCR line on the
@@ -161,7 +183,7 @@ DllCall("SetProcessDPIAware")
 ; ============================================================
 ;  CONSTANTS / PATHS
 ; ============================================================
-AppVersion := "5.0.5"
+AppVersion := "5.0.6"
 MainWinTitle    := "BA Custom Control Box Remapper"
 BuilderWinTitle := "BA Custom Control Box - Button Builder"
 HelpWinTitle    := "BA Custom Control Box - Help"
@@ -392,6 +414,9 @@ VerifyY      := 0
 VerifyBandPx := 90           ; vertical tolerance for verify match
 LastLatticeNote := ""        ; diagnostics for miss dumps
 LastResolveBand := 90
+LastRef := {}                ; geometry of the last resolved target
+SpotWin := ""                ; GSPro client rect the locked spots belong to
+Spots := {}                  ; locked Smart Click spots (see LOCKED SPOTS)
 OcrWarmedUp  := false
 
 ; ---- Auto-Pick Scramble state (settings loaded from ini) ----
@@ -986,7 +1011,7 @@ RunOcrAction(actionId) {
     global GSProWinNeedle, GSProWinExclude, PendingOcrAction, PendingOcrSince
     global LastActionId, LastClickX, LastClickY, LastFireTick
     global LastScanObj, LastScanTick, VerifyActionId, VerifyY, VerifyBandPx
-    global LastResolveBand, LastLatticeNote
+    global LastResolveBand, LastLatticeNote, LastRef, SpotWin
     if (!OcrActionNeedles.HasKey(actionId))
         return
     closesMenu := (actionId = "DropRehit" || actionId = "Rehit")
@@ -1015,7 +1040,6 @@ RunOcrAction(actionId) {
     }
     OcrLockTake()
     try {
-    needles := OcrActionNeedles[actionId]
 
     ; FAST PATH 1 - identical repeat: the menu stack does not
     ; move while it is up, and the cursor is still hovering the
@@ -1031,62 +1055,104 @@ RunOcrAction(actionId) {
         return
     }
 
-    ; TWO-FRAME AGREEMENT - a click is authorized only when two
-    ; consecutive reads put the target in the same place.  GSPro
-    ; animates its menus in; a single frame caught mid-animation
-    ; forms a perfectly consistent lattice at the WRONG place (a
-    ; menu zooming in from its middle puts Next Option's spot
-    ; between Drop Ball and Move Back - the field report), and
-    ; the FN-press prefetch made such a frame the one clicked.
-    ; Now the prefetch cache is only frame A; a fresh frame B
-    ; must confirm it.  A settled menu agrees on the first fresh
-    ; read (one scan of delay); a moving one keeps being read
-    ; until it holds still.
     found := false
+    learnNow := false
     cx := 0
     cy := 0
-    prevOk := false
-    px := 0
-    py := 0
-    ; Rehit depends on the slot-2 WORD, which changes with Next
-    ; Option, so its frame A always comes fresh.
-    if (actionId != "Rehit" && IsObject(LastScanObj) && (A_TickCount - LastScanTick) <= 2500) {
-        if (ResolveOcrTarget(actionId, LastScanObj, px, py)) {
-            prevOk := true
-            OcrTrace("  frame A (prefetch): " . px . "," . py . "  " . LastLatticeNote)
+    scan := {found: false, lines: [], text: "", lc: ""}
+
+    ; FAST PATH 2 - LOCKED SPOTS.  This PC's menu positions were
+    ; verified and saved on an earlier press (same GSPro window
+    ; size): read only the button's own small area, confirm its
+    ; word sits there at the saved size, click.  Tens of ms
+    ; instead of two full-window reads.
+    curWr := ClientRectByTitle(GSProWinNeedle, GSProWinExclude)
+    curKey := curWr.found ? curWr.x . "," . curWr.y . "," . curWr.w . "," . curWr.h : ""
+    spotsValid := (curKey != "" && curKey = SpotWin)
+    if (spotsValid) {
+        if (SpotFastResolve(actionId, cx, cy, 8)) {
+            found := true
+            LastScanObj := {found: true, lines: [], text: "", lc: "", win: curWr}
+        } else {
+            OcrTrace("  locked spot not confirmed - reading the whole screen")
         }
     }
-    Loop, 8 {
-        scan := ScanWinClient(GSProWinNeedle, GSProWinExclude)
-        if (!scan.found)
-            scan := ScanScreen()   ; window title fallback
-        LastScanObj := scan
-        LastScanTick := A_TickCount
-        tx := 0
-        ty := 0
-        ok := ResolveOcrTarget(actionId, scan, tx, ty)
-        OcrTrace("  read " . A_Index . ": " . (ok ? tx . "," . ty : "no target") . "  " . LastLatticeNote)
-        if (ok && prevOk) {
-            agreeTol := LastResolveBand // 4
-            if (agreeTol < 4)
-                agreeTol := 4
-            if (Abs(tx - px) <= agreeTol && Abs(ty - py) <= agreeTol) {
-                found := true
-                cx := tx
-                cy := ty
-                break
+
+    ; LEARN PATH - TWO-FRAME AGREEMENT.  A click is authorized
+    ; only when two consecutive reads put the menu in the same
+    ; place.  GSPro slides its menus in: a frame caught mid-slide
+    ; forms a perfectly consistent menu ~100px from where it ends
+    ; up (field trace 4 Oct: the FN-press read had Drop Ball where
+    ; Move Back settles).  The first read is the whole window (or
+    ; the FN-press prefetch); the confirming read covers only the
+    ; menu's area, so it is fast.  When the two agree, the click
+    ; goes out and every button's position is LOCKED for next time.
+    if (!found) {
+        maxReads := spotsValid ? 3 : 8
+        prevOk := false
+        prevRef := ""
+        lastWin := curWr.found ? curWr : ""
+        px := 0
+        py := 0
+        if (!spotsValid && actionId != "Rehit" && IsObject(LastScanObj) && (A_TickCount - LastScanTick) <= 2500) {
+            tx := 0
+            ty := 0
+            if (ResolveOcrTarget(actionId, LastScanObj, tx, ty)) {
+                prevOk := true
+                prevRef := LastRef
+                px := LastRef.rx
+                py := LastRef.ry
+                OcrTrace("  frame A (prefetch): " . tx . "," . ty . "  " . LastLatticeNote)
             }
-            OcrTrace("    moved since last read - waiting for the menu to settle")
         }
-        prevOk := ok
-        px := tx
-        py := ty
-        if (!ok)
-            Sleep, 120
+        Loop, %maxReads% {
+            useArea := (prevOk && IsObject(prevRef) && prevRef.kind = "menu" && IsObject(lastWin))
+            if (useArea) {
+                scan := ScanMenuArea(prevRef, lastWin)
+            } else {
+                scan := ScanWinClient(GSProWinNeedle, GSProWinExclude)
+                if (!scan.found)
+                    scan := ScanScreen()   ; window title fallback
+                if (scan.HasKey("win"))
+                    lastWin := scan.win
+            }
+            LastScanObj := scan
+            LastScanTick := A_TickCount
+            tx := 0
+            ty := 0
+            ok := ResolveOcrTarget(actionId, scan, tx, ty)
+            OcrTrace("  read " . A_Index . (useArea ? " (menu area)" : " (full)") . ": " . (ok ? tx . "," . ty : "no target") . "  " . LastLatticeNote)
+            if (ok && prevOk) {
+                agreeTol := LastResolveBand // 4
+                if (agreeTol < 4)
+                    agreeTol := 4
+                if (Abs(LastRef.rx - px) <= agreeTol && Abs(LastRef.ry - py) <= agreeTol) {
+                    found := true
+                    learnNow := true
+                    cx := tx
+                    cy := ty
+                    break
+                }
+                OcrTrace("    moved since last read - waiting for the menu to settle")
+            }
+            prevOk := ok
+            if (ok) {
+                prevRef := LastRef
+                px := LastRef.rx
+                py := LastRef.ry
+            }
+            if (!ok)
+                Sleep, 120
+        }
     }
 
     if (found) {
         OcrTrace("  resolved at " . cx . "," . cy)
+        ; Lock in this PC's spots from the verified frames.
+        if (learnNow && IsObject(LastScanObj) && LastScanObj.HasKey("win") && LastScanObj.win.found) {
+            lw := LastScanObj.win
+            LearnSpots(lw.x . "," . lw.y . "," . lw.w . "," . lw.h)
+        }
         ; The click is about to change the screen, so this scan
         ; is spent: the next press must read fresh rather than
         ; resolve against a pre-click cache.
@@ -1114,6 +1180,15 @@ RunOcrAction(actionId) {
             VerifyY := cy
             VerifyBandPx := LastResolveBand
             SetTimer, OcrVerifyTick, -900
+            ; Extra taps of the same button made while this one
+            ; was working are impatience, not new requests: the
+            ; menu is closing.  (Field trace: a queued Drop Ball
+            ; ran after the drop and searched 5s for a menu that
+            ; was gone, then showed "not found".)
+            if (PendingOcrAction = actionId) {
+                PendingOcrAction := ""
+                OcrTrace("  extra " . actionId . " tap made during this press dropped")
+            }
         } else {
             LastActionId := actionId
             LastClickX := cx
@@ -1122,7 +1197,7 @@ RunOcrAction(actionId) {
         SetTimer, ParkTick, -1200
     } else {
         dispName := OcrActionName.HasKey(actionId) ? OcrActionName[actionId] : actionId
-        OcrTrace("  NOT FOUND (" . LastLatticeNote . ")" . (prevOk ? " - the menu never held still" : ""))
+        OcrTrace("  NOT FOUND (" . LastLatticeNote . ")")
         ShowGsproTip(dispName . " - not found on screen", 1800)
         OcrDumpMiss("SmartClick " . actionId . " (" . LastLatticeNote . ")", scan)
     }
@@ -1374,6 +1449,7 @@ FindMenuLattice(scan) {
     }
     lat.found := true
     lat.colX := Round(colX)
+    lat.havg := havg
     lat.wavg := wavg
     lat.pitch := pitch
     lat.slotY := slotY
@@ -1452,7 +1528,8 @@ FindObTitleRehit(scan) {
 ; true and sets cx/cy; sets LastResolveBand (the vertical
 ; tolerance used by the background verify).
 ResolveOcrTarget(actionId, scan, ByRef cx, ByRef cy) {
-    global LastResolveBand, LastLatticeNote
+    global LastResolveBand, LastLatticeNote, LastRef
+    LastRef := {kind: ""}
     target := 0
     if (actionId = "MoveForward")
         target := 1
@@ -1478,12 +1555,14 @@ ResolveOcrTarget(actionId, scan, ByRef cx, ByRef cy) {
                 cx := lat.colX
                 cy := lat.slotY[2]
             }
+            LastRef := MenuRef(lat, 2)
             return true
         }
         if (lat.anch.HasKey(target)) {
             a := lat.anch[target]
             cx := a.x + a.w // 2
             cy := a.y + a.h // 2
+            LastRef := MenuRef(lat, target)
             return true
         }
         ; Inferred position: refuse if a DIFFERENT stack word is
@@ -1497,22 +1576,20 @@ ResolveOcrTarget(actionId, scan, ByRef cx, ByRef cy) {
         }
         cx := lat.colX
         cy := lat.slotY[target]
+        LastRef := MenuRef(lat, target)
         return true
     }
     ; actionId = "Rehit": the OB dialog (by title, or by the
     ; Mulligan pair), or the relief menu's slot 2 showing Rehit.
     pr := FindObTitleRehit(scan)
+    if (!pr.found)
+        pr := FindObPair(scan)
     if (pr.found) {
         LastResolveBand := Round(pr.h * 2)
         cx := pr.x + pr.w // 2
         cy := pr.y + pr.h // 2
-        return true
-    }
-    pr := FindObPair(scan)
-    if (pr.found) {
-        LastResolveBand := Round(pr.h * 2)
-        cx := pr.x + pr.w // 2
-        cy := pr.y + pr.h // 2
+        LastRef := {kind: "ob", rx: cx, ry: cy, w: pr.w, h: pr.h}
+        LastLatticeNote := "OB dialog"
         return true
     }
     lat := FindMenuLattice(scan)
@@ -1520,9 +1597,218 @@ ResolveOcrTarget(actionId, scan, ByRef cx, ByRef cy) {
         LastResolveBand := Round(lat.pitch)
         cx := lat.s2.x + lat.s2.w // 2
         cy := lat.s2.y + lat.s2.h // 2
+        LastRef := MenuRef(lat, 2)
         return true
     }
     return false
+}
+
+; Geometry of a verified relief menu, for agreement checks, the
+; small confirm read, and learning the locked spots.
+MenuRef(lat, target) {
+    return {kind: "menu", rx: lat.colX, ry: lat.slotY[target], colX: lat.colX
+        , slotY: lat.slotY, pitch: lat.pitch, wavg: lat.wavg, havg: lat.havg
+        , anch: lat.anch, s2: lat.s2}
+}
+
+; ============================================================
+;  LOCKED SMART CLICK SPOTS  (v5.0.6)
+;
+;  The first Smart Click on a PC that two agreeing screen reads
+;  verify saves where every relief-menu button sits (and the OB
+;  dialog's Rehit), keyed to the GSPro window's exact position
+;  and size, in settings.ini [SmartSpots].  From then on a press
+;  reads ONLY that button's small area - tens of milliseconds
+;  instead of two full-window reads - confirms the button's own
+;  word is there at the saved size (a menu still sliding in is
+;  neither in place nor full size), and clicks.  Anything else -
+;  menu not up yet, a different layout - falls back to the full
+;  read, which re-learns.  A different GSPro window size or
+;  position (new resolution) never uses old spots: they are
+;  re-learned on the next press automatically.  Tray menu: Reset
+;  Smart Click spots forces a fresh learn.
+; ============================================================
+SpotKeys() {
+    return ["MoveForward", "DropRehit", "MoveBack", "NextOption", "ObRehit"]
+}
+
+LoadSpots() {
+    global ConfigFile, SpotWin, Spots
+    Spots := {}
+    SpotWin := ""
+    IniRead, sw, %ConfigFile%, SmartSpots, Win, %A_Space%
+    sw := Trim(sw)
+    if (!RegExMatch(sw, "^-?\d+,-?\d+,\d+,\d+$"))
+        return
+    SpotWin := sw
+    for i, k in SpotKeys() {
+        IniRead, v, %ConfigFile%, SmartSpots, %k%, %A_Space%
+        p := StrSplit(Trim(v), ",")
+        if (p.MaxIndex() >= 4 && p[3] > 0 && p[4] > 0)
+            Spots[k] := {x: p[1] + 0, y: p[2] + 0, w: p[3] + 0, h: p[4] + 0, inferred: (p[5] = "1" ? 1 : 0)}
+    }
+}
+
+SaveSpots() {
+    global ConfigFile, SpotWin, Spots
+    try {
+        IniWrite, %SpotWin%, %ConfigFile%, SmartSpots, Win
+        for i, k in SpotKeys() {
+            v := ""
+            if (Spots.HasKey(k))
+                v := Spots[k].x . "," . Spots[k].y . "," . Spots[k].w . "," . Spots[k].h . "," . Spots[k].inferred
+            IniWrite, %v%, %ConfigFile%, SmartSpots, %k%
+        }
+    } catch spErr {
+        LogAppError("SaveSpots", spErr)
+    }
+}
+
+; Are this PC's locked spots valid for the GSPro window as it is
+; right now?  (Cheap: a window lookup, no screen read.)
+SpotsValidNow() {
+    global GSProWinNeedle, GSProWinExclude, SpotWin
+    if (SpotWin = "")
+        return false
+    wr := ClientRectByTitle(GSProWinNeedle, GSProWinExclude)
+    if (!wr.found)
+        return false
+    return ((wr.x . "," . wr.y . "," . wr.w . "," . wr.h) = SpotWin)
+}
+
+; Save the spots from the frame just verified (LastRef).
+LearnSpots(winKey) {
+    global Spots, SpotWin, LastRef
+    if (winKey = "" || !IsObject(LastRef) || LastRef.kind = "")
+        return
+    if (SpotWin != winKey) {
+        Spots := {}
+        SpotWin := winKey
+    }
+    if (LastRef.kind = "menu") {
+        keys := {1: "MoveForward", 2: "DropRehit", 3: "MoveBack", 4: "NextOption"}
+        for slot, key in keys {
+            a := ""
+            if (slot = 2) {
+                if (LastRef.s2.found)
+                    a := LastRef.s2
+            } else if (LastRef.anch.HasKey(slot)) {
+                a := LastRef.anch[slot]
+            }
+            if (IsObject(a))
+                Spots[key] := {x: a.x + a.w // 2, y: a.y + a.h // 2, w: a.w, h: a.h, inferred: 0}
+            else
+                Spots[key] := {x: LastRef.colX, y: LastRef.slotY[slot], w: Round(LastRef.wavg), h: Round(LastRef.havg), inferred: 1}
+        }
+        OcrTrace("  spots locked for this PC: menu at col " . LastRef.colX . ", pitch " . Round(LastRef.pitch))
+    } else if (LastRef.kind = "ob") {
+        Spots["ObRehit"] := {x: LastRef.rx, y: LastRef.ry, w: LastRef.w, h: LastRef.h, inferred: 0}
+        OcrTrace("  spot locked for this PC: OB Rehit at " . LastRef.rx . "," . LastRef.ry)
+    }
+    SaveSpots()
+}
+
+; Confirm a locked spot with a small read of the button's own
+; area.  The word must be the right one, centered where it was
+; learned, at the learned size - a menu still sliding in is not
+; there yet and a menu zooming in is too small, so neither is
+; ever clicked; the read simply repeats (up to `tries` times,
+; ~0.1s apart) until the menu holds still.
+SpotFastResolve(actionId, ByRef cx, ByRef cy, tries := 8) {
+    global Spots, LastResolveBand
+    cands := []
+    if (actionId = "MoveForward")
+        cands.Push(["MoveForward", ["move forward"]])
+    else if (actionId = "MoveBack")
+        cands.Push(["MoveBack", ["move back"]])
+    else if (actionId = "NextOption")
+        cands.Push(["NextOption", ["next option"]])
+    else if (actionId = "DropRehit")
+        cands.Push(["DropRehit", ["drop ball", "rehit"]])
+    else if (actionId = "Rehit") {
+        cands.Push(["ObRehit", ["rehit"]])
+        cands.Push(["DropRehit", ["rehit"]])
+    }
+    have := false
+    for i, c in cands {
+        if (Spots.HasKey(c[1]))
+            have := true
+    }
+    if (!have)
+        return false
+    Loop, %tries% {
+        tryN := A_Index
+        for i, c in cands {
+            if (!Spots.HasKey(c[1]))
+                continue
+            sp := Spots[c[1]]
+            hx := sp.w // 2 + sp.h * 2
+            hy := Round(sp.h * 1.3)
+            o := OcrRegion(sp.x - hx, sp.y - hy, hx * 2, hy * 2)
+            tolY := sp.h * 0.25
+            if (tolY < 5)
+                tolY := 5
+            tolX := sp.h * 0.6
+            if (tolX < 8)
+                tolX := 8
+            for j, ln in o.lines {
+                hit := false
+                for k, nd in c[2] {
+                    if (FuzzyIs(ln.text, nd))
+                        hit := true
+                }
+                if (!hit)
+                    continue
+                lx := ln.x + ln.w // 2
+                ly := ln.y + ln.h // 2
+                if (Abs(ly - sp.y) > tolY || Abs(lx - sp.x) > tolX)
+                    continue
+                if (ln.h < sp.h * 0.72 || ln.h > sp.h * 1.3)
+                    continue
+                cx := lx
+                cy := ly
+                LastResolveBand := Round(sp.h * 2)
+                OcrTrace("  locked spot " . c[1] . " confirmed |" . ln.text . "| read " . tryN)
+                ; A spot learned by inference (its word did not read
+                ; that time) takes the real box the first time the
+                ; word is seen.
+                if (sp.inferred) {
+                    Spots[c[1]] := {x: lx, y: ly, w: ln.w, h: ln.h, inferred: 0}
+                    SaveSpots()
+                }
+                return true
+            }
+        }
+        if (tryN < tries)
+            Sleep, 50
+    }
+    return false
+}
+
+; Confirming read for the learn path: just the menu's area
+; (around a tenth of a 1440p window), padded so a menu that is
+; still settling stays inside it.
+ScanMenuArea(ref, win) {
+    r := {found: true, lines: [], text: "", lc: "", win: win}
+    x1 := Round(ref.colX - ref.wavg * 0.6 - ref.pitch * 2)
+    x2 := Round(ref.colX + ref.wavg * 0.6 + ref.pitch * 2)
+    y1 := Round(ref.slotY[1] - ref.pitch * 2.3)
+    y2 := Round(ref.slotY[4] + ref.pitch * 2.3)
+    if (x1 < win.x)
+        x1 := win.x
+    if (y1 < win.y)
+        y1 := win.y
+    if (x2 > win.x + win.w)
+        x2 := win.x + win.w
+    if (y2 > win.y + win.h)
+        y2 := win.y + win.h
+    if (x2 - x1 < 20 || y2 - y1 < 20)
+        return r
+    o := OcrRegion(x1, y1, x2 - x1, y2 - y1)
+    r.lines := o.lines
+    r.text := o.text
+    r.lc := LowerStr(o.text)
+    return r
 }
 
 ; Normalize OCR text for matching: lowercase, strip everything
@@ -1926,13 +2212,16 @@ OcrDumpMiss(context, scan) {
 ;    - Distance per column: the tallest digits-only line
 ;      (feet+inches on the green, yards elsewhere)
 ;
-;  Decision: any card on the GREEN wins; several greens ->
-;  shortest; no greens -> lowest distance; tie -> first card.
-;  Then it SENDS THE KEYSTROKE (1-4) - no clicking involved.
+;  Decision (Ba's rule): FEWEST STROKES first; among those a
+;  ball on the GREEN always wins; then the SHORTEST distance;
+;  tie -> first card.  The lie is otherwise ignored - a group
+;  that wants the longer ball out of the woods picks it.  Then
+;  it SENDS THE KEYSTROKE (1-4) - no clicking involved.
 ;
-;  Safety gate: every card's lie must be readable, and every
-;  contender's distance must parse, or it stands down with a
-;  tooltip + diagnostic dump and leaves the choice to people.
+;  Stands down (tooltip + diagnostic dump, the players choose)
+;  only when a contender's distance cannot be read, when only
+;  some shot numbers read, or when a lie word may be a misread
+;  GREEN.
 ; ============================================================
 ; Letters-only exact match.  GSPro's animated green grid runs
 ; right up to the card edges, and a moving grid dot absorbed
@@ -2021,6 +2310,9 @@ ScrambleDecide(scan, uses, ctx := "") {
                 anchor := ln
             }
         }
+        ; An ordinal proves this is the lie row; without one the
+        ; row is a best guess, so only a known lie word counts.
+        anchorProven := IsObject(anchor)
         if (!IsObject(anchor)) {
             for i, ln in colLines {
                 if (ln.y > anchorY) {
@@ -2053,7 +2345,7 @@ ScrambleDecide(scan, uses, ctx := "") {
             for i, p in rowParts
                 rowText .= (rowText = "" ? "" : " ") . Trim(p.text)
             card.row := rowText
-            lieWord := ScrambleLieWord(rowText)
+            lieWord := ScrambleLieWord(rowText, anchorProven)
             if (lieWord != "") {
                 card.lie := lieWord
                 card.green := (lieWord = "green")
@@ -2078,7 +2370,7 @@ ScrambleDecide(scan, uses, ctx := "") {
                 continue
             clean := RegExReplace(ln.text, "[^0-9 ]", " ")
             clean := Trim(RegExReplace(clean, " +", " "))
-            if (clean != "" && RegExMatch(clean, "^\d+( \d+)?$") && ln.h > useH) {
+            if (clean != "" && RegExMatch(clean, "^\d+( \d+){0,2}$") && ln.h > useH) {
                 if (ln.h > distH) {
                     distH := ln.h
                     distClean := clean
@@ -2086,23 +2378,26 @@ ScrambleDecide(scan, uses, ctx := "") {
                 }
             }
         }
-        ; Convert to inches: green = feet(+inches), else yards
+        ; Convert to inches.  Feet (+inches) when the card is on
+        ; the green or the distance carries a feet/inch mark;
+        ; otherwise yards.
         if (distClean != "") {
-            if (InStr(distClean, " ")) {
-                StringSplit, part, distClean, %A_Space%
-                card.dist := part1 * 12 + part2   ; feet + inches
-            } else if (card.green) {
-                card.dist := distClean * 12       ; feet
-            } else {
-                card.dist := distClean * 36       ; yards
-            }
+            feetMarks := "['" . Chr(34) . Chr(145) . Chr(146) . Chr(147) . Chr(148) . "``]"
+            if (card.green || RegExMatch(card.distRaw, feetMarks) || InStr(distClean, " "))
+                card.dist := FeetInches(card.distRaw)
+            else
+                card.dist := distClean * 36
         }
         cards.Push(card)
     }
-    ; Gate 1: every card's lie must be readable
+    ; The lie itself never blocks a pick (rough, concrete, woods
+    ; - players who want the longer ball from a bad lie choose it
+    ; themselves).  The ONE lie that changes the decision is
+    ; GREEN, so a word that may be a badly misread GREEN stands
+    ; down rather than risk breaking the green rule.
     Loop, %n% {
-        if (cards[A_Index].lie = "") {
-            ScrambleLogDecision(n, cards, 0, 0, "GATE: lie unreadable" . ctx)
+        if (cards[A_Index].lie = "?green") {
+            ScrambleLogDecision(n, cards, 0, 0, "GATE: card " . A_Index . " lie may be a misread GREEN" . ctx)
             return 0
         }
     }
@@ -2169,6 +2464,62 @@ ScrambleOrdinal(t) {
     return 0
 }
 
+; Green distance (feet + inches, e.g. 14' 7") to inches.  The
+; OCR engine often reads the ' mark as a "1" (field log 4 Oct:
+; 14' 7" -> "141 7"" and 33' 10" -> "33110""), which v5.0.5 took
+; as 141 ft and 33110 ft.  With an inch mark present, a trailing
+; 1 on the feet is that misread mark; inches are 0-11, so in a
+; run with no space the last digit (or a final 10/11) is inches.
+; Returns -1 if nothing usable.
+FeetInches(raw) {
+    q := Chr(34)
+    t := raw
+    t := StrReplace(t, Chr(147), q)
+    t := StrReplace(t, Chr(148), q)
+    t := StrReplace(t, "''", q)
+    t := StrReplace(t, Chr(145), "'")
+    t := StrReplace(t, Chr(146), "'")
+    t := StrReplace(t, "``", "'")
+    ; An explicit feet mark: split on it.
+    ap := InStr(t, "'")
+    if (ap) {
+        ft := RegExReplace(SubStr(t, 1, ap - 1), "[^0-9]", "")
+        inch := RegExReplace(SubStr(t, ap + 1), "[^0-9]", "")
+        if (ft = "")
+            return -1
+        if (inch = "")
+            inch := 0
+        return ft * 12 + inch
+    }
+    hasQ := InStr(t, q)
+    d := Trim(RegExReplace(RegExReplace(t, "[^0-9 ]", " "), " +", " "))
+    if (d = "")
+        return -1
+    if (InStr(d, " ")) {
+        parts := StrSplit(d, " ")
+        a := parts[1]
+        inch := parts[parts.MaxIndex()]
+        if (hasQ && StrLen(a) >= 2 && SubStr(a, 0) = "1")
+            a := SubStr(a, 1, StrLen(a) - 1)
+        return a * 12 + inch
+    }
+    if (!hasQ || StrLen(d) < 3)
+        return d * 12
+    last2 := SubStr(d, -1)
+    if (last2 = "10" || last2 = "11") {
+        inch := last2 + 0
+        a := SubStr(d, 1, StrLen(d) - 2)
+    } else {
+        inch := SubStr(d, 0) + 0
+        a := SubStr(d, 1, StrLen(d) - 1)
+    }
+    if (StrLen(a) >= 2 && SubStr(a, 0) = "1")
+        a := SubStr(a, 1, StrLen(a) - 1)
+    if (a = "")
+        return -1
+    return a * 12 + inch
+}
+
 ; Shot number from the joined lie row.  The clean ordinal first;
 ; then a digit with a misread suffix ("4IH"); then a suffix whose
 ; digit misread ("ZND" -> 2, "IST" -> 1, "3RO" keeps its 3).
@@ -2190,19 +2541,26 @@ ScrambleShotNumber(rowText) {
     return 0
 }
 
-; The lie, as one of GSPro's lie words, read from the joined row.
-; Long words tolerate one misread letter ("R0UGH", "GREFN"); short
-; ones must match exactly.  "green" is returned as exactly
-; "green" - it is the one lie the decision depends on.  An
-; unrecognized row returns "" so the card counts as unreadable
-; (a GREEN misread into noise must stand down, never be scored
-; as an ordinary lie).
-ScrambleLieWord(rowText) {
-    static words := ["green", "fairway", "rough", "deep", "fringe", "collar", "apron", "tee"
+; The lie, read from the joined row.  Only GREEN changes the
+; decision, so the rules are built around it:
+;   1. a word that reads as GREEN (one misread letter allowed)
+;      -> "green"
+;   2. a known lie word (one misread letter allowed on long ones)
+;   3. a word that could be a BADLY misread GREEN (two letters
+;      off) -> "" : stand down rather than score it as rough
+;   4. any other real word is accepted as an ordinary lie.
+; v5.0.5 stopped at step 2, so a lie GSPro has that was not on
+; the list - CONCRETE, in the field log, read perfectly - counted
+; as unreadable and the pick stood down.  GSPro adds surfaces
+; with course designers' choices; the list can never be complete,
+; and it does not need to be: only "is it green" matters.
+ScrambleLieWord(rowText, allowUnknown := true) {
+    static words := ["fairway", "rough", "deep", "fringe", "collar", "apron", "tee"
         , "sand", "bunker", "waste", "native", "pine", "straw", "recovery", "fescue"
-        , "path", "cart", "dirt", "mulch", "hardpan", "gravel", "rock", "rocks", "wood"
-        , "woods", "leaves", "grass", "heather", "gorse", "tree", "trees", "hazard"
-        , "water", "drop", "desert", "mud", "first", "cut", "area"]
+        , "path", "cart", "cartpath", "dirt", "mulch", "hardpan", "gravel", "rock", "rocks"
+        , "wood", "woods", "leaves", "grass", "heather", "gorse", "tree", "trees", "hazard"
+        , "water", "drop", "desert", "mud", "first", "cut", "area", "concrete", "asphalt"
+        , "bridge", "stone", "brick", "pavement", "deck", "boardwalk", "chips", "bark"]
     t := LowerStr(rowText)
     ; A digit misread INSIDE a word splits it ("R0UGH" would read
     ; as "r" + "ugh"): map the usual look-alikes back to letters,
@@ -2212,26 +2570,49 @@ ScrambleLieWord(rowText) {
     t := RegExReplace(t, "(?<=[a-z])5(?=[a-z])", "s")
     t := RegExReplace(t, "(?<=[a-z])[0-9](?=[a-z])", "")
     t := RegExReplace(t, "[^a-z]+", " ")
-    found := ""
+    ; Word tokens, minus what is left of the shot ordinal after the
+    ; digit is stripped ("2ND" -> "nd", a misread "ZND" -> "znd").
+    toks := []
     Loop, Parse, t, %A_Space%
     {
         tok := A_LoopField
         if (StrLen(tok) < 3)
             continue
+        if (RegExMatch(tok, "^[a-z](st|nd|rd|th)$"))
+            continue
+        toks.Push(tok)
+    }
+    ; 1. GREEN
+    for i, tok in toks {
+        if (tok = "green")
+            return "green"
+        if (Abs(StrLen(tok) - 5) <= 1 && LevDist(tok, "green") <= 1)
+            return "green"
+    }
+    ; 2. a known lie word
+    for i, tok in toks {
         for k, w in words {
-            hit := (tok = w)
-            if (!hit && StrLen(w) >= 5 && Abs(StrLen(tok) - StrLen(w)) <= 1)
-                hit := (LevDist(tok, w) <= 1)
-            if (hit) {
-                if (w = "green")
-                    return "green"
-                if (found = "")
-                    found := w
-                break
-            }
+            if (tok = w)
+                return w
+            if (StrLen(w) >= 5 && Abs(StrLen(tok) - StrLen(w)) <= 1 && LevDist(tok, w) <= 1)
+                return w
         }
     }
-    return found
+    ; 3. possibly a mangled GREEN: never guess
+    for i, tok in toks {
+        if (Abs(StrLen(tok) - 5) <= 2 && LevDist(tok, "green") <= 2)
+            return "?green"
+    }
+    ; 4. any other real word (has a vowel - "XQZT" is noise), but
+    ;    only on a row the shot ordinal proved is the lie row: a
+    ;    guessed row could be a player's name.
+    if (!allowUnknown)
+        return ""
+    for i, tok in toks {
+        if (RegExMatch(tok, "[aeiouy]"))
+            return tok
+    }
+    return ""
 }
 
 ; ---- diagnostics must never break the feature ----
@@ -2308,6 +2689,7 @@ UpdateMainStatus() {
 ;  INIT  -  call order matters
 ; ============================================================
 LoadSettings()
+LoadSpots()
 RefreshAutoStartPath()
 ScanProfileList()
 SeedPresetProfiles()
@@ -2323,6 +2705,7 @@ Menu, Tray, Add, Toggle Mapping,   ToggleFromTray
 Menu, Tray, Add,
 Menu, Tray, Add, Open Settings Folder, OpenSettingsFolder
 Menu, Tray, Add, OCR Test (dump screen text), TrayOcrDump
+Menu, Tray, Add, Reset Smart Click spots, ResetSmartSpots
 Menu, Tray, Add,
 Menu, Tray, Add, Exit,             ExitLabel
 Menu, Tray, Tip, BA Custom Control Box Remapper v%AppVersion%
@@ -2757,10 +3140,15 @@ OcrVerifyTick:
     OcrLockTake()
     vAgain := false
     try {
-        vScan := ScanWinClient(GSProWinNeedle, GSProWinExclude)
         vx := 0
         vy := 0
-        if (ResolveOcrTarget(VerifyActionId, vScan, vx, vy) && Abs(vy - VerifyY) < VerifyBandPx)
+        if (SpotsValidNow()) {
+            vHit := SpotFastResolve(VerifyActionId, vx, vy, 1)
+        } else {
+            vScan := ScanWinClient(GSProWinNeedle, GSProWinExclude)
+            vHit := ResolveOcrTarget(VerifyActionId, vScan, vx, vy)
+        }
+        if (vHit && Abs(vy - VerifyY) < VerifyBandPx)
             vAgain := true
     } catch appErr {
         LogAppError("ClickVerify", appErr)
@@ -2785,10 +3173,15 @@ OcrVerifyTick2:
     }
     OcrLockTake()
     try {
-        vScan2 := ScanWinClient(GSProWinNeedle, GSProWinExclude)
         vx := 0
         vy := 0
-        if (ResolveOcrTarget(VerifyActionId, vScan2, vx, vy) && Abs(vy - VerifyY) < VerifyBandPx) {
+        if (SpotsValidNow()) {
+            vHit := SpotFastResolve(VerifyActionId, vx, vy, 1)
+        } else {
+            vScan2 := ScanWinClient(GSProWinNeedle, GSProWinExclude)
+            vHit := ResolveOcrTarget(VerifyActionId, vScan2, vx, vy)
+        }
+        if (vHit && Abs(vy - VerifyY) < VerifyBandPx) {
             OcrTrace("  verify: " . VerifyActionId . " still on screen - clicked again at " . vx . "," . vy)
             DpiClickAt(vx, vy)
             ParkMouse()
@@ -2802,6 +3195,10 @@ Return
 
 ; FN-hold prefetch: one background scan into the shared cache.
 OcrPrefetch:
+    ; Locked spots confirm with their own small read - a full
+    ; prefetch would only hold the lock the press needs.
+    if (SpotsValidNow())
+        Return
     OcrStaleCheck()
     if (OcrBusy) {
         if (FnIsDown)
@@ -2994,6 +3391,15 @@ TrayOcrDump:
     }
 Return
 
+; Forget this PC's locked Smart Click spots; the next press
+; re-learns them with two full screen reads.
+ResetSmartSpots:
+    Spots := {}
+    SpotWin := ""
+    SaveSpots()
+    TrayTip, BA Remapper, Smart Click spots cleared - the next press re-learns them, 4, 1
+Return
+
 ; One-time OCR engine warm-up (first call pays ~1s engine
 ; init; do it in the background at launch, not on the first
 ; real button press at the tee).
@@ -3017,7 +3423,11 @@ ScrambleTick:
     ; One OCR call at a time: if a Smart Click scan is in flight
     ; this tick is skipped (the next comes in 2s); while the
     ; watcher scans, a press waits on OcrBusy instead of
-    ; interleaving two engine calls.
+    ; interleaving two engine calls.  While FN is held a Smart
+    ; Click is coming: the watcher stands aside so the press
+    ; never waits behind a full-window read.
+    if (FnIsDown)
+        Return
     OcrStaleCheck()
     if (ScrambleBusy || OcrBusy)
         Return
@@ -3250,6 +3660,11 @@ ShowHelp:
       No setup, works at any resolution.  Actions: Move
       Forward, Move Back, Next Option, Drop Ball / Rehit,
       OB Rehit.  Needs Windows 10 or 11.
+      The first press on a PC learns where the menu buttons
+      sit and LOCKS them in - every press after that is
+      fast.  Changed the resolution?  It re-learns by itself
+      on the next press (or tray menu: Reset Smart Click
+      spots).
     Taught Screen Click: FN + button clicks a fixed spot
       you captured (the old way - still available).
     Speed: keep FN held and tap the button repeatedly -
@@ -3276,7 +3691,10 @@ ShowHelp:
     Balls hitting the FEWEST strokes are considered first -
     a 2nd-shot ball always beats a closer 3rd-shot ball from
     a penalty drop.  Among those, a ball on the GREEN always
-    wins; otherwise the lowest number.  Pick manually any time - if the cards close,
+    wins; otherwise the shortest distance.  The lie is not
+    judged: if the group wants a longer ball from a better
+    lie than one in the woods, pick it yourself before the
+    countdown ends.  Pick manually any time - if the cards close,
     the countdown just cancels.  If the cards cannot be
     read, it does nothing and lets you choose.
     An on-screen countdown ("Auto-pick: 12s") shows above
