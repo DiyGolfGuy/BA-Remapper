@@ -11,8 +11,32 @@ CoordMode, Mouse, Screen
 DllCall("SetProcessDPIAware")
 
 ; ============================================================
-;  BA CUSTOM PRODUCTS - CONTROL BOX REMAPPER v5.0.6
+;  BA CUSTOM PRODUCTS - CONTROL BOX REMAPPER v5.0.7
 ;  bacustomproducts@gmail.com   GitHub: DiyGolfGuy
+;
+;  CHANGES IN v5.0.7  (from the 4 Oct sim session logs/photos)
+;  - Drop Ball locked spot: the second button's word changes
+;    (Drop Ball / Rehit / "Go to DZ" in a water drop zone), so it
+;    is now confirmed by Move Forward + Move Back in their locked
+;    places and clicked whatever it says.  Locked button sizes
+;    are judged against the menu's own text-height range, so
+;    Drop Ball -> Rehit no longer fails the size check (it fell
+;    back to two full reads every time).
+;  - OB dialog: its Rehit button wobbles ~30px sideways; the
+;    agreement and locked checks follow the button's width.
+;  - After a locked spot fails to confirm, up to 8 reads (fast
+;    menu-area reads after the first) instead of 3 - a menu that
+;    re-slides in after Move Back is waited out - but three empty
+;    full reads in a row end a press made with no menu up.
+;  - Scramble: cards are remembered across frames (the putting-
+;    green grid spoils a different card each frame); stand-alone
+;    grid marks ("l", "|") are dropped; on the green a feet/inch
+;    distance is read even when its marks misread as letters;
+;    6 tries before standing down; the stand-down dump has every
+;    line's position (ocr_last_scramble_miss.txt).
+;  - Key trace: every FN / button event on a Smart Click profile
+;    goes to ocr_trace.txt (Move Forward presses never reached
+;    the Smart Click in the field trace - this shows why).
 ;
 ;  CHANGES IN v5.0.6
 ;  - LOCKED SMART CLICK SPOTS: the first verified Smart Click
@@ -183,7 +207,7 @@ DllCall("SetProcessDPIAware")
 ; ============================================================
 ;  CONSTANTS / PATHS
 ; ============================================================
-AppVersion := "5.0.6"
+AppVersion := "5.0.7"
 MainWinTitle    := "BA Custom Control Box Remapper"
 BuilderWinTitle := "BA Custom Control Box - Button Builder"
 HelpWinTitle    := "BA Custom Control Box - Help"
@@ -415,6 +439,7 @@ VerifyBandPx := 90           ; vertical tolerance for verify match
 LastLatticeNote := ""        ; diagnostics for miss dumps
 LastResolveBand := 90
 LastRef := {}                ; geometry of the last resolved target
+ScrambleMemo := {}           ; what earlier frames read on each card
 SpotWin := ""                ; GSPro client rect the locked spots belong to
 Spots := {}                  ; locked Smart Click spots (see LOCKED SPOTS)
 OcrWarmedUp  := false
@@ -923,6 +948,11 @@ HandleBoxKeyDown(keyName) {
         return
 
     if (btnId = FnButtonId) {
+        ; Key trace (Smart Click profiles only): every FN and
+        ; button event lands in ocr_trace.txt, so a press that
+        ; never reached a Smart Click shows exactly why.
+        if (!FnIsDown && AnyOcrSecondary())
+            OcrTrace("key FN (" . keyName . ") down")
         FnIsDown := true
         FnUsedAsModifier := false
         FnLastDownTime := A_TickCount
@@ -942,12 +972,16 @@ HandleBoxKeyDown(keyName) {
 
     if (fnHeld) {
         FnUsedAsModifier := true
+        if (AnyOcrSecondary())
+            OcrTrace("key " . keyName . " (" . btnId . ") down with FN held")
         FireSecondary(btnId)
         return
     }
 
     pk := BtnPrimary[btnId]
     pk := ApplyIKSwap(pk)
+    if (AnyOcrSecondary())
+        OcrTrace("key " . keyName . " (" . btnId . ") down, FN not held -> sent " . pk)
     if (pk != "")
         Send, %pk%
 }
@@ -959,6 +993,8 @@ HandleBoxKeyUp(keyName) {
     if (btnId = "")
         return
     if (btnId = FnButtonId) {
+        if (AnyOcrSecondary())
+            OcrTrace("key FN (" . keyName . ") up" . (FnUsedAsModifier ? "" : " - tapped alone, sent its own key"))
         if (!FnUsedAsModifier) {
             pk := BtnPrimary[btnId]
             pk := ApplyIKSwap(pk)
@@ -1070,7 +1106,7 @@ RunOcrAction(actionId) {
     curKey := curWr.found ? curWr.x . "," . curWr.y . "," . curWr.w . "," . curWr.h : ""
     spotsValid := (curKey != "" && curKey = SpotWin)
     if (spotsValid) {
-        if (SpotFastResolve(actionId, cx, cy, 8)) {
+        if (SpotFastResolve(actionId, cx, cy, 12)) {
             found := true
             LastScanObj := {found: true, lines: [], text: "", lc: "", win: curWr}
         } else {
@@ -1088,7 +1124,12 @@ RunOcrAction(actionId) {
     ; menu's area, so it is fast.  When the two agree, the click
     ; goes out and every button's position is LOCKED for next time.
     if (!found) {
-        maxReads := spotsValid ? 3 : 8
+        ; Up to 8 reads (after the first, each is the fast menu-
+        ; area read).  With locked spots the poll above already
+        ; waited for the menu, so three empty full reads in a row
+        ; mean no menu is up: stop instead of searching for 4s.
+        maxReads := 8
+        missRun := 0
         prevOk := false
         prevRef := ""
         lastWin := curWr.found ? curWr : ""
@@ -1126,7 +1167,16 @@ RunOcrAction(actionId) {
                 agreeTol := LastResolveBand // 4
                 if (agreeTol < 4)
                     agreeTol := 4
-                if (Abs(LastRef.rx - px) <= agreeTol && Abs(LastRef.ry - py) <= agreeTol) {
+                agreeX := agreeTol
+                agreeY := agreeTol
+                ; The OB dialog's Rehit button wobbles sideways
+                ; (field trace 1788 -> 1817 -> 1788): agree on
+                ; the button, not on one pixel.
+                if (LastRef.kind = "ob") {
+                    agreeX := Round(LastRef.w * 0.6) + 4
+                    agreeY := Round(LastRef.h * 0.6) + 4
+                }
+                if (Abs(LastRef.rx - px) <= agreeX && Abs(LastRef.ry - py) <= agreeY) {
                     found := true
                     learnNow := true
                     cx := tx
@@ -1141,8 +1191,14 @@ RunOcrAction(actionId) {
                 px := LastRef.rx
                 py := LastRef.ry
             }
-            if (!ok)
+            if (!ok) {
+                missRun += 1
+                if (spotsValid && missRun >= 3)
+                    break
                 Sleep, 120
+            } else {
+                missRun := 0
+            }
         }
     }
 
@@ -1714,8 +1770,29 @@ LearnSpots(winKey) {
 ; there yet and a menu zooming in is too small, so neither is
 ; ever clicked; the read simply repeats (up to `tries` times,
 ; ~0.1s apart) until the menu holds still.
-SpotFastResolve(actionId, ByRef cx, ByRef cy, tries := 8) {
+;
+; The second button changes its word with the option shown -
+; Drop Ball, Rehit, Go to DZ (water drop zone, field photo
+; 4 Oct) - so Drop Ball / Rehit is confirmed by the two buttons
+; that never change, Move Forward above it and Move Back below
+; it, both in their locked places; then the second button is
+; clicked whatever it says.
+SpotFastResolve(actionId, ByRef cx, ByRef cy, tries := 12) {
     global Spots, LastResolveBand
+    ; The menu's text heights (words with and without descenders)
+    ; - a size check that does not depend on which word a button
+    ; shows.
+    hMin := 0
+    hMax := 0
+    for i, k in ["MoveForward", "DropRehit", "MoveBack", "NextOption"] {
+        if (Spots.HasKey(k) && !Spots[k].inferred) {
+            hv := Spots[k].h
+            if (hMin = 0 || hv < hMin)
+                hMin := hv
+            if (hv > hMax)
+                hMax := hv
+        }
+    }
     cands := []
     if (actionId = "MoveForward")
         cands.Push(["MoveForward", ["move forward"]])
@@ -1724,12 +1801,14 @@ SpotFastResolve(actionId, ByRef cx, ByRef cy, tries := 8) {
     else if (actionId = "NextOption")
         cands.Push(["NextOption", ["next option"]])
     else if (actionId = "DropRehit")
-        cands.Push(["DropRehit", ["drop ball", "rehit"]])
+        cands.Push(["DropRehit", ["drop ball", "rehit", "go to dz"]])
     else if (actionId = "Rehit") {
         cands.Push(["ObRehit", ["rehit"]])
         cands.Push(["DropRehit", ["rehit"]])
     }
-    have := false
+    useFrame := (actionId = "DropRehit" && Spots.HasKey("MoveForward")
+        && Spots.HasKey("MoveBack") && Spots.HasKey("DropRehit"))
+    have := useFrame
     for i, c in cands {
         if (Spots.HasKey(c[1]))
             have := true
@@ -1738,51 +1817,129 @@ SpotFastResolve(actionId, ByRef cx, ByRef cy, tries := 8) {
         return false
     Loop, %tries% {
         tryN := A_Index
-        for i, c in cands {
-            if (!Spots.HasKey(c[1]))
-                continue
-            sp := Spots[c[1]]
-            hx := sp.w // 2 + sp.h * 2
-            hy := Round(sp.h * 1.3)
-            o := OcrRegion(sp.x - hx, sp.y - hy, hx * 2, hy * 2)
-            tolY := sp.h * 0.25
-            if (tolY < 5)
-                tolY := 5
-            tolX := sp.h * 0.6
-            if (tolX < 8)
-                tolX := 8
-            for j, ln in o.lines {
-                hit := false
-                for k, nd in c[2] {
-                    if (FuzzyIs(ln.text, nd))
-                        hit := true
-                }
-                if (!hit)
-                    continue
-                lx := ln.x + ln.w // 2
-                ly := ln.y + ln.h // 2
-                if (Abs(ly - sp.y) > tolY || Abs(lx - sp.x) > tolX)
-                    continue
-                if (ln.h < sp.h * 0.72 || ln.h > sp.h * 1.3)
-                    continue
-                cx := lx
-                cy := ly
-                LastResolveBand := Round(sp.h * 2)
-                OcrTrace("  locked spot " . c[1] . " confirmed |" . ln.text . "| read " . tryN)
-                ; A spot learned by inference (its word did not read
-                ; that time) takes the real box the first time the
-                ; word is seen.
-                if (sp.inferred) {
-                    Spots[c[1]] := {x: lx, y: ly, w: ln.w, h: ln.h, inferred: 0}
-                    SaveSpots()
-                }
+        if (useFrame) {
+            if (SpotSlot2Confirm(cx, cy, hMin, hMax)) {
+                LastResolveBand := Round(Spots["DropRehit"].h * 2)
+                OcrTrace("  locked spot DropRehit confirmed by Move Forward + Move Back, read " . tryN)
                 return true
+            }
+        } else {
+            for i, c in cands {
+                if (!Spots.HasKey(c[1]))
+                    continue
+                sp := Spots[c[1]]
+                isMenu := (c[1] != "ObRehit")
+                hx := sp.w // 2 + sp.h * 2
+                hy := Round(sp.h * 1.3)
+                o := OcrRegion(sp.x - hx, sp.y - hy, hx * 2, hy * 2)
+                for j, ln in o.lines {
+                    hit := false
+                    for k, nd in c[2] {
+                        if (FuzzyIs(ln.text, nd))
+                            hit := true
+                    }
+                    if (!hit || !SpotLineOk(ln, sp, isMenu, hMin, hMax))
+                        continue
+                    cx := ln.x + ln.w // 2
+                    cy := ln.y + ln.h // 2
+                    LastResolveBand := Round(sp.h * 2)
+                    OcrTrace("  locked spot " . c[1] . " confirmed |" . ln.text . "| read " . tryN)
+                    ; A spot learned by inference (its word did not
+                    ; read that time) takes the real box the first
+                    ; time the word is seen.
+                    if (sp.inferred) {
+                        Spots[c[1]] := {x: cx, y: cy, w: ln.w, h: ln.h, inferred: 0}
+                        SaveSpots()
+                    }
+                    return true
+                }
             }
         }
         if (tryN < tries)
             Sleep, 50
     }
     return false
+}
+
+; Is this OCR line the locked button, settled: in its place and
+; at its size?  Menu buttons are sized against the menu's own
+; text-height range (Drop Ball has a descender, Rehit does not).
+; The OB dialog's Rehit button wobbles sideways (field trace:
+; 1788 -> 1817 -> 1788), so its sideways tolerance follows the
+; word's width.
+SpotLineOk(ln, sp, isMenu, hMin, hMax) {
+    lx := ln.x + ln.w / 2
+    ly := ln.y + ln.h / 2
+    tolY := sp.h * 0.25
+    if (isMenu && hMax > hMin && (hMax - hMin) / 2 + 4 > tolY)
+        tolY := (hMax - hMin) / 2 + 4
+    if (!isMenu)
+        tolY := sp.h * 0.4
+    if (tolY < 5)
+        tolY := 5
+    tolX := sp.h * 0.6
+    if (!isMenu && sp.w * 0.4 > tolX)
+        tolX := sp.w * 0.4
+    if (tolX < 8)
+        tolX := 8
+    if (Abs(ly - sp.y) > tolY || Abs(lx - sp.x) > tolX)
+        return false
+    if (isMenu && hMin > 0)
+        return (ln.h >= hMin * 0.8 && ln.h <= hMax * 1.2)
+    return (ln.h >= sp.h * 0.72 && ln.h <= sp.h * 1.3)
+}
+
+; Drop Ball / Rehit / Go to DZ: one small read covering Move
+; Forward, the second button and Move Back.  Both fixed words
+; must sit in their locked places at menu size; then the second
+; button is clicked - at its word if one reads there, else at
+; its locked spot.
+SpotSlot2Confirm(ByRef cx, ByRef cy, hMin, hMax) {
+    global Spots
+    mf := Spots["MoveForward"]
+    mb := Spots["MoveBack"]
+    s2 := Spots["DropRehit"]
+    hx := s2.w // 2 + s2.h * 2
+    if (mf.w // 2 + mf.h > hx)
+        hx := mf.w // 2 + mf.h
+    if (mb.w // 2 + mb.h > hx)
+        hx := mb.w // 2 + mb.h
+    y1 := Round(mf.y - mf.h * 1.3)
+    y2 := Round(mb.y + mb.h * 1.3)
+    if (y2 - y1 < 20)
+        return false
+    o := OcrRegion(s2.x - hx, y1, hx * 2, y2 - y1)
+    okF := false
+    okB := false
+    best := ""
+    for i, ln in o.lines {
+        if (FuzzyIs(ln.text, "move forward")) {
+            if (SpotLineOk(ln, mf, true, hMin, hMax))
+                okF := true
+            continue
+        }
+        if (FuzzyIs(ln.text, "move back")) {
+            if (SpotLineOk(ln, mb, true, hMin, hMax))
+                okB := true
+            continue
+        }
+        if (FuzzyIs(ln.text, "next option") || FuzzyIs(ln.text, "mulligan"))
+            continue
+        lcy := ln.y + ln.h / 2
+        lcx := ln.x + ln.w / 2
+        if (Abs(lcy - s2.y) <= s2.h * 0.6 && Abs(lcx - s2.x) <= s2.w)
+            best := ln
+    }
+    if (!okF || !okB)
+        return false
+    if (IsObject(best)) {
+        cx := best.x + best.w // 2
+        cy := best.y + best.h // 2
+    } else {
+        cx := s2.x
+        cy := s2.y
+    }
+    return true
 }
 
 ; Confirming read for the learn path: just the menu's area
@@ -2181,16 +2338,19 @@ LogAppError(where, e) {
 ; Write the full text of a failed scan for diagnosis.  Every
 ; "OCR missed it" report is really "the wording was different
 ; on that machine" - this file shows the exact wording seen.
-OcrDumpMiss(context, scan) {
-    global ConfigDir
+OcrDumpMiss(context, scan, fname := "ocr_last_miss.txt") {
+    global ConfigDir, AppVersion
     try {
-    f := ConfigDir . "\ocr_last_miss.txt"
+    f := ConfigDir . "\" . fname
     SafeFileDelete(f)
-    body := "BARemapper OCR diagnostic`n"
+    body := "BARemapper OCR diagnostic  (v" . AppVersion . ")`n"
     body .= "Time: " . A_YYYY . "-" . A_MM . "-" . A_DD . " " . A_Hour . ":" . A_Min . ":" . A_Sec . "`n"
     body .= "Context: " . context . "`n"
     body .= "------------------------------------------`n"
-    body .= scan.text
+    ; Every line with its position and size, so a miss shows
+    ; exactly what sat where.
+    for i, ln in scan.lines
+        body .= ln.x . "," . ln.y . "  " . ln.w . "x" . ln.h . "  |" . ln.text . "|`n"
     FileAppend, %body%, %f%
     } catch logErr {
     }
@@ -2241,6 +2401,7 @@ FindAllLinesExact(scan, needle) {
 }
 
 ScrambleDecide(scan, uses, ctx := "") {
+    global ScrambleMemo
     ; Sort USE buttons left-to-right (position = shot key number)
     n := uses.MaxIndex()
     if (n > 4)
@@ -2352,42 +2513,88 @@ ScrambleDecide(scan, uses, ctx := "") {
             }
             card.shot := ScrambleShotNumber(rowText)
         }
+        ; ---- Earlier frames ----
+        ; The cards do not change while they are up, so anything an
+        ; earlier frame read clearly fills in what this frame
+        ; missed.  On the putting green the animated grid spoils a
+        ; different card in each frame (field log 4 Oct: one card's
+        ; distance read in frame 1, the other's never in the same
+        ; frame) - together the frames read every card.
+        mk := n . "-" . c
+        mm := ScrambleMemo.HasKey(mk) ? ScrambleMemo[mk] : {dist: -1, distRaw: "", shot: 0, lie: "", green: false}
+        if ((card.lie = "" || card.lie = "?green") && mm.lie != "") {
+            card.lie := mm.lie
+            card.green := mm.green
+        }
+        if (card.shot = 0 && mm.shot > 0)
+            card.shot := mm.shot
         ; ---- Step 2: DISTANCE ----
-        ; The tallest digits-only line ABOVE the lie row, centered
-        ; on the card (the corner badge digit sits far off-center),
-        ; taller than the USE text.  Any LETTER in the raw
-        ; text disqualifies it - a mangled "143" read as "!4E" must
-        ; never strip down to "4" and win the comparison.
+        ; The tallest line ABOVE the lie row, centered on the card
+        ; (the corner badge digit sits far off-center), taller than
+        ; the USE text.  Stand-alone grid marks ("l", "|", "!" - a
+        ; green-grid line crossing the card) are dropped first.
+        ; Then any LETTER disqualifies a yards distance - a mangled
+        ; "143" read as "!4E" must never strip down to "4" - but on
+        ; the GREEN, feet-and-inches is accepted with its two marks
+        ; misread as anything ("9l 7u" is 9' 7").
         distH := 0
         distClean := ""
+        distDirect := -1
         for i, ln in colLines {
             lcx := ln.x + ln.w // 2
             if (Abs(lcx - cx) > useW * 0.8)
                 continue
             if (IsObject(anchor) && (ln.y + ln.h / 2) >= rowCy - rowBand)
                 continue
-            if (RegExMatch(ln.text, "i)[a-z]"))
+            if (ln.h <= useH || ln.h <= distH)
                 continue
-            clean := RegExReplace(ln.text, "[^0-9 ]", " ")
-            clean := Trim(RegExReplace(clean, " +", " "))
-            if (clean != "" && RegExMatch(clean, "^\d+( \d+){0,2}$") && ln.h > useH) {
-                if (ln.h > distH) {
+            t := ScrambleStripMarks(ln.text)
+            if (!RegExMatch(t, "i)[a-z]")) {
+                clean := RegExReplace(t, "[^0-9 ]", " ")
+                clean := Trim(RegExReplace(clean, " +", " "))
+                if (clean != "" && RegExMatch(clean, "^\d+( \d+){0,2}$")) {
                     distH := ln.h
                     distClean := clean
-                    card.distRaw := ln.text
+                    distDirect := -1
+                    card.distRaw := t
+                }
+            } else if (card.green) {
+                if (RegExMatch(t, "^\D{0,2}(\d{1,3})\D{1,3}(\d{1,2})\D{0,3}$", fm) && fm2 <= 11) {
+                    distH := ln.h
+                    distClean := ""
+                    distDirect := fm1 * 12 + fm2
+                    card.distRaw := t
                 }
             }
         }
         ; Convert to inches.  Feet (+inches) when the card is on
         ; the green or the distance carries a feet/inch mark;
         ; otherwise yards.
-        if (distClean != "") {
+        if (distDirect >= 0) {
+            card.dist := distDirect
+        } else if (distClean != "") {
             feetMarks := "['" . Chr(34) . Chr(145) . Chr(146) . Chr(147) . Chr(148) . "``]"
             if (card.green || RegExMatch(card.distRaw, feetMarks) || InStr(distClean, " "))
                 card.dist := FeetInches(card.distRaw)
             else
                 card.dist := distClean * 36
         }
+        if (card.dist < 0 && mm.dist >= 0) {
+            card.dist := mm.dist
+            card.distRaw := mm.distRaw . " (earlier frame)"
+        }
+        ; Remember what this frame read clearly.
+        if (card.dist >= 0 && !InStr(card.distRaw, "(earlier frame)")) {
+            mm.dist := card.dist
+            mm.distRaw := card.distRaw
+        }
+        if (card.shot > 0)
+            mm.shot := card.shot
+        if (card.lie != "" && card.lie != "?green") {
+            mm.lie := card.lie
+            mm.green := card.green
+        }
+        ScrambleMemo[mk] := mm
         cards.Push(card)
     }
     ; The lie itself never blocks a pick (rough, concrete, woods
@@ -2453,6 +2660,15 @@ ScrambleDecide(scan, uses, ctx := "") {
     }
     ScrambleLogDecision(n, cards, minShot, bestIdx, "OK" . ctx)
     return bestIdx
+}
+
+; Drop stand-alone marks that are not part of a number: a grid
+; line on the putting green crossing a card reads as "l", "I",
+; "|", "!" or a dot.
+ScrambleStripMarks(t) {
+    t := " " . t . " "
+    t := RegExReplace(t, "(?<=\s)[lIi|!.:;,]+(?=\s)", " ")
+    return Trim(RegExReplace(t, "\s+", " "))
 }
 
 ; Shot number from a whole-word ordinal ("2ND", "3RD", "4TH").
@@ -3479,6 +3695,7 @@ ScrambleWork:
         ScrambleDumped := false
         ScrambleMissTicks := 0
         ScrambleTries := 0
+        ScrambleMemo := {}
         Return
     }
     ScrambleMissTicks := 0
@@ -3486,6 +3703,7 @@ ScrambleWork:
         Return   ; already acted on this appearance; wait for it to clear
     if (ScrambleArmedTick = 0) {
         ScrambleArmedTick := A_TickCount
+        ScrambleMemo := {}
         Return
     }
     if (A_TickCount - ScrambleArmedTick < ScrambleDelaySec * 1000)
@@ -3512,12 +3730,12 @@ ScrambleWork:
     ; one per 2s watcher tick) before standing down - a one-frame
     ; glitch used to end the pick permanently.
     ScrambleTries += 1
-    if (ScrambleTries < 4) {
+    if (ScrambleTries < 6) {
         ScrambleArmedTick := A_TickCount - (ScrambleDelaySec * 1000)
         Return
     }
     if (!ScrambleDumped) {
-        OcrDumpMiss("Scramble parse failure", scrScan)
+        OcrDumpMiss("Scramble parse failure", scrScan, "ocr_last_scramble_miss.txt")
         ShowGsproTip("Auto-pick: could not read all cards - please pick manually", 2500)
         ScrambleDumped := true
     }
@@ -3658,8 +3876,9 @@ ShowHelp:
     Smart Click (OCR): FN + button READS THE SCREEN, finds
       the GSPro menu button by its text, and clicks it.
       No setup, works at any resolution.  Actions: Move
-      Forward, Move Back, Next Option, Drop Ball / Rehit,
-      OB Rehit.  Needs Windows 10 or 11.
+      Forward, Move Back, Next Option, Drop Ball / Rehit
+      (also "Go to DZ" in a water drop zone), OB Rehit.
+      Needs Windows 10 or 11.
       The first press on a PC learns where the menu buttons
       sit and LOCKS them in - every press after that is
       fast.  Changed the resolution?  It re-learns by itself

@@ -41,7 +41,7 @@ Each button's secondary can be one of three types:
 | **Taught Screen Click** | Clicks a fixed position you capture yourself (the classic method, still available) |
 
 ### Smart Clicks
-Five penalty/relief menu actions are built in: **Move Forward, Move Back, Next Option, Drop Ball / Rehit, OB Rehit**. Before any click, the app verifies the entire relief menu — the Options counter and the buttons, in order, evenly spaced, one column — and clicks the verified position inside it. It works with mulligans on or off (GSPro hides the Mulligan button when they're off). It never clicks a lone matched word, never clicks into an opening or closing animation, and if a button's own text misreads, the surrounding menu still proves where it is. Drop Ball / Rehit clicks the changing second slot whichever word it currently shows; OB Rehit handles the "You have hit OB!" dialog (with or without its Mulligan button) and the relief menu's rehit option. The app starts reading the screen the moment you press FN, and keeps retrying while a menu is still fading in, so one press is all it takes. If the menu genuinely isn't on screen, the app tells you instead of guessing.
+Five penalty/relief menu actions are built in: **Move Forward, Move Back, Next Option, Drop Ball / Rehit, OB Rehit**. Before any click, the app verifies the entire relief menu — the Options counter and the buttons, in order, evenly spaced, one column — and clicks the verified position inside it. It works with mulligans on or off (GSPro hides the Mulligan button when they're off). It never clicks a lone matched word, never clicks into an opening or closing animation, and if a button's own text misreads, the surrounding menu still proves where it is. Drop Ball / Rehit clicks the changing second slot whichever word it currently shows (Drop Ball, Rehit, or "Go to DZ" in a water drop zone); OB Rehit handles the "You have hit OB!" dialog (with or without its Mulligan button) and the relief menu's rehit option. The app starts reading the screen the moment you press FN, and keeps retrying while a menu is still fading in, so one press is all it takes. If the menu genuinely isn't on screen, the app tells you instead of guessing.
 
 **Locked spots — fast after the first press.** The first Smart Click on a PC reads the screen twice, checks both reads agree, and locks in where every menu button sits (saved in `settings.ini`). From then on each press reads only that button's small area and clicks right away, with no click positions to program. The spots are tied to the GSPro window size: change the resolution and they are re-learned automatically on the next press. Tray menu → **Reset Smart Click spots** forces a fresh learn.
 
@@ -93,8 +93,9 @@ Everything lives in `Documents\BA Custom Products\Remapper\` — visible, plain 
 | `ocr_last_scan.txt` | Written by the **OCR Test** button — everything the OCR currently reads, with coordinates |
 | `ocr_last_miss.txt` | Written when a Smart Click can't find its target — shows exactly what the screen said |
 | `scramble_last_decision.txt` | Written on every auto-pick attempt — each card's lie, shot number, and distance as parsed, the exact text read on each card, and the decision or the reason it stood down |
+| `ocr_last_scramble_miss.txt` | Written when auto-pick stands down — every line on screen with its position |
 | `scramble_log.txt` | The same record for the last ~100 attempts, so an earlier miss is never lost when a later pick succeeds |
-| `ocr_trace.txt` | Every Smart Click press, step by step: each screen read, where it found the button, the click — or why it held off |
+| `ocr_trace.txt` | Every FN and button press on a Smart Click profile, and every Smart Click step by step: each screen read, where it found the button, the click — or why it held off |
 | `error_log.txt` | Any internal error the app caught and recovered from, with version and location |
 
 The **OCR Test** button (main window and tray menu) scans the GSPro window on demand and opens the result in Notepad — the first stop for any "it didn't click" question. With scramble cards on screen it also shows which card the auto-pick would choose from that exact frame (no key is sent).
@@ -120,6 +121,8 @@ The **OCR Test** button (main window and tray menu) scans the GSPro window on de
 ---
 
 ## Version History
+
+**v5.0.7** — Drop Ball / Rehit / Go to DZ is confirmed by Move Forward and Move Back in their locked places, so the changing word no longer forces a slow full read; locked sizes are judged against the menu's text-height range. The OB dialog's wobbling Rehit button is allowed for. A menu re-sliding in after Move Back is waited out; a press with no menu up still stops quickly. Auto-pick remembers each card across screen reads (the putting-green grid spoils a different card each frame), drops stand-alone grid marks, reads green feet/inches even with misread marks, and tries 6 times. Every FN/button event is traced.
 
 **v5.0.6** — Smart Clicks are fast again: the first press on a PC verifies the menu with two reads and locks in every button's position; later presses read only that button's small area. Spots re-learn automatically when the GSPro window size changes (or via tray → Reset Smart Click spots). A sliding/zooming menu is never clicked; extra Drop Ball taps during a press are dropped; the scramble watcher pauses while FN is held. Auto-pick rule: fewest strokes → green always wins → shortest; the lie no longer stops a pick (5.0.5 stood down on CONCRETE). Green distances parse correctly when the ' mark reads as a 1.
 
