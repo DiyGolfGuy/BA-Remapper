@@ -2,6 +2,7 @@
 #SingleInstance Off
 #Persistent
 #MaxThreadsPerHotkey 3
+#KeyHistory 60
 SetWorkingDir %A_ScriptDir%
 SendMode, Input
 SetMouseDelay, 10
@@ -11,8 +12,29 @@ CoordMode, Mouse, Screen
 DllCall("SetProcessDPIAware")
 
 ; ============================================================
-;  BA CUSTOM PRODUCTS - CONTROL BOX REMAPPER v5.0.7
+;  BA CUSTOM PRODUCTS - CONTROL BOX REMAPPER v5.0.8
 ;  bacustomproducts@gmail.com   GitHub: DiyGolfGuy
+;
+;  CHANGES IN v5.0.8  (field dumps 4 Oct 18:40 and 18:46)
+;  - Scramble CLOSE-UP READ: when a card's distance is missing
+;    from the full-window read (Windows' reader skipped CARTER's
+;    28' 0" in all six reads; it skips a lone "8" every time),
+;    that card's distance area is read again: enlarged, then with
+;    only the white text kept, the number isolated on a white
+;    page, and finally with a marker word ("DIST 8") so a single
+;    digit is not skipped.  A zero read as the letter O on the
+;    green is accepted.  If even that finds nothing the area is
+;    saved as scramble_card<N>.bmp.
+;  - Scramble READS ALL THROUGH THE COUNTDOWN (Ba): every 2s look
+;    from the first sighting parses the cards and votes for a
+;    pick, so the decision is made before zero.  At zero a quick
+;    look at the USE buttons confirms the cards are still up and
+;    the card most reads agree on gets its key - right at zero,
+;    not on the next 2s look, and one bad frame cannot swing it.
+;    Nothing decided by zero: 3 more looks, then it stands down.
+;    The decision log is written once per pick, with the reads.
+;  - Tray: Key Test (last keys received) - shows what each box
+;    button actually sends (a dead button never appears).
 ;
 ;  CHANGES IN v5.0.7  (from the 4 Oct sim session logs/photos)
 ;  - Drop Ball locked spot: the second button's word changes
@@ -207,7 +229,7 @@ DllCall("SetProcessDPIAware")
 ; ============================================================
 ;  CONSTANTS / PATHS
 ; ============================================================
-AppVersion := "5.0.7"
+AppVersion := "5.0.8"
 MainWinTitle    := "BA Custom Control Box Remapper"
 BuilderWinTitle := "BA Custom Control Box - Button Builder"
 HelpWinTitle    := "BA Custom Control Box - Help"
@@ -451,7 +473,13 @@ ScrambleArmedTick := 0       ; tick when USE screen first seen (0 = not armed)
 ScrambleCoolDown  := false   ; true after firing until screen disappears
 ScrambleBusy      := false   ; re-entrancy guard for the watcher timer
 ScrambleDumped    := false   ; one-shot diagnostic dump guard
-ScrambleTries     := 0       ; parse attempts for this card screen
+ScrambleTries     := 0       ; reads after zero with no pick decided
+ScrambleVotes     := {}      ; pick each countdown read decided ("cards-winner" -> count)
+ScrambleReadsN    := {}      ; countdown reads per number of cards seen
+ScrambleVoteLast  := ""      ; most recent read's pick (breaks a tie)
+ScrambleLastRead  := ""      ; last read's cards, for the decision log
+ScrambleLastUses  := ""      ; last read's USE buttons (quick confirm at zero)
+ScrambleLastHwnd  := 0       ; GSPro window the cards were read in
 ScrambleFbTick    := 0       ; throttle for full-screen fallback scans
 ScrambleMissTicks := 0       ; consecutive scans without the cards
 ScrambleCountdown := true    ; show on-screen countdown before auto-pick
@@ -2118,6 +2146,261 @@ OcrRegionScaled(x, y, w, h, scale) {
     return o
 }
 
+; Capture a screen rectangle, keep only BRIGHT, colorless pixels
+; (white text) as black on a white page, enlarge it by `scale`,
+; OCR it, and map the boxes back to real screen pixels - the same
+; closed loop as OcrRegionScaled.  For card text over the busy
+; putting-green grid, where the plain read can skip a line.
+;   isolate: keep only the text in the middle of the area (the
+;            distance) - card edges, grid specks and the rows
+;            above/below are blanked.
+;   marker:  write this word just left of that text on a widened
+;            white page.  Windows' reader skips a LONE character -
+;            a single-digit distance like "8" (field dump 4 Oct
+;            18:46: the "8" and the name "AL" missing, every
+;            two-digit number read) - but reads "DIST 8".  The
+;            caller strips the marker.
+;   savePath (optional) keeps the captured area as a .bmp.
+OcrRegionEnhanced(x, y, w, h, scale, thr, savePath := "", marker := "", isolate := false) {
+    o := {lines: [], text: ""}
+    if (w <= 0 || h <= 0)
+        return o
+    VarSetCapacity(bi, 40, 0)
+    NumPut(40, bi, 0, "UInt")
+    NumPut(w, bi, 4, "Int")
+    NumPut(-h, bi, 8, "Int")
+    NumPut(1, bi, 12, "UShort")
+    NumPut(32, bi, 14, "UShort")
+    scr := DllCall("GetDC", "Ptr", 0, "Ptr")
+    mdc := DllCall("CreateCompatibleDC", "Ptr", scr, "Ptr")
+    pBits := 0
+    dib := DllCall("CreateDIBSection", "Ptr", mdc, "Ptr", &bi, "UInt", 0, "Ptr*", pBits, "Ptr", 0, "UInt", 0, "Ptr")
+    if (!dib || !pBits) {
+        DllCall("DeleteDC", "Ptr", mdc)
+        DllCall("ReleaseDC", "Ptr", 0, "Ptr", scr)
+        return o
+    }
+    oldm := DllCall("SelectObject", "Ptr", mdc, "Ptr", dib, "Ptr")
+    DllCall("BitBlt", "Ptr", mdc, "Int", 0, "Int", 0, "Int", w, "Int", h, "Ptr", scr, "Int", x, "Int", y, "UInt", 0x00CC0020)
+    DllCall("GdiFlush")
+    if (savePath != "")
+        SaveDibBmp(savePath, pBits, w, h)
+    n := w * h
+    Loop, %n% {
+        off := (A_Index - 1) * 4
+        px := NumGet(pBits + 0, off, "UInt")
+        b := px & 0xFF
+        g := (px >> 8) & 0xFF
+        r := (px >> 16) & 0xFF
+        mn := (r < g) ? r : g
+        if (b < mn)
+            mn := b
+        NumPut((mn >= thr) ? 0xFF000000 : 0xFFFFFFFF, pBits + 0, off, "UInt")
+    }
+    box := ""
+    if (isolate || marker != "") {
+        box := FindTextCluster(pBits, w, h)
+        if (IsObject(box)) {
+            m := Round((box.bot - box.top + 1) * 0.3)
+            BlankOutside(pBits, w, h, box.left - m, box.top - m, box.right + m, box.bot + m)
+        } else {
+            marker := ""
+        }
+    }
+    sw := w * scale
+    sh := h * scale
+    bdc := DllCall("CreateCompatibleDC", "Ptr", scr, "Ptr")
+    ; marker font, and the white margin it needs on the left
+    pad := 0
+    font := 0
+    if (marker != "") {
+        bandH := box.bot - box.top + 1
+        font := DllCall("CreateFont", "Int", -Round(bandH * scale / 0.72), "Int", 0, "Int", 0, "Int", 0, "Int", 700
+            , "UInt", 0, "UInt", 0, "UInt", 0, "UInt", 0, "UInt", 0, "UInt", 0, "UInt", 3, "UInt", 0
+            , "Str", "Arial", "Ptr")
+        if (!font) {
+            marker := ""
+        } else {
+            gapBig := Round(bandH * scale * 0.45)
+            oldf := DllCall("SelectObject", "Ptr", bdc, "Ptr", font, "Ptr")
+            VarSetCapacity(sz, 8, 0)
+            DllCall("GetTextExtentPoint32", "Ptr", bdc, "Str", marker, "Int", StrLen(marker), "Ptr", &sz)
+            twBig := NumGet(sz, 0, "Int")
+            DllCall("SelectObject", "Ptr", bdc, "Ptr", oldf)
+            need := twBig + gapBig + 8
+            if (box.left * scale < need)
+                pad := need - box.left * scale
+        }
+    }
+    big := DllCall("CreateCompatibleBitmap", "Ptr", scr, "Int", sw + pad, "Int", sh, "Ptr")
+    oldb := DllCall("SelectObject", "Ptr", bdc, "Ptr", big, "Ptr")
+    DllCall("PatBlt", "Ptr", bdc, "Int", 0, "Int", 0, "Int", sw + pad, "Int", sh, "UInt", 0x00FF0062)
+    DllCall("SetStretchBltMode", "Ptr", bdc, "Int", 4)
+    DllCall("SetBrushOrgEx", "Ptr", bdc, "Int", 0, "Int", 0, "Ptr", 0)
+    DllCall("StretchBlt", "Ptr", bdc, "Int", pad, "Int", 0, "Int", sw, "Int", sh
+                        , "Ptr", mdc, "Int", 0, "Int", 0, "Int", w, "Int", h, "UInt", 0x00CC0020)
+    if (marker != "") {
+        oldf := DllCall("SelectObject", "Ptr", bdc, "Ptr", font, "Ptr")
+        DllCall("SetBkMode", "Ptr", bdc, "Int", 1)
+        DllCall("SetTextColor", "Ptr", bdc, "UInt", 0)
+        VarSetCapacity(tm, 64, 0)
+        DllCall("GetTextMetrics", "Ptr", bdc, "Ptr", &tm)
+        ascent := NumGet(tm, 4, "Int")
+        tx := pad + box.left * scale - gapBig - twBig
+        ty := (box.bot + 1) * scale - ascent
+        DllCall("TextOut", "Ptr", bdc, "Int", tx, "Int", ty, "Str", marker, "Int", StrLen(marker))
+        DllCall("SelectObject", "Ptr", bdc, "Ptr", oldf)
+    }
+    if (font)
+        DllCall("DeleteObject", "Ptr", font)
+    DllCall("SelectObject", "Ptr", bdc, "Ptr", oldb)
+    DllCall("DeleteDC", "Ptr", bdc)
+    DllCall("SelectObject", "Ptr", mdc, "Ptr", oldm)
+    DllCall("DeleteDC", "Ptr", mdc)
+    DllCall("DeleteObject", "Ptr", dib)
+    DllCall("ReleaseDC", "Ptr", 0, "Ptr", scr)
+    stream := HBitmapToRandomAccessStream(big)
+    DllCall("DeleteObject", "Ptr", big)
+    res := ocr_words(stream)
+    for i, ln in res.lines {
+        ln.x := Round((ln.x - pad) / scale) + x
+        ln.y := Round(ln.y / scale) + y
+        ln.w := Round(ln.w / scale)
+        ln.h := Round(ln.h / scale)
+        o.lines.Push(ln)
+    }
+    o.text := res.text
+    return o
+}
+
+; The text cluster nearest the middle of a black-on-white image:
+; the tallest run of text rows (middle 60% of the width, below
+; the top 12%), then the run of text columns in that band that
+; holds - or sits nearest - the center, gaps up to 0.8 x text
+; height allowed (28' 0" stays one piece; a card edge or a grid
+; line off to the side does not join it).  "" if none.
+FindTextCluster(pBits, w, h) {
+    cx0 := Round(w * 0.2)
+    cx1 := Round(w * 0.8)
+    ry0 := Round(h * 0.12)
+    top := -1
+    bot := -1
+    curTop := -1
+    lastOn := -100
+    yy := ry0
+    while (yy < h) {
+        cnt := 0
+        xx := cx0
+        while (xx < cx1) {
+            if (NumGet(pBits + 0, (yy * w + xx) * 4, "UInt") = 0xFF000000)
+                cnt += 1
+            xx += 1
+        }
+        if (cnt >= 2) {
+            if (curTop < 0 || yy - lastOn > 3)
+                curTop := yy
+            lastOn := yy
+            if (lastOn - curTop > bot - top) {
+                top := curTop
+                bot := lastOn
+            }
+        }
+        yy += 1
+    }
+    if (top < 0 || bot - top + 1 < 6)
+        return ""
+    bandH := bot - top + 1
+    maxGap := Round(bandH * 0.8)
+    if (maxGap < 3)
+        maxGap := 3
+    mid := w // 2
+    best := ""
+    bestDist := 999999
+    cl := -1
+    cr := -1
+    xx := 0
+    while (xx <= w) {
+        on := false
+        if (xx < w) {
+            yy := top
+            while (yy <= bot) {
+                if (NumGet(pBits + 0, (yy * w + xx) * 4, "UInt") = 0xFF000000) {
+                    on := true
+                    break
+                }
+                yy += 1
+            }
+        }
+        if (on) {
+            if (cl >= 0 && xx - cr > maxGap) {
+                d := (mid < cl) ? cl - mid : ((mid > cr) ? mid - cr : 0)
+                if (d < bestDist) {
+                    bestDist := d
+                    best := {left: cl, right: cr}
+                }
+                cl := -1
+            }
+            if (cl < 0)
+                cl := xx
+            cr := xx
+        }
+        xx += 1
+    }
+    if (cl >= 0) {
+        d := (mid < cl) ? cl - mid : ((mid > cr) ? mid - cr : 0)
+        if (d < bestDist)
+            best := {left: cl, right: cr}
+    }
+    if (!IsObject(best))
+        return ""
+    best.top := top
+    best.bot := bot
+    return best
+}
+
+; White out every pixel outside a box (black-on-white image).
+BlankOutside(pBits, w, h, x0, y0, x1, y1) {
+    yy := 0
+    while (yy < h) {
+        rowOut := (yy < y0 || yy > y1)
+        xx := 0
+        while (xx < w) {
+            if (rowOut || xx < x0 || xx > x1)
+                NumPut(0xFFFFFFFF, pBits + 0, (yy * w + xx) * 4, "UInt")
+            xx += 1
+        }
+        yy += 1
+    }
+}
+
+; Write 32-bit top-down pixels as a .bmp (diagnostics only).
+SaveDibBmp(path, pBits, w, h) {
+    try {
+        size := w * h * 4
+        f := FileOpen(path, "w")
+        if (!IsObject(f))
+            return
+        f.WriteUShort(0x4D42)
+        f.WriteUInt(54 + size)
+        f.WriteUInt(0)
+        f.WriteUInt(54)
+        f.WriteUInt(40)
+        f.WriteInt(w)
+        f.WriteInt(-h)
+        f.WriteUShort(1)
+        f.WriteUShort(32)
+        f.WriteUInt(0)
+        f.WriteUInt(size)
+        f.WriteInt(2835)
+        f.WriteInt(2835)
+        f.WriteUInt(0)
+        f.WriteUInt(0)
+        f.RawWrite(pBits + 0, size)
+        f.Close()
+    } catch bmpErr {
+    }
+}
+
 ; Scramble-watcher scan: client area, upscaled 2x when the
 ; window is under 1300px tall (1080p and below), where the
 ; cards' USE and lie text sits at the OCR engine's size floor.
@@ -2364,7 +2647,11 @@ OcrDumpMiss(context, scan, fname := "ocr_last_miss.txt") {
 ;  shot-select cards (trigger: 2+ lines reading exactly "USE").
 ;  Once seen, a countdown starts (5/10/15/20s, user setting).
 ;  If the players pick manually, the cards vanish and the
-;  countdown cancels silently.  At zero it parses the cards:
+;  countdown cancels silently.  The cards are read on EVERY
+;  look from the first sighting on, so the pick is decided
+;  before zero; each read votes and at zero the card most reads
+;  agree on gets its key (after a quick look that the cards are
+;  still up).  Each read parses the cards:
 ;
 ;    - Column per USE button (left to right = shot key 1-4,
 ;      matching GSPro's keyboard shortcuts)
@@ -2400,7 +2687,7 @@ FindAllLinesExact(scan, needle) {
     return out
 }
 
-ScrambleDecide(scan, uses, ctx := "") {
+ScrambleDecide(scan, uses, ctx := "", quiet := false) {
     global ScrambleMemo
     ; Sort USE buttons left-to-right (position = shot key number)
     n := uses.MaxIndex()
@@ -2531,15 +2818,9 @@ ScrambleDecide(scan, uses, ctx := "") {
         ; ---- Step 2: DISTANCE ----
         ; The tallest line ABOVE the lie row, centered on the card
         ; (the corner badge digit sits far off-center), taller than
-        ; the USE text.  Stand-alone grid marks ("l", "|", "!" - a
-        ; green-grid line crossing the card) are dropped first.
-        ; Then any LETTER disqualifies a yards distance - a mangled
-        ; "143" read as "!4E" must never strip down to "4" - but on
-        ; the GREEN, feet-and-inches is accepted with its two marks
-        ; misread as anything ("9l 7u" is 9' 7").
+        ; the USE text, that parses as a distance (see
+        ; ScrambleParseDistance).
         distH := 0
-        distClean := ""
-        distDirect := -1
         for i, ln in colLines {
             lcx := ln.x + ln.w // 2
             if (Abs(lcx - cx) > useW * 0.8)
@@ -2548,36 +2829,27 @@ ScrambleDecide(scan, uses, ctx := "") {
                 continue
             if (ln.h <= useH || ln.h <= distH)
                 continue
-            t := ScrambleStripMarks(ln.text)
-            if (!RegExMatch(t, "i)[a-z]")) {
-                clean := RegExReplace(t, "[^0-9 ]", " ")
-                clean := Trim(RegExReplace(clean, " +", " "))
-                if (clean != "" && RegExMatch(clean, "^\d+( \d+){0,2}$")) {
-                    distH := ln.h
-                    distClean := clean
-                    distDirect := -1
-                    card.distRaw := t
-                }
-            } else if (card.green) {
-                if (RegExMatch(t, "^\D{0,2}(\d{1,3})\D{1,3}(\d{1,2})\D{0,3}$", fm) && fm2 <= 11) {
-                    distH := ln.h
-                    distClean := ""
-                    distDirect := fm1 * 12 + fm2
-                    card.distRaw := t
-                }
+            dv := ScrambleParseDistance(ln.text, card.green)
+            if (dv >= 0) {
+                distH := ln.h
+                card.dist := dv
+                card.distRaw := ScrambleStripMarks(ln.text)
             }
         }
-        ; Convert to inches.  Feet (+inches) when the card is on
-        ; the green or the distance carries a feet/inch mark;
-        ; otherwise yards.
-        if (distDirect >= 0) {
-            card.dist := distDirect
-        } else if (distClean != "") {
-            feetMarks := "['" . Chr(34) . Chr(145) . Chr(146) . Chr(147) . Chr(148) . "``]"
-            if (card.green || RegExMatch(card.distRaw, feetMarks) || InStr(distClean, " "))
-                card.dist := FeetInches(card.distRaw)
-            else
-                card.dist := distClean * 36
+        ; CLOSE-UP READ.  Windows' reader sometimes skips a card's
+        ; distance in the full-window read altogether - on the
+        ; putting green, CARTER's 28' 0" was missing from all six
+        ; reads while AL's 29' 7" read every time (field dump
+        ; 4 Oct 18:40).  Read just that card's distance area again,
+        ; enlarged, then enlarged with the white text isolated.
+        if (card.dist < 0 && IsObject(anchor)) {
+            rr := ScrambleRereadDistance(c, cx, useW, useH, anchor.y, card.green)
+            if (rr.dist >= 0) {
+                card.dist := rr.dist
+                card.distRaw := rr.raw . " (close-up read)"
+            } else {
+                card.distRaw := "(close-up read found nothing)"
+            }
         }
         if (card.dist < 0 && mm.dist >= 0) {
             card.dist := mm.dist
@@ -2604,7 +2876,7 @@ ScrambleDecide(scan, uses, ctx := "") {
     ; down rather than risk breaking the green rule.
     Loop, %n% {
         if (cards[A_Index].lie = "?green") {
-            ScrambleLogDecision(n, cards, 0, 0, "GATE: card " . A_Index . " lie may be a misread GREEN" . ctx)
+            ScrambleKeepRead(n, cards, 0, 0, "GATE: card " . A_Index . " lie may be a misread GREEN" . ctx, quiet)
             return 0
         }
     }
@@ -2620,7 +2892,7 @@ ScrambleDecide(scan, uses, ctx := "") {
         Loop, %n%
             cards[A_Index].shot := 1
     } else if (knownShots < n) {
-        ScrambleLogDecision(n, cards, 0, 0, "GATE: shot numbers partial" . ctx)
+        ScrambleKeepRead(n, cards, 0, 0, "GATE: shot numbers partial" . ctx, quiet)
         return 0
     }
     ; PENALTY RULE: the fewest-strokes balls are considered
@@ -2650,7 +2922,7 @@ ScrambleDecide(scan, uses, ctx := "") {
             continue
         ; Gate 2: contender distances must parse
         if (cards[c].dist < 0) {
-            ScrambleLogDecision(n, cards, minShot, 0, "GATE: contender distance unreadable" . ctx)
+            ScrambleKeepRead(n, cards, minShot, 0, "GATE: contender distance unreadable" . ctx, quiet)
             return 0
         }
         if (cards[c].dist < bestVal) {
@@ -2658,8 +2930,238 @@ ScrambleDecide(scan, uses, ctx := "") {
             bestIdx := c
         }
     }
-    ScrambleLogDecision(n, cards, minShot, bestIdx, "OK" . ctx)
+    ScrambleKeepRead(n, cards, minShot, bestIdx, "OK" . ctx, quiet)
     return bestIdx
+}
+
+; ---- READ ALL THROUGH THE COUNTDOWN, PICK AT ZERO ----
+; The cards are read on every look while the countdown runs, so
+; the pick is decided before it reaches zero (Ba: "it has the
+; decision before the count down is even over").  Each read
+; votes for the card it would pick; at zero the card most reads
+; agree on gets the key, so one bad frame cannot swing it.
+
+; Keep a read's cards for the decision log; log it now unless
+; it is a countdown read (those are logged once, with the pick).
+ScrambleKeepRead(n, cards, minShot, winner, note, quiet) {
+    global ScrambleLastRead
+    ScrambleLastRead := {n: n, cards: cards, minShot: minShot, winner: winner, note: note}
+    if (!quiet)
+        ScrambleLogDecision(n, cards, minShot, winner, note)
+}
+
+; Count one read.  Votes are kept per number of cards seen: a
+; frame that missed one card's USE button numbers the cards
+; differently, so its vote never mixes with the full set.
+ScrambleCountRead(n, winner) {
+    global ScrambleVotes, ScrambleReadsN, ScrambleVoteLast
+    if (n = "" || n < 2)
+        return
+    ScrambleReadsN[n] := (ScrambleReadsN.HasKey(n) ? ScrambleReadsN[n] : 0) + 1
+    if (winner > 0) {
+        k := n . "-" . winner
+        ScrambleVotes[k] := (ScrambleVotes.HasKey(k) ? ScrambleVotes[k] : 0) + 1
+        ScrambleVoteLast := k
+    }
+}
+
+; The card the reads agree on (0 = none decided yet): among the
+; reads that saw the MOST cards (the grid can hide a USE button,
+; it never adds one - a "USE" must read exactly), the pick with
+; the most votes; a tie goes to the latest read.
+ScrambleVoteLeader() {
+    global ScrambleVotes, ScrambleReadsN, ScrambleVoteLast
+    cn := 0
+    for k, v in ScrambleReadsN {
+        if (k > cn)
+            cn := k
+    }
+    best := 0
+    bestV := 0
+    for k, v in ScrambleVotes {
+        p := StrSplit(k, "-")
+        if (p[1] != cn)
+            continue
+        if (v > bestV || (v = bestV && k = ScrambleVoteLast)) {
+            best := p[2] + 0
+            bestV := v
+        }
+    }
+    return best
+}
+
+; "7 reads: card 2 x6, card 1 x1" for the decision log.
+ScrambleVoteSummary() {
+    global ScrambleVotes, ScrambleReadsN
+    tot := 0
+    multi := 0
+    for k, v in ScrambleReadsN {
+        tot += v
+        multi += 1
+    }
+    s := tot . " read" . (tot = 1 ? "" : "s")
+    sep := ": "
+    for k, v in ScrambleVotes {
+        p := StrSplit(k, "-")
+        s .= sep . "card " . p[2] . (multi > 1 ? " of " . p[1] : "") . " x" . v
+        sep := ", "
+    }
+    return s
+}
+
+; Fresh start for a new set of cards.
+ScrambleResetReads() {
+    global ScrambleVotes, ScrambleReadsN, ScrambleVoteLast, ScrambleLastRead, ScrambleLastUses, ScrambleMemo, ScrambleTries
+    ScrambleVotes := {}
+    ScrambleReadsN := {}
+    ScrambleVoteLast := ""
+    ScrambleLastRead := ""
+    ScrambleLastUses := ""
+    ScrambleMemo := {}
+    ScrambleTries := 0
+    SetTimer, ScrambleZero, Off
+}
+
+; Quick look at zero: are the USE buttons still up?  Reads only
+; the strip they sit in (tens of ms, not a full-window read), so
+; a pick the players made in the last second is never overridden.
+ScrambleCardsStillUp() {
+    global ScrambleLastUses
+    u := ScrambleLastUses
+    if (!IsObject(u) || u.MaxIndex() = "")
+        return false
+    x0 := 999999
+    y0 := 999999
+    x1 := -999999
+    y1 := -999999
+    for i, b in u {
+        if (b.x < x0)
+            x0 := b.x
+        if (b.y < y0)
+            y0 := b.y
+        if (b.x + b.w > x1)
+            x1 := b.x + b.w
+        if (b.y + b.h > y1)
+            y1 := b.y + b.h
+    }
+    pw := u[1].w
+    ph := u[1].h
+    o := OcrRegionScaled(x0 - pw, y0 - ph, (x1 - x0) + pw * 2, (y1 - y0) + ph * 2, 2)
+    ; Count USE words, not lines: in a strip this small the reader
+    ; may join two buttons on one baseline into "USE USE".
+    k := 0
+    for i, ln in o.lines {
+        t := RegExReplace(LowerStr(ln.text), "[^a-z ]", "")
+        Loop, Parse, t, %A_Space%
+        {
+            if (A_LoopField = "use")
+                k += 1
+        }
+    }
+    return (k >= 2)
+}
+
+; Press the chosen card's shot key (GSPro's own 1-4 shortcut)
+; and log the pick with every read that led to it.
+ScrambleSendPick(pick, when) {
+    global ScrambleCoolDown, ScrambleArmedTick, ScrambleTries, ScrambleLastHwnd, ScrambleLastRead
+    h := ScrambleLastHwnd
+    if (h && !WinActive("ahk_id " . h)) {
+        WinActivate, ahk_id %h%
+        Sleep, 150
+    }
+    Send, %pick%
+    ScrambleCoolDown := true
+    ScrambleArmedTick := 0
+    ScrambleTries := 0
+    SetTimer, ScrambleZero, Off
+    lr := ScrambleLastRead
+    note := "OK - PICKED " . pick . " " . when . " (" . ScrambleVoteSummary() . ")"
+    if (IsObject(lr)) {
+        if (lr.note != "OK")
+            note .= "   last read: " . lr.note
+        ScrambleLogDecision(lr.n, lr.cards, lr.minShot, pick, note)
+    }
+    TrayTip, BA Remapper, Auto-picked scramble shot %pick%, 3, 1
+}
+
+; One OCR line -> distance in inches, or -1.
+;   No letters: plain yards ("189"), or feet + inches when the
+;   card is on the green or the text carries ' / " marks - the '
+;   mark often reads as "1" ("291 7"" is 29' 7", see FeetInches).
+;   Letters: refused off the green - a mangled "143" read as "!4E"
+;   must never strip down to "4".  On the GREEN the text is always
+;   feet + inches, so a letter can only be a misread mark ("9l 7u"
+;   is 9' 7") or a zero read as the letter O ("28' O"" is 28' 0").
+ScrambleParseDistance(text, isGreen) {
+    t := ScrambleStripMarks(text)
+    if (t = "")
+        return -1
+    if (!RegExMatch(t, "i)[a-z]")) {
+        clean := Trim(RegExReplace(RegExReplace(t, "[^0-9 ]", " "), " +", " "))
+        if (clean = "" || !RegExMatch(clean, "^\d+( \d+){0,2}$"))
+            return -1
+        feetMarks := "['" . Chr(34) . Chr(145) . Chr(146) . Chr(147) . Chr(148) . "``]"
+        if (isGreen || RegExMatch(t, feetMarks) || InStr(clean, " "))
+            return FeetInches(t)
+        return clean * 36
+    }
+    if (!isGreen)
+        return -1
+    if (RegExMatch(t, "^\D{0,2}(\d{1,3})\D{1,3}(\d{1,2})\D{0,3}$", fm) && fm2 <= 11)
+        return fm1 * 12 + fm2
+    t2 := RegExReplace(t, "[oO]", "0")
+    if (!RegExMatch(t2, "i)[a-z]"))
+        return FeetInches(t2)
+    if (RegExMatch(t2, "^\D{0,2}(\d{1,3})\D{1,3}(\d{1,2})\D{0,3}$", fm) && fm2 <= 11)
+        return fm1 * 12 + fm2
+    return -1
+}
+
+; Close-up re-read of one card's distance area (between the name
+; and the lie row): first enlarged 2x, then enlarged 3x with only
+; the bright white text kept (two brightness cut-offs).  Returns
+; {dist, raw}; dist -1 if nothing usable.  When nothing reads, the
+; area is saved as scramble_card<N>.bmp so a miss can be seen.
+ScrambleRereadDistance(cardN, cx, useW, useH, rowTop, isGreen) {
+    global ConfigDir
+    out := {dist: -1, raw: ""}
+    x1 := Round(cx - useW * 2.4)
+    y1 := Round(rowTop - useH * 4.6)
+    w := Round(useW * 4.8)
+    h := Round(useH * 4.45)
+    if (w < 20 || h < 20)
+        return out
+    passes := [[2, 0, ""], [3, 170, ""], [3, 215, ""], [3, 170, "DIST"]]
+    for p, ps in passes {
+        if (ps[2] = 0)
+            o := OcrRegionScaled(x1, y1, w, h, ps[1])
+        else
+            o := OcrRegionEnhanced(x1, y1, w, h, ps[1], ps[2], (p = passes.MaxIndex()) ? ConfigDir . "\scramble_card" . cardN . ".bmp" : "", ps[3], true)
+        bestH := 0
+        for i, ln in o.lines {
+            t := ln.text
+            if (ps[3] != "") {
+                ; our own marker: keep only what follows it
+                if (!RegExMatch(t, "\d"))
+                    continue
+                t := RegExReplace(t, "^[^\d]*", "")
+            } else if (Abs((ln.x + ln.w / 2) - cx) > useW * 0.9) {
+                continue
+            }
+            if (ln.h < useH * 0.9 || ln.h <= bestH)
+                continue
+            dv := ScrambleParseDistance(t, isGreen)
+            if (dv >= 0) {
+                bestH := ln.h
+                out.dist := dv
+                out.raw := ScrambleStripMarks(t)
+            }
+        }
+        if (out.dist >= 0)
+            return out
+    }
+    return out
 }
 
 ; Drop stand-alone marks that are not part of a number: a grid
@@ -2922,6 +3424,7 @@ Menu, Tray, Add,
 Menu, Tray, Add, Open Settings Folder, OpenSettingsFolder
 Menu, Tray, Add, OCR Test (dump screen text), TrayOcrDump
 Menu, Tray, Add, Reset Smart Click spots, ResetSmartSpots
+Menu, Tray, Add, Key Test (last keys received), KeyTestShow
 Menu, Tray, Add,
 Menu, Tray, Add, Exit,             ExitLabel
 Menu, Tray, Tip, BA Custom Control Box Remapper v%AppVersion%
@@ -3506,9 +4009,10 @@ CdTick:
     cdRemain := ScrambleDelaySec - ((A_TickCount - ScrambleArmedTick) // 1000)
     if (cdRemain < 0)
         cdRemain := 0
-    ; If the pick has not fired within 5s past zero, something
+    ; If the pick has not fired within 8s past zero (the watcher
+    ; keeps reading ~4-6s past zero before standing down), something
     ; upstream stalled - hide rather than sit on "0s" forever.
-    if ((A_TickCount - ScrambleArmedTick) > (ScrambleDelaySec * 1000 + 5000)) {
+    if ((A_TickCount - ScrambleArmedTick) > (ScrambleDelaySec * 1000 + 8000)) {
         if (CdVisible) {
             Gui, Countdown:Destroy
             CdVisible := false
@@ -3607,6 +4111,13 @@ TrayOcrDump:
     }
 Return
 
+; Key Test: the last keys this PC received, with their codes -
+; shows at a glance what each box button sends (a button that
+; never appears here is not reaching the PC at all).
+KeyTestShow:
+    KeyHistory
+Return
+
 ; Forget this PC's locked Smart Click spots; the next press
 ; re-learns them with two full screen reads.
 ResetSmartSpots:
@@ -3694,8 +4205,7 @@ ScrambleWork:
         ScrambleCoolDown := false
         ScrambleDumped := false
         ScrambleMissTicks := 0
-        ScrambleTries := 0
-        ScrambleMemo := {}
+        ScrambleResetReads()
         Return
     }
     ScrambleMissTicks := 0
@@ -3703,37 +4213,36 @@ ScrambleWork:
         Return   ; already acted on this appearance; wait for it to clear
     if (ScrambleArmedTick = 0) {
         ScrambleArmedTick := A_TickCount
-        ScrambleMemo := {}
+        ScrambleResetReads()
+    }
+    ; Read the cards on EVERY look - from the first sighting, all
+    ; through the countdown - so the pick is decided before zero.
+    ; Earlier frames fill in what a frame missed (ScrambleMemo)
+    ; and every read votes; the log is written once, at the pick.
+    scrWin := ScrambleDecide(scrScan, scrUses, "", true)
+    ScrambleCountRead(useCount, scrWin)
+    ScrambleLastUses := scrUses
+    ScrambleLastHwnd := (scrScan.HasKey("win") && scrScan.win.hwnd) ? scrScan.win.hwnd : 0
+    scrLeft := ScrambleDelaySec * 1000 - (A_TickCount - ScrambleArmedTick)
+    if (scrLeft > 0) {
+        ; Land exactly on zero, not on the next 2s look.
+        SetTimer, ScrambleZero, % -scrLeft
         Return
     }
-    if (A_TickCount - ScrambleArmedTick < ScrambleDelaySec * 1000)
-        Return
-    winner := ScrambleDecide(scrScan, scrUses)
-    if (winner > 0) {
-        if (scrScan.HasKey("win") && scrScan.win.hwnd) {
-            scrHwnd := scrScan.win.hwnd
-            if (!WinActive("ahk_id " . scrHwnd)) {
-                WinActivate, ahk_id %scrHwnd%
-                Sleep, 150
-            }
-        }
-        Send, %winner%
-        TrayTip, BA Remapper, Auto-picked scramble shot %winner%, 3, 1
-        ScrambleCoolDown := true
-        ScrambleArmedTick := 0
-        ScrambleTries := 0
+    ; At or past zero, and this full read just saw the cards up.
+    scrPick := ScrambleVoteLeader()
+    if (scrPick > 0) {
+        ScrambleSendPick(scrPick, "at zero +" . Round(-scrLeft / 1000, 1) . "s")
         Return
     }
-    ; Parse failed on THIS frame.  On the putting green the
-    ; animated grid runs right around the cards and can spoil a
-    ; single capture, so give the next frames a chance (4 tries,
-    ; one per 2s watcher tick) before standing down - a one-frame
-    ; glitch used to end the pick permanently.
+    ; Nothing decided yet (every read so far hit a gate).  Keep
+    ; reading a few more looks (~4-6s) before standing down.
     ScrambleTries += 1
-    if (ScrambleTries < 6) {
-        ScrambleArmedTick := A_TickCount - (ScrambleDelaySec * 1000)
+    if (ScrambleTries < 3)
         Return
-    }
+    lr := ScrambleLastRead
+    if (IsObject(lr))
+        ScrambleLogDecision(lr.n, lr.cards, lr.minShot, 0, lr.note . " - stood down (" . ScrambleVoteSummary() . ")")
     if (!ScrambleDumped) {
         OcrDumpMiss("Scramble parse failure", scrScan, "ocr_last_scramble_miss.txt")
         ShowGsproTip("Auto-pick: could not read all cards - please pick manually", 2500)
@@ -3742,6 +4251,41 @@ ScrambleWork:
     ScrambleCoolDown := true
     ScrambleArmedTick := 0
     ScrambleTries := 0
+    SetTimer, ScrambleZero, Off
+Return
+
+; The moment the countdown hits zero.  The cards were read all
+; through the countdown, so the pick is already decided: one quick
+; look at the USE strip confirms the cards are still up (nobody
+; picked in the last second) and the key goes out.  If nothing is
+; decided yet, or the quick look misses, the watcher's next full
+; read carries on (it picks as soon as it can, or stands down).
+ScrambleZero:
+    if (!ScrambleAutoPick || ScrambleCoolDown || ScrambleArmedTick = 0)
+        Return
+    zLeft := ScrambleDelaySec * 1000 - (A_TickCount - ScrambleArmedTick)
+    if (zLeft > 30) {
+        SetTimer, ScrambleZero, % -zLeft
+        Return
+    }
+    zPick := ScrambleVoteLeader()
+    if (zPick <= 0)
+        Return
+    OcrStaleCheck()
+    if (ScrambleBusy || OcrBusy) {
+        SetTimer, ScrambleZero, -100
+        Return
+    }
+    ScrambleBusy := true
+    OcrLockTake()
+    try {
+        if (ScrambleCardsStillUp())
+            ScrambleSendPick(zPick, "at zero")
+    } catch appErr {
+        LogAppError("ScrambleZero", appErr)
+    }
+    OcrBusy := false
+    ScrambleBusy := false
 Return
 
 
@@ -3907,6 +4451,8 @@ ShowHelp:
     watches for GSPro's scramble shot-select cards the whole
     time it is running.  After your chosen delay (5-20s) it picks
     the best ball automatically by pressing its shot key.
+    It reads the cards over and over while the countdown runs,
+    so the pick is ready the moment it reaches zero.
     Balls hitting the FEWEST strokes are considered first -
     a 2nd-shot ball always beats a closer 3rd-shot ball from
     a penalty drop.  Among those, a ball on the GREEN always

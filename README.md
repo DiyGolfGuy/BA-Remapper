@@ -68,7 +68,9 @@ Turn on the checkbox and BA Remapper watches for GSPro's scramble shot-select ca
 
 The lie is not judged otherwise — rough, woods and concrete never stop a pick. If the group wants a longer ball from a better lie, they pick it themselves before the countdown ends.
 
-Lie and shot number are read from each card's lie row only, so a player name like "Woods" or "Sandy" can never be mistaken for a lie. The row is read whether the screen reader returns it as one piece ("ROUGH 4TH") or two, and a single misread letter ("R0UGH") is tolerated. Pick manually any time — when the cards close, the countdown cancels silently. If a frame can't be read (the animated green grid on the putting green can spoil one), it re-reads the next frames; if the cards still can't be read completely, the picker stands down and leaves the choice to the players. It never guesses. Works with 2, 3, or 4 player groups. The setting is global (all profiles).
+The cards are read over and over while the countdown runs (every 2 seconds, from the moment they appear), so the decision is made before zero. Each read votes for the card it would pick; at zero, after a quick look that the cards are still up, the card most reads agree on gets its key — one bad frame can't swing it, and a pick the players make in the last second is never overridden.
+
+Lie and shot number are read from each card's lie row only, so a player name like "Woods" or "Sandy" can never be mistaken for a lie. The row is read whether the screen reader returns it as one piece ("ROUGH 4TH") or two, and a single misread letter ("R0UGH") is tolerated. When the screen reader skips a card's distance (it can miss one on the putting-green grid, and skips a lone digit like "8"), that card's distance area is read again close up. Pick manually any time — when the cards close, the countdown cancels silently. If nothing can be decided by zero, it keeps reading a few more seconds; if the cards still can't be read completely, the picker stands down and leaves the choice to the players. It never guesses. Works with 2, 3, or 4 player groups. The setting is global (all profiles).
 
 ### Button Builder
 The Builder window mirrors the physical panel — same layout, with each button's current secondary printed in yellow beneath it, exactly like the box. Click any button to set its secondary in one dialog (hotkey list, Smart Click list, position capture, or none). Everything auto-saves the moment you change it.
@@ -92,9 +94,10 @@ Everything lives in `Documents\BA Custom Products\Remapper\` — visible, plain 
 | `launch_log.txt` | Every app launch: time, version, manual vs Windows-startup, exe path |
 | `ocr_last_scan.txt` | Written by the **OCR Test** button — everything the OCR currently reads, with coordinates |
 | `ocr_last_miss.txt` | Written when a Smart Click can't find its target — shows exactly what the screen said |
-| `scramble_last_decision.txt` | Written on every auto-pick attempt — each card's lie, shot number, and distance as parsed, the exact text read on each card, and the decision or the reason it stood down |
+| `scramble_last_decision.txt` | Written on every auto-pick or stand-down — each card's lie, shot number, and distance as parsed, the exact text read on each card, how many reads agreed on the pick, or the reason it stood down |
 | `ocr_last_scramble_miss.txt` | Written when auto-pick stands down — every line on screen with its position |
-| `scramble_log.txt` | The same record for the last ~100 attempts, so an earlier miss is never lost when a later pick succeeds |
+| `scramble_card<N>.bmp` | Written when even the close-up read can't find card N's distance — the exact area that was read |
+| `scramble_log.txt` | The same record for the last ~100 picks and stand-downs, so an earlier miss is never lost when a later pick succeeds |
 | `ocr_trace.txt` | Every FN and button press on a Smart Click profile, and every Smart Click step by step: each screen read, where it found the button, the click — or why it held off |
 | `error_log.txt` | Any internal error the app caught and recovered from, with version and location |
 
@@ -114,13 +117,17 @@ The **OCR Test** button (main window and tray menu) scans the GSPro window on de
 
 **A Smart Click missed** — press OCR Test with the menu on screen and send in `ocr_last_scan.txt`, plus `ocr_trace.txt` and `error_log.txt` if present. Nearly every miss is wording or layout the dump reveals immediately.
 
-**Auto-pick didn't pick** — send `scramble_last_decision.txt` (or `scramble_log.txt` if it picked later); it shows each card exactly as read and the reason it stood down.
+**Auto-pick didn't pick** — send `scramble_last_decision.txt` (or `scramble_log.txt` if it picked later) and any `scramble_card<N>.bmp`; they show each card exactly as read and the reason it stood down.
+
+**A box button does nothing** — press it a few times, then open tray menu → **Key Test (last keys received)** (F5 in that window refreshes it). A button that never shows up there isn't reaching the PC at all — a hardware problem, not a settings one.
 
 **Typing goes weird in other apps** — mapping is ON and catching your keys. Ctrl+F12 toggles it off instantly.
 
 ---
 
 ## Version History
+
+**v5.0.8** — Auto-pick reads the cards all through the countdown and votes on every read, so the decision is made before zero and the key goes out right at zero (after a quick check that the cards are still up). When the screen reader skips a card's distance — CARTER's 28' 0" on the putting green, a lone "8" — that card's distance area is read again close up: enlarged, with only the white text kept, and with a marker word beside a single digit. A zero read as the letter O on the green is accepted. New tray item: Key Test (last keys received).
 
 **v5.0.7** — Drop Ball / Rehit / Go to DZ is confirmed by Move Forward and Move Back in their locked places, so the changing word no longer forces a slow full read; locked sizes are judged against the menu's text-height range. The OB dialog's wobbling Rehit button is allowed for. A menu re-sliding in after Move Back is waited out; a press with no menu up still stops quickly. Auto-pick remembers each card across screen reads (the putting-green grid spoils a different card each frame), drops stand-alone grid marks, reads green feet/inches even with misread marks, and tries 6 times. Every FN/button event is traced.
 
