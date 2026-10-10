@@ -12,8 +12,20 @@ CoordMode, Mouse, Screen
 DllCall("SetProcessDPIAware")
 
 ; ============================================================
-;  BA CUSTOM PRODUCTS - CONTROL BOX REMAPPER v5.0.8
+;  BA CUSTOM PRODUCTS - CONTROL BOX REMAPPER v5.0.9
 ;  bacustomproducts@gmail.com   GitHub: DiyGolfGuy
+;
+;  CHANGES IN v5.0.9  (field report 9 Oct: FN + Club Down did not
+;  Clear View on either bay; every Smart Click worked)
+;  - Basic Secondary: Clear View (b) is on BOTH club buttons with
+;    FN - Club Up and Club Down.  A box whose club buttons send
+;    I/K the other way round (the reason to tick Swap Club
+;    Up/Down) put FN + "Club Down" on Club Up, which had nothing
+;    assigned, so nothing happened.  Either club button now works
+;    however the box is wired and whether Swap is ticked or not.
+;  - Key trace: a key-type secondary now logs the key it sent, an
+;    FN combo with nothing assigned logs that, and FN down logs
+;    the active profile - one press shows exactly what happened.
 ;
 ;  CHANGES IN v5.0.8  (field dumps 4 Oct 18:40 and 18:46)
 ;  - Scramble CLOSE-UP READ: when a card's distance is missing
@@ -229,7 +241,7 @@ DllCall("SetProcessDPIAware")
 ; ============================================================
 ;  CONSTANTS / PATHS
 ; ============================================================
-AppVersion := "5.0.8"
+AppVersion := "5.0.9"
 MainWinTitle    := "BA Custom Control Box Remapper"
 BuilderWinTitle := "BA Custom Control Box - Button Builder"
 HelpWinTitle    := "BA Custom Control Box - Help"
@@ -771,6 +783,9 @@ ScanProfileList() {
 ;  secondary works with zero programming:
 ;
 ;    FN + CLUB DOWN (K)  -> Clear View (b)
+;    FN + CLUB UP   (I)  -> Clear View (b)   (same key: works
+;                           whichever way the box's club buttons
+;                           are wired, Swap ticked or not)
 ;    FN + TEE LEFT (C)   -> OB Rehit          (Smart Click)
 ;    FN + AIM UP         -> Move Forward      (Smart Click)
 ;    FN + AIM DOWN       -> Move Back         (Smart Click)
@@ -795,7 +810,7 @@ SeedPresetProfiles() {
     for i, id in AllBtnIds
     {
         st := "none", sv := ""
-        if (id = "clubdown") {
+        if (id = "clubdown" || id = "clubup") {
             st := "key",  sv := "b"
         } else if (id = "teeleft") {
             st := "ocr",  sv := "Rehit"
@@ -970,7 +985,7 @@ RefreshAutoStartPath() {
 ; ============================================================
 HandleBoxKeyDown(keyName) {
     global KeyToBtnId, FnButtonId, FnIsDown, FnUsedAsModifier
-    global FnLastDownTime, BtnPrimary, OcrBusy
+    global FnLastDownTime, BtnPrimary, OcrBusy, ActiveProfile
     btnId := KeyToBtnId[keyName]
     if (btnId = "")
         return
@@ -980,7 +995,7 @@ HandleBoxKeyDown(keyName) {
         ; button event lands in ocr_trace.txt, so a press that
         ; never reached a Smart Click shows exactly why.
         if (!FnIsDown && AnyOcrSecondary())
-            OcrTrace("key FN (" . keyName . ") down")
+            OcrTrace("key FN (" . keyName . ") down  [profile: " . ActiveProfile . "]")
         FnIsDown := true
         FnUsedAsModifier := false
         FnLastDownTime := A_TickCount
@@ -1037,11 +1052,16 @@ HandleBoxKeyUp(keyName) {
 
 FireSecondary(btnId) {
     global SecType, SecValue, SecX, SecY, SETTLE_MS
-    if (!SecType.HasKey(btnId) || SecType[btnId] = "" || SecType[btnId] = "none")
+    if (!SecType.HasKey(btnId) || SecType[btnId] = "" || SecType[btnId] = "none") {
+        if (AnyOcrSecondary())
+            OcrTrace("  nothing assigned to " . btnId . " with FN on this profile")
         return
+    }
     stype := SecType[btnId]
     if (stype = "key") {
         sval := SecValue[btnId]
+        if (AnyOcrSecondary())
+            OcrTrace("secondary fired: " . btnId . " -> sent " . sval)
         if (sval != "")
             Send, %sval%
     }
@@ -4438,8 +4458,8 @@ ShowHelp:
     BUILT-IN PRESET: "Basic Secondary"
     Pick "Basic Secondary" in the profile dropdown and the
     yellow print on your control box just works - zero
-    programming: Clear View on Club Down, OB Rehit on Tee
-    Left, Move Forward/Back on Aim Up/Down, Next Option on
+    programming: Clear View on Club Down (and Club Up), OB
+    Rehit on Tee Left, Move Forward/Back on Aim Up/Down, Next Option on
     Aim Left, Drop Ball / Rehit on Aim Right.
     Basic Secondary is locked - it cannot be edited, reset,
     or renamed, so it always works exactly like the print on

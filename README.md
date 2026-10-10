@@ -50,7 +50,7 @@ Select **Basic Secondary** from the profile dropdown and the yellow print on the
 
 | FN + button | Action |
 |---|---|
-| CLUB DOWN | Clear View (B) |
+| CLUB DOWN or CLUB UP | Clear View (B) |
 | TEE LEFT | OB Rehit |
 | AIM UP | Move Forward |
 | AIM DOWN | Move Back |
@@ -126,6 +126,8 @@ The **OCR Test** button (main window and tray menu) scans the GSPro window on de
 ---
 
 ## Version History
+
+**v5.0.9** — Basic Secondary: Clear View (B) now works with FN on either club button. On a box whose club buttons send I and K the other way round (the reason to tick Swap Club Up/Down), FN + Club Down landed on Club Up, which had nothing assigned, so Clear View did nothing. The key trace now logs the key a secondary sent, an FN combo with nothing assigned, and the active profile.
 
 **v5.0.8** — Auto-pick reads the cards all through the countdown and votes on every read, so the decision is made before zero and the key goes out right at zero (after a quick check that the cards are still up). When the screen reader skips a card's distance — CARTER's 28' 0" on the putting green, a lone "8" — that card's distance area is read again close up: enlarged, with only the white text kept, and with a marker word beside a single digit. A zero read as the letter O on the green is accepted. New tray item: Key Test (last keys received).
 
