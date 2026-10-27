@@ -231,6 +231,8 @@ Assert(ok, message) {
 }
 
 CaptureWindow(hwnd, name) {
+    DllCall("RedrawWindow", "Ptr", hwnd, "Ptr", 0, "Ptr", 0, "UInt", 0x185)
+    Sleep, 100
     WinGetPos, , , w, h, ahk_id %hwnd%
     dc := DllCall("GetDC", "Ptr", 0, "Ptr")
     memory := DllCall("CreateCompatibleDC", "Ptr", dc, "Ptr")
@@ -280,7 +282,9 @@ Return
 AcceptFactoryNotice:
     WinGetTitle, noticeTitle, A
     WinGetText, noticeText, A
-    FileAppend, % "Active: " . noticeTitle . " | " . noticeText . "`n", % A_ScriptDir . "\factory-checks.txt"
+    if (noticeTitle != lastNoticeTitle)
+        FileAppend, % "Active: " . noticeTitle . " | " . noticeText . "`n", % A_ScriptDir . "\factory-checks.txt"
+    lastNoticeTitle := noticeTitle
     if (!factoryCaptured) {
         CaptureWindow(WinExist("A"), "factory-dialog")
         factoryCaptured := true

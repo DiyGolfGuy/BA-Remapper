@@ -1256,8 +1256,8 @@ FireSecondary(btnId) {
     }
 }
 
-; GSPro polls key state once per frame. An instantaneous
-; SendInput down/up can fall entirely between frames. Match a
+; Frame-polled game input can miss an instantaneous SendInput
+; down/up between frames. Match a
 ; deliberate physical tap, and focus the same GSPro game window
 ; Smart Clicks use. Only FN hotkeys use this path.
 SendSecondaryKey(keys) {
@@ -5479,7 +5479,9 @@ DoCleanup() {
     global RegistryRunKey, RegistryRunName, ConfigDir, ProfilesDir, ConfigFile, TriggerFile
     Gui, Main:+OwnDialogs
     Gui, Factory:+OwnDialogs
-    MsgBox, 4 + 48 + 256, Factory Reset, Remove all saved profiles, settings and Start with Windows?`n`nThe program and diagnostic logs stay. BA Remapper will exit.`n`nFor an incorrect OCR click, choose No and use Reset Smart Click Spots instead.
+    ; Numeric options are intentional: legacy MsgBox interprets
+    ; "4 + 48 + 256" as message text, not as Yes/No options.
+    MsgBox, 308, Factory Reset, Remove all saved profiles, settings and Start with Windows?`n`nThe program and diagnostic logs stay. BA Remapper will exit.`n`nFor an incorrect OCR click, choose No and use Reset Smart Click Spots instead.
     IfMsgBox, No
         return
 
