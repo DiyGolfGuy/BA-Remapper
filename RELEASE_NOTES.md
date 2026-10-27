@@ -14,14 +14,14 @@ This version is being built with the owner while more features are considered. I
 
 Local preserved-core checks, the production trailing-tick regex cases, Python syntax, workflow YAML parsing, publication defaults, and version consistency have passed.
 
-New Windows runtime/OCR tests, portable compilation, and installer upgrade verification are **pending for this candidate**. This workspace blocks the Windows runtime; development code is staged on a draft PR for Windows verification. Results from v5.1.1 are historical evidence, not a pass for v5.1.2.
+[Windows verification run 40598471990](https://github.com/DiyGolfGuy/BA-Remapper/actions/runs/40598471990) passed: production parsing; all 38 distance cases; actual Windows OCR two/three/four-card selection and non-trigger cases; the existing UI, hotkey, reset, startup and profile checks; Unicode 64-bit compilation; and an actual upgrade preserving settings/profiles. Both candidate ZIPs were downloaded and their checksums and architecture/version inspected.
 
-See [DEVELOPMENT.md](DEVELOPMENT.md) and the latest entry in [AI_HANDOFF.md](AI_HANDOFF.md) before continuing or releasing. A live GSPro session and physical control-box/multi-monitor acceptance are also unverified.
+See [DEVELOPMENT.md](DEVELOPMENT.md) and the latest entry in [AI_HANDOFF.md](AI_HANDOFF.md) for evidence. The work remains in a draft PR and is not published as a release. A live GSPro session and physical control-box/multi-monitor acceptance are still unverified.
 
-### Expected assets after validation
+### Candidate build assets (Actions only)
 
 - `BARemapper_Setup_v5.1.2.zip`
 - `BARemapper_v5.1.2_portable.zip`
 - `SHA256SUMS.txt`
 
-These are intended asset names, not downloads available now. Keep the 64-bit Unicode build and existing profiles/settings compatibility.
+These files are held as Actions artifacts, not release downloads or the website update. Keep the 64-bit Unicode build and existing profiles/settings compatibility.

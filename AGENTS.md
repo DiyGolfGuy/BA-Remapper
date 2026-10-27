@@ -6,6 +6,7 @@ Read [AI_HANDOFF.md](AI_HANDOFF.md) before changing the app. It records the owne
 
 ## Work with the owner
 
+- Public readers may view/download; only Bruce and his authorized accounts/apps should have write or publish access. Do not invite collaborators or grant new write access. A full collaborator/admin audit has not been completed through this connection.
 - Keep development a back-and-forth conversation with Bruce. Explain your understanding and the next useful step, give concise progress updates, and explain the result in plain language.
 - Ask when a missing answer changes the requested behavior or scope. Continue routine work already authorized; do not repeatedly request permission for the same work.
 - Surface unexpected behavior, meaningful tradeoffs, and uncertain assumptions. Do not silently redesign working features or expand an agreed change.

@@ -25,18 +25,32 @@ Current owner instruction, 2026-10-27: upload the code to the development branch
 - Workflow YAML parsing, publication opt-in defaults and version metadata checks: passed.
 - Source review confirms `ScrambleDecide`, OCR recognition/learning/clicking, monitor discovery, mouse parking, and primary/FN key routing remain unchanged.
 
-## Pending before a release-ready binary
+## Windows candidate build verified
 
-The AutoHotkey U64 runtime cannot start in this workspace: Wine's server reports `socket: Operation not permitted`. This prevented a fresh production AHK parse, runtime tests, and compilation. Do not treat the local source checks as Windows execution.
+[Draft PR #3](https://github.com/DiyGolfGuy/BA-Remapper/pull/3) remains unmerged. [Windows run 40598471990](https://github.com/DiyGolfGuy/BA-Remapper/actions/runs/40598471990) passed on source `0878d3ccfb5f4dc3d00a12a92a67309658f077f0`:
 
-The owner has authorized public development-source staging. Run the draft PR workflow on its disposable Windows runner. It must pass:
+- Production AutoHotkey U64 parse and the full existing UI/profile/reset/startup/key-event checks.
+- All 38 distance runtime cases, including `100'` -> 1200 inches, `111'` -> 1332 inches, and consistent letter-path validation.
+- Real Windows en-US OCR: all ten two/three/four-card decision scenes, plus all three HUD scenes, no-card and one-card non-triggers. Three/four-card cases are required passes, not KNOWN exceptions.
+- The negative-desktop-origin card-strip geometry check.
+- Official Unicode 64-bit compilation and executable metadata validation.
+- Actual v5.0.9-to-v5.1.2 installer upgrade: seeded profile/preferences unchanged and installed executable exactly matches the new binary.
+- Candidate installer/portable ZIP creation and SHA-256 checksums. The verification workflow has read-only repository permission and no publication step.
 
-- Production-source AutoHotkey parsing and the full isolated runtime/OCR suite, including the formerly KNOWN three/four-card scenes.
-- Portable compilation with the official Unicode 64-bit base and executable metadata validation.
-- Actual installer upgrade/profile preservation and package/checksum generation.
-- Review of the central-strip fallback on live GSPro; the existing fields were tested synthetically in v5.1.1, not on the simulator here.
+Downloaded candidate artifact `12776293996` (`BARemapper_candidate_packages`), checked both ZIPs and checksums, and inspected the executable: PE32+ machine `0x8664`, ProductName BA Remapper, ProductVersion 5.1.2.
 
-Do not run `scripts/package-release.ps1` on the simulator PC. Its installer-upgrade fixture is intended for a disposable GitHub Windows runner; it deliberately seeds test configuration and runs actual installers. The new guard refuses other environments and existing configuration folders.
+- Installer ZIP SHA-256: `8b0c356b46119ff66f925c9a07b8bbbf8f57423e1639c8c04246b7d2294dc355`.
+- Portable ZIP SHA-256: `fc16be1ef4c6c970580ae63ffc86fe3d5a8d2184ad090369d6e9a0a96937cfde`.
+
+These are Actions candidate artifacts, not a public release or the website update. App source remains identical to the verified source after this documentation update. More features may change the candidate and require new verification.
+
+A live GSPro session, physical control box, and physical multi-monitor acceptance remain unverified. The Windows build was verified on GitHub's disposable runner after the owner authorized source upload; no local Windows result is claimed.
+
+Do not run `scripts/package-release.ps1` on the simulator PC. Its installer-upgrade fixture requires a disposable GitHub Windows runner, deliberately seeds test configuration, and refuses existing configuration folders.
+
+## Access policy
+
+Bruce permits public viewing/downloading and authorizes development by his own account and connected AI tools. He does not want anyone else changing or publishing in his public or private repositories. The connection confirms `DiyGolfGuy` has admin permission on BA-Remapper, but does not expose the complete collaborator list or collaborator administration. No access changes were performed, and owner-only existing access has not been fully audited. Do not claim that the absence of external writers was verified.
 
 ## Continuing this work
 
