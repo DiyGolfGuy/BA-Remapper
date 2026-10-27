@@ -348,6 +348,7 @@ ScrambleSmoke:
         if (A_Args[1] = "ocr") {
             ; ---- real Windows OCR on rendered scramble cards ----
             sc := []
+            sc.Push({name: "three cards first 150 / 98 / 121", want: 2, cards: [["JIM", "150", "ROUGH   2ND"], ["TOM", "98", "FAIRWAY   2ND"], ["SUE", "121", "FAIRWAY   2ND"]]})
             sc.Push({name: "putting green 28' 0 vs 29' 7", want: 1, cards: [["CARTER", "28' 0" . q, "GREEN   4TH"], ["AL", "29' 7" . q, "GREEN   4TH"]]})
             sc.Push({name: "green 14' 7 vs 9' 11", want: 2, cards: [["CARTER", "14' 7" . q, "GREEN   3RD"], ["AL", "9' 11" . q, "GREEN   3RD"]]})
             sc.Push({name: "around the green: lone 8 yds fringe vs 13 yds rough", want: 1, cards: [["CARTER", "8", "FRINGE   4TH"], ["AL", "13", "ROUGH   4TH"]]})
@@ -369,6 +370,17 @@ ScrambleSmoke:
                     Sleep, 150
                 }
                 pick := ScrambleVoteLeader()
+                if (lc = "" || lc = 0) {
+                    ; Nothing read at all: is the window painted, and does a
+                    ; smaller or enlarged read of one card see anything?
+                    PixelGetColor, pc1, 240, 150, RGB
+                    PixelGetColor, pc2, 240, 325, RGB
+                    PixelGetColor, pc3, 50, 50, RGB
+                    part := OcrRegion(135, 100, 210, 290)
+                    big := OcrRegionScaled(135, 100, 210, 290, 2)
+                    full := ScanScreen()
+                    ScrambleNote("INFO", "0 lines: pixels card=" . pc1 . " use=" . pc2 . " bg=" . pc3 . "; one-card read " . (part.lines.MaxIndex() + 0) . " lines [" . StrReplace(part.text, "`n", " / ") . "]; 2x read " . (big.lines.MaxIndex() + 0) . " lines; whole screen " . (full.lines.MaxIndex() + 0) . " lines [" . SubStr(StrReplace(full.text, "`n", " / "), 1, 300) . "]")
+                }
                 OcrDumpMiss("OCR scenario " . i . ": " . s.name, scan, "ocr_scenario_" . i . ".txt")
                 CaptureWindow(SmokeCardsHwnd, "ocr_scenario_" . i)
                 reads := ""
