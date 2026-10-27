@@ -10,6 +10,7 @@ from pathlib import Path
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -550,12 +551,17 @@ def main():
     args = parser.parse_args()
     source = (ROOT / "BARemapper.ahk").read_text(encoding="utf-8-sig")
     baseline = args.baseline.read_text(encoding="utf-8-sig") if args.baseline else subprocess.check_output(["git", "show", BASE + ":BARemapper.ahk"], cwd=ROOT).decode("utf-8-sig")
+    # The scramble checks print feet/inch marks (curly quotes, primes) that
+    # the Windows console code page cannot encode.
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
     try:
         static_checks(source, baseline)
         if args.ahk:
             runtime_checks(source, args.ahk.resolve())
-    except AssertionError as failure:
-        annotate("error", "Regression check failed", str(failure))
+    except Exception as failure:
+        annotate("error", "Regression check failed", f"{type(failure).__name__}: {failure}")
         raise
 
 
