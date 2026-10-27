@@ -379,7 +379,7 @@ ScrambleSmoke:
                     Sleep, 150
                 }
                 pick := ScrambleVoteLeader()
-                if (lc = "" || lc = 0) {
+                if ((lc = "" || lc = 0) && !InStr(s.name, "three cards")) {
                     ; Nothing read at all: is the window painted, and does a
                     ; smaller or enlarged read of one card see anything?
                     PixelGetColor, pc1, 240, 150, RGB
@@ -398,19 +398,22 @@ ScrambleSmoke:
                     for k, cd in lr.cards
                         reads .= "  card " . k . ": " . cd.lie . " shot " . cd.shot . " dist " . cd.dist . " [" . cd.distRaw . "]"
                 }
-                ScrambleNote((pick = s.want) ? "PASS" : "FAIL", "OCR " . s.name . ": picked " . pick . " (want " . s.want . ", " . ScrambleVoteSummary() . "; reads saw " . seen . ")" . reads)
+                ScrambleNote((pick = s.want) ? "PASS" : (InStr(s.name, "three cards") ? "KNOWN" : "FAIL"), "OCR " . s.name . ": picked " . pick . " (want " . s.want . ", " . ScrambleVoteSummary() . "; reads saw " . seen . ")" . reads)
                 if (pick != s.want && !InStr(s.name, "three cards"))
                     fails += 1
             }
-            ; ---- experiments: when does a full-window read drop the cards? ----
-            ; G = GSPro proportions from the 4K dump (card spacing 12.5 x USE
-            ; height, cards nearly touching), S = the sparser layout above.
+            ; ---- known Windows OCR behavior (2026-10-27, windows-latest) ----
+            ; With 3 or 4 cards side by side, a read of the WHOLE window
+            ; returned none of the card text (0 lines with no HUD; only the
+            ; HUD lines with it), while a read of just the card strip, or of
+            ; the window in halves/thirds/quarters, found every card.  Two
+            ; cards read fine either way.  Not confirmed on a live GSPro
+            ; screen.  Recorded here so a change in that behavior shows up.
             c4 := [["CARTER", "212", "FAIRWAY   2ND"], ["AL", "87", "FAIRWAY   2ND"], ["BOB", "143", "ROUGH   2ND"], ["JIM", "98", "ROUGH   2ND"]]
-            exps := [["G2 2 cards", [c4[1], c4[2]], 140, 10, true], ["G3 3 cards", [c4[1], c4[2], c4[3]], 140, 10, true], ["G4 4 cards", c4, 140, 10, true]
-                , ["S2 2 cards", [c4[1], c4[2]], 210, 50, true], ["S3 3 cards", [c4[1], c4[2], c4[3]], 210, 50, true], ["S4 4 cards", c4, 200, 30, true]]
+            exps := [["2 cards + HUD", [c4[1], c4[2]], 210, 50, true], ["3 cards + HUD", [c4[1], c4[2], c4[3]], 210, 50, true], ["4 cards + HUD", c4, 200, 30, true]]
             for i, e in exps {
                 ShowCards(e[2], e[3], e[4], e[5])
-                wx := SmokeWinX(), wy := 0, ww := 1000, wh := 540
+                ww := 1000, wh := 540
                 scan := ScanWinClient(GSProWinNeedle, GSProWinExclude)
                 r := e[1] . ": full " . Cnt(FindAllLinesExact(scan, "use"))
                 big := OcrRegionScaled(0, 0, ww, wh, 2)
@@ -421,7 +424,7 @@ ScrambleSmoke:
                 r .= " | thirds " . TileUses(0, 0, ww, wh, 3)
                 r .= " | quarters " . TileUses(0, 0, ww, wh, 4)
                 r .= "   (USE found; " . e[2].MaxIndex() . " cards)"
-                ScrambleNote("INFO", r)
+                ScrambleNote("KNOWN", r)
             }
             Loop, 4 {
                 Gui, SmokeUse%A_Index%:Destroy
@@ -438,10 +441,6 @@ ScrambleSmoke:
         ExitApp, 1
     }
 Return
-
-SmokeWinX() {
-    return 0
-}
 
 ; USE buttons found reading the area in n side-by-side tiles that
 ; overlap by 70 px (a button on a seam is read by both; counted once).
