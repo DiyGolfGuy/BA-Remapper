@@ -52,6 +52,19 @@ Do not run `scripts/package-release.ps1` on the simulator PC. Its installer-upgr
 
 Bruce permits public viewing/downloading and authorizes development by his own account and connected AI tools. He does not want anyone else changing or publishing in his public or private repositories. The connection confirms `DiyGolfGuy` has admin permission on BA-Remapper, but does not expose the complete collaborator list or collaborator administration. No access changes were performed, and owner-only existing access has not been fully audited. Do not claim that the absence of external writers was verified.
 
+## Product direction for the next ideas
+
+Bruce emphasized that this is BA Custom Products LLC's companion software for its physical control boxes. Judge features by how much easier they make GSPro operation at the mat, with future Remapper enhancements for PurePlay.
+
+Priorities to discuss/build next, not claims of implemented features:
+
+- Trigger useful controls from the box itself, such as scramble Pick Now/Skip This Pick, and verified menu/confirm/back actions.
+- Organize simulator-specific actions/profiles so future PurePlay additions can be verified separately while preserving GSPro's working controls.
+- Offer optional help that mirrors the physical box and can live on a data display.
+- Keep customer setup simple: understandable presets, clear FN behavior, and easy preservation/transfer of custom profiles.
+
+The prior five-item suggestion list is not blanket authorization to ship every proposed feature. No PurePlay Remapper integration or new hardware behavior is implemented by this direction note.
+
 ## Continuing this work
 
 Use the development branch and draft PR to continue; the earlier local-only checkpoint is historical. Read `AGENTS.md` and `AI_HANDOFF.md` before editing. Keep collecting the owner's ideas and update the dated log after meaningful work.

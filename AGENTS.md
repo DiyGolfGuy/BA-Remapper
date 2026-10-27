@@ -4,6 +4,15 @@
 
 Read [AI_HANDOFF.md](AI_HANDOFF.md) before changing the app. It records the owner's decisions, implementation reasons, release state, and evidence from prior work. Check the current source and GitHub state when continuing; dated notes are historical context.
 
+## Product direction
+
+- BA Remapper is companion software for **BA Custom Products LLC's physical control boxes**. The goal is easier simulator operation from the hitting mat, with fewer trips to the keyboard or mouse.
+- Prioritize useful actions customers can trigger from the box/FN layer: gameplay, camera/view controls, relief/menu operation, and scramble control. Optional on-screen help should explain the physical buttons and current profile.
+- Preserve the printed white/yellow functions, familiar panel arrangement, native primary-key operation, and the working GSPro defaults.
+- GSPro is the current implementation target. Prepare future Remapper enhancements for PurePlay with separate simulator-specific action definitions/profiles; verify its actual controls rather than assuming GSPro keys, OCR text, menus, or timing carry over.
+- Prefer simple setup and reliable button response over adding settings or unrelated desktop-automation features. Proposed features remain ideas until their behavior and implementation are agreed; do not claim PurePlay Remapper support has been built or tested.
+- The owner redirected the conversation to product ideas. Do not keep pursuing access audits/browser setup unless he reopens that task.
+
 ## Work with the owner
 
 - Public readers may view/download; only Bruce and his authorized accounts/apps should have write or publish access. Do not invite collaborators or grant new write access. A full collaborator/admin audit has not been completed through this connection.
