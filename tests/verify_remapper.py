@@ -59,17 +59,22 @@ def static_checks(source, baseline):
     # cp1252 bytes 145-148). Apart from that one call, both are unchanged.
     for name, old_line, new_line in [
         ("ScrambleParseDistance", "t := ScrambleStripMarks(text)", "t := ScrambleStripMarks(ScrambleNormQuotes(text))"),
-        ("FeetInches", "t := raw", "t := ScrambleNormQuotes(raw)"),
     ]:
         assert function(source, name) == function(baseline, name).replace(old_line, new_line, 1), f"Unexpected core change: {name}"
     assert "0x201D" in function(source, "ScrambleNormQuotes"), "Curly inch mark normalized"
+    # FeetInches also changed on purpose (real Windows OCR read 29' 7" as
+    # "291 71'"): a lone trailing ' is the inch mark, and every result goes
+    # through ScrambleFtIn (inches 0-11, no green distance over 199 ft).
+    feet = function(source, "FeetInches")
+    assert "t := ScrambleNormQuotes(raw)" in feet and feet.count("ScrambleFtIn(") == 4 and "* 12 +" not in feet, "FeetInches routes every result through ScrambleFtIn"
+    assert "ft > 199" in function(source, "ScrambleFtIn"), "Oversized green distance refused"
     assert 'SendMode, Input' in source  # Primary-key and scramble output mode preserved.
     assert 'if (FnIsDown)\n            return' in function(source, "HandleBoxKeyDown")
     assert 'SetKeyDelay, 15, 60' in function(source, "SendSecondaryKey")
     assert 'SendEvent, %keys%' in function(source, "SendSecondaryKey")
     assert 'gResetSmartSpots, Reset Smart Click Spots' in source
     assert 'gOnCleanup,' not in source
-    print(f"PASS: {len(unchanged)} core functions, diagnostics, hotkeys and exit preserved; distance parsers differ only by quote normalization")
+    print(f"PASS: {len(unchanged)} core functions, diagnostics, hotkeys and exit preserved; distance parsers changed only as documented (quote marks, inch-mark misreads)")
 
 
 SINK = r'''
@@ -332,6 +337,7 @@ ScrambleSmoke:
         cases := [["28' 0" . q, 1, 336], ["29' 7" . q, 1, 355], ["141 7" . q, 1, 175], ["291 7" . q, 1, 355]
             , ["33110" . q, 1, 406], ["28' O" . q, 1, 336], ["9l 7u", 1, 115], ["0' 6" . q, 1, 6]
             , ["14" . rs . "7" . rd, 1, 175], ["141 7" . rd, 1, 175], ["33110" . rd, 1, 406], ["14" . pr . " 7" . pd, 1, 175]
+            , ["291 71'", 1, 355], ["29' 71" . q, 1, 355], ["28'", 1, 336], ["5' 11" . q, 1, 71], ["33110", 1, -1], ["9' 74" . q, 1, -1]
             , ["189", 0, 6804], ["8", 0, 288], ["15", 0, 540], ["!4E", 0, -1], ["l 87", 0, 3132]]
         for i, c in cases {
             got := ScrambleParseDistance(c[1], c[2])
@@ -356,7 +362,8 @@ ScrambleSmoke:
                     scan := ScanWinClient(GSProWinNeedle, GSProWinExclude)
                     uses := FindAllLinesExact(scan, "use")
                     n := uses.MaxIndex()
-                    seen .= (seen = "" ? "" : ",") . (scan.found ? scan.lines.MaxIndex() + 0 . " lines/" . (n + 0) . " USE" : "no GSPro window")
+                    lc := scan.lines.MaxIndex()
+                    seen .= (seen = "" ? "" : ",") . (scan.found ? (lc = "" ? 0 : lc) . " lines/" . (n = "" ? 0 : n) . " USE in " . scan.win.title . " " . scan.win.w . "x" . scan.win.h . "@" . scan.win.x . "," . scan.win.y . (scan.win.hwnd = SmokeCardsHwnd ? "" : " (NOT the test window)") : "no GSPro window")
                     w := (n >= 2) ? ScrambleDecide(scan, uses, "", true) : 0
                     ScrambleCountRead(n, w)
                     Sleep, 150
