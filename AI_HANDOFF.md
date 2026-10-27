@@ -4,7 +4,7 @@ Updated **2026-10-27**. Read alongside [AGENTS.md](AGENTS.md), the current sourc
 
 ## State at this handoff
 
-- **Update 2026-10-27 (Claude Code):** v5.1.1 was prepared in [PR #2](https://github.com/DiyGolfGuy/BA-Remapper/pull/2) and is published by the release workflow when that PR merges to main. See the dated entry "8" below. The v5.1.0 notes that follow are kept as history.
+- **Update 2026-10-27 (Claude Code):** public release [v5.1.1](https://github.com/DiyGolfGuy/BA-Remapper/releases/tag/v5.1.1), published by the release workflow from squash-merged [PR #2](https://github.com/DiyGolfGuy/BA-Remapper/pull/2), source `39581fda8a5eb0cb3596fd65f55e8885aaa6c88c`. Assets: `BARemapper_Setup_v5.1.1.zip` (`f8054922e1e22c1733a2b8fab8973ab352a61d33cbee0fa119b2d18f8fce22b6`), `BARemapper_v5.1.1_portable.zip` (`097cc527966dacf2a4857c7311b0f0b47fc6fba68ae5ed3d5732691f899fd278`), `SHA256SUMS.txt`. Downloaded and checked: 64-bit exe, version 5.1.1, contains the fix; installs on 64-bit Windows (wine). See dated entry 8. The v5.1.0 notes that follow are kept as history.
 - Public release: [v5.1.0](https://github.com/DiyGolfGuy/BA-Remapper/releases/tag/v5.1.0), published as a full release, not a draft/prerelease.
 - Released source: `0352465ded92bbd71ab20e919c982233cf3ed424`.
 - Working baseline before these changes: v5.0.9, `a5f762113cc2645a385277b4e4941453c8527b63`.
