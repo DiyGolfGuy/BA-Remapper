@@ -313,7 +313,7 @@ KeyToBtnId["Down"]  := "down"
 ;  GSPRO ACTIONS LIST  (for the Builder dropdown)
 ; ============================================================
 GSProActions := "None|"
-    . "A - Aim Reset|B - Clear View / Hide Objects|C - Tee Left|D - Vertical Dots|"
+    . "A - Aim Reset|B - Camera Clip / Clear View|C - Tee Left|D - Vertical Dots|"
     . "F - FPS Toggle|G - Green Grid|H - Hide UI|I - Club Up|"
     . "J - Shot Cam|K - Club Down|L - Lighting|N - Switch Hand|"
     . "O - Flyover|P - Pin Indicator|Q - Minimap Zoom Out|"
@@ -329,7 +329,7 @@ GSProActions := "None|"
 GSProKeyMap := {}
 GSProKeyMap["None"] := ""
 GSProKeyMap["A - Aim Reset"]         := "a"
-GSProKeyMap["B - Clear View / Hide Objects"] := "b"
+GSProKeyMap["B - Camera Clip / Clear View"] := "b"
 GSProKeyMap["C - Tee Left"]          := "c"
 GSProKeyMap["D - Vertical Dots"]     := "d"
 GSProKeyMap["F - FPS Toggle"]        := "f"
@@ -4847,7 +4847,7 @@ Return
 FactoryConfirm:
     Gui, Factory:Submit, NoHide
     if (FactoryBackup) {
-        backupDir := ConfigDir . " Backups\" . A_Now
+        backupDir := ConfigDir . " Backups\" . A_Now . "-" . A_TickCount
         try {
             FileCopyDir, %ConfigDir%, %backupDir%, 0
             if (ErrorLevel)
@@ -5357,6 +5357,8 @@ UpdateOneLabel(btnIdVal, ctrlName, secCtrl, dispName, priKey) {
 ; Short yellow-print name for a key-type secondary
 YellowKeyName(sendKey) {
     global GSProNameMap
+    if (sendKey = "b")
+        return "CLEAR VIEW"
     name := GSProNameMap.HasKey(sendKey) ? GSProNameMap[sendKey] : sendKey
     ; strip a "X - " prefix if present
     pos := InStr(name, " - ")

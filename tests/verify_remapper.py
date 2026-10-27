@@ -116,7 +116,7 @@ UiSmoke:
         GuiControlGet, enabled, Cfg:Enabled, CfgKeyChoice
         Assert(!enabled, "Inactive key dropdown disabled")
         GuiControl, Cfg:, CfgTypeKey, 1
-        GuiControl, Cfg:ChooseString, CfgKeyChoice, B - Clear View / Hide Objects
+        GuiControl, Cfg:ChooseString, CfgKeyChoice, B - Camera Clip / Clear View
         UpdateConfigPreview()
         GuiControlGet, preview, Cfg:, CfgPreview
         Assert(InStr(preview, "Reset Aim") && InStr(preview, "AIM LEFT") && InStr(preview, "Clear View"), "Readable action preview")
@@ -124,7 +124,7 @@ UiSmoke:
         Assert(SecType["left"] = "ocr", "Cancel retains previous action")
         ConfigButton("left", "AIM LEFT", "Left Arrow")
         GuiControl, Cfg:, CfgTypeKey, 1
-        GuiControl, Cfg:ChooseString, CfgKeyChoice, B - Clear View / Hide Objects
+        GuiControl, Cfg:ChooseString, CfgKeyChoice, B - Camera Clip / Clear View
         Gosub, CfgOK
         Assert(SecType["left"] = "key" && SecValue["left"] = "b", "Save applies chosen hotkey")
         IniRead, saved, % ProfilesDir . "\Regression Copy.ini", Profile, left_Value
@@ -194,7 +194,7 @@ UiSmoke:
         RemapActive := false
         Sleep, 300
         Process, Close, %sinkPid%
-        FileAppend, PASS: UI, profile, reset, scrollbar and FN runtime checks`n, % A_ScriptDir . "\result.txt"
+        FileAppend, % "PASS: UI, profile, reset, scrollbar and FN runtime checks`n", % A_ScriptDir . "\result.txt"
         Gosub, DoFullExit
     } catch failure {
         Process, Close, %sinkPid%

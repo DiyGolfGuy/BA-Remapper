@@ -27,7 +27,7 @@ The installer puts BA Remapper in Program Files, adds it to the Start Menu and *
 ## Quick Start
 
 1. Choose **Basic Secondary** for the yellow functions printed on the box.
-2. Turn **Button Mapping ON**. Tap for a white function; hold Reset Aim (A) and tap another button for its yellow function. FN + either club button sends Clear View (B).
+2. Turn **Button Mapping ON**. Tap for a white function; hold Reset Aim (A) and tap another button for its yellow function. FN + either club button sends Camera Clip / Clear View (B).
 3. To change a function, choose **Customize a Copy**, give it a name, open the Builder, click a button, choose the action, and **Save**. The original preset and Windows Startup Profile stay unchanged. **New Blank** starts without secondary actions.
 4. Optional: choose **Use Current Profile at Windows Startup**, then check **Start with Windows**.
 
@@ -45,7 +45,7 @@ Each button's secondary can be one of three types:
 
 | Type | What it does |
 |---|---|
-| **GSPro Hotkey** | Sends any GSPro key, including scramble Select Shot 1–4, Clear View (B), Mulligan, and every standard binding |
+| **GSPro Hotkey** | Sends any GSPro key, including scramble Select Shot 1–4, Camera Clip / Clear View (B), Mulligan, and every standard binding |
 | **Smart Click (OCR)** | Reads the live GSPro screen, finds the menu button by its text, and clicks it — zero setup, works at any resolution, any monitor count, any Windows scaling |
 | **Taught Screen Click** | Clicks a fixed position you capture yourself (the classic method, still available) |
 
@@ -59,7 +59,7 @@ Select **Basic Secondary** from the profile dropdown and the yellow print on the
 
 | FN + button | Action |
 |---|---|
-| CLUB DOWN or CLUB UP | Clear View (B) |
+| CLUB DOWN or CLUB UP | Camera Clip / Clear View (B) |
 | TEE LEFT | OB Rehit |
 | AIM UP | Move Forward |
 | AIM DOWN | Move Back |
@@ -144,7 +144,7 @@ The main window, Builder and action editor can be resized and scrolled when they
 
 **v5.1.0** — Separate mapping/Auto-Pick status, Customize a Copy, visibly locked presets, action previews and modal Save/Cancel editing, readable scrollable settings windows, clearer Windows Startup Profile wording, Quick Start, and an OCR-only Reset Smart Click Spots that also clears transient click caches. Factory reset is separate and offers backup first. Repeated FN-down events no longer cause an extra Reset Aim when FN is released. FN hotkeys focus GSPro and use a 60 ms key press instead of an instantaneous SendInput tap; primary keys, Smart Click matching/learning and scramble choice logic are unchanged. Game behavior still needs a live GSPro check on the sim PC.
 
-**v5.0.9** — Basic Secondary: Clear View (B) now works with FN on either club button. On a box whose club buttons send I and K the other way round (the reason to tick Swap Club Up/Down), FN + Club Down landed on Club Up, which had nothing assigned, so Clear View did nothing. The key trace now logs the key a secondary sent, an FN combo with nothing assigned, and the active profile.
+**v5.0.9** — Basic Secondary: Camera Clip / Clear View (B) now works with FN on either club button. On a box whose club buttons send I and K the other way round (the reason to tick Swap Club Up/Down), FN + Club Down landed on Club Up, which had nothing assigned, so Clear View did nothing. The key trace now logs the key a secondary sent, an FN combo with nothing assigned, and the active profile.
 
 **v5.0.8** — Auto-pick reads the cards all through the countdown and votes on every read, so the decision is made before zero and the key goes out right at zero (after a quick check that the cards are still up). When the screen reader skips a card's distance — CARTER's 28' 0" on the putting green, a lone "8" — that card's distance area is read again close up: enlarged, with only the white text kept, and with a marker word beside a single digit. A zero read as the letter O on the green is accepted. New tray item: Key Test (last keys received).
 
