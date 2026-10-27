@@ -118,16 +118,20 @@ UiSmoke:
         ConfigButton("left", "AIM LEFT", "Left Arrow")
         GuiControlGet, enabled, Cfg:Enabled, CfgKeyChoice
         Assert(!enabled, "Inactive key dropdown disabled")
-        GuiControl, Cfg:, CfgTypeKey, 1
+        SelectConfigType("key")
         GuiControl, Cfg:ChooseString, CfgKeyChoice, B - Camera Clip / Clear View
         UpdateConfigPreview()
+        GuiControlGet, keySelected, Cfg:, CfgTypeKey
+        GuiControlGet, ocrSelected, Cfg:, CfgTypeOcr
+        GuiControlGet, ocrEnabled, Cfg:Enabled, CfgOcrChoice
+        Assert(keySelected && !ocrSelected && !ocrEnabled, "Action types are mutually exclusive")
         GuiControlGet, preview, Cfg:, CfgPreview
         Assert(InStr(preview, "Reset Aim") && InStr(preview, "AIM LEFT") && InStr(preview, "Clear View"), "Readable action preview")
         CaptureWindow(CfgHwnd, "action-preview")
         Gosub, CfgCancel
         Assert(SecType["left"] = "ocr", "Cancel retains previous action")
         ConfigButton("left", "AIM LEFT", "Left Arrow")
-        GuiControl, Cfg:, CfgTypeKey, 1
+        SelectConfigType("key")
         GuiControl, Cfg:ChooseString, CfgKeyChoice, B - Camera Clip / Clear View
         Gosub, CfgOK
         Assert(SecType["left"] = "key" && SecValue["left"] = "b", "Save applies chosen hotkey")
@@ -272,6 +276,10 @@ FactorySmoke:
     ExitApp, 1
 Return
 AcceptFactoryNotice:
+    if WinExist("Backup Failed") {
+        FileAppend, % "FAIL: backup dialog reported failure`n", % A_ScriptDir . "\result.txt"
+        ExitApp, 1
+    }
     ; The two explicit confirmation/result dialogs have this exact
     ; title. The parent settings dialog starts with "BA Remapper".
     ControlClick, Button1, Factory Reset
@@ -327,7 +335,8 @@ def runtime_checks(source, ahk):
             script = work / (mode + ".ahk")
             script.write_text(candidate + "\n" + SMOKE + "\n" + extra, encoding="utf-8-sig")
             check = subprocess.run([str(ahk), "/ErrorStdOut", str(script), *arguments], capture_output=True, text=True, timeout=40)
-            assert check.returncode == 0, mode + ": " + check.stdout + check.stderr
+            report = (work / "result.txt").read_text() if (work / "result.txt").exists() else "No result"
+            assert check.returncode == 0, mode + ": " + report + check.stdout + check.stderr
             if mode == "BootSmoke":
                 assert (work / "result.txt").read_text().startswith("PASS:"), "Startup checks failed"
                 print("PASS: startup loads the chosen profile, enables mapping and stays hidden")

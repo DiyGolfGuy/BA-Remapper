@@ -4847,8 +4847,10 @@ Return
 FactoryConfirm:
     Gui, Factory:Submit, NoHide
     if (FactoryBackup) {
-        backupDir := ConfigDir . " Backups\" . A_Now . "-" . A_TickCount
+        backupRoot := ConfigDir . " Backups"
+        backupDir := backupRoot . "\" . A_Now . "-" . A_TickCount
         try {
+            FileCreateDir, %backupRoot%
             FileCopyDir, %ConfigDir%, %backupDir%, 0
             if (ErrorLevel)
                 throw Exception("Backup failed")
@@ -5172,23 +5174,32 @@ ConfigButton(btnIdVal, displayName, primaryKey) {
         GuiControl, Cfg:, CfgTypeNone, 1
         GuiControl, Cfg:ChooseString, CfgKeyChoice, None
     }
-    UpdateConfigPreview()
+    SelectConfigType(curType)
     ShowSettingsWindow("Cfg", CfgHwnd, 460, 416)
 }
 
 CfgTypeChanged:
-    UpdateConfigPreview()
+    chosenType := A_GuiControl = "CfgTypeKey" ? "key" : A_GuiControl = "CfgTypeOcr" ? "ocr" : A_GuiControl = "CfgTypeClick" ? "click" : "none"
+    SelectConfigType(chosenType)
 Return
 
 CfgKeyChanged:
-    GuiControl, Cfg:, CfgTypeKey, 1
-    UpdateConfigPreview()
+    SelectConfigType("key")
 Return
 
 CfgOcrChanged:
-    GuiControl, Cfg:, CfgTypeOcr, 1
-    UpdateConfigPreview()
+    SelectConfigType("ocr")
 Return
+
+SelectConfigType(type) {
+    ; Dropdowns between radio buttons can split native radio
+    ; groups. Explicitly select exactly one action type.
+    GuiControl, Cfg:, CfgTypeKey, % type = "key"
+    GuiControl, Cfg:, CfgTypeOcr, % type = "ocr"
+    GuiControl, Cfg:, CfgTypeClick, % type = "click"
+    GuiControl, Cfg:, CfgTypeNone, % (type != "key" && type != "ocr" && type != "click")
+    UpdateConfigPreview()
+}
 
 UpdateConfigPreview() {
     global FnChoiceMap, FnButtonId, ConfiguringDisplayName, CfgCapturedX, CfgCapturedY
@@ -5254,7 +5265,7 @@ CfgCapture:
         CfgCapturedX := capX
         CfgCapturedY := capY
         GuiControl, Cfg:, CfgClickPos, % "at " . capX . ", " . capY
-        GuiControl, Cfg:, CfgTypeClick, 1
+        SelectConfigType("click")
     }
     UpdateConfigPreview()
 Return
