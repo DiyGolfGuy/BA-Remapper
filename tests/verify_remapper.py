@@ -536,7 +536,7 @@ def runtime_checks(source, ahk):
         notes = (work / "scramble-checks.txt").read_text(encoding="utf-8-sig") if (work / "scramble-checks.txt").exists() else "No scramble checks reached"
         print(notes)
         annotate("notice", "Scramble checks (" + ("real Windows OCR: " + ocr_note if has_ocr else "no OCR engine") + ")", notes)
-        dumps = sorted(work.glob("ocr_scenario_*.txt"))
+        dumps = sorted((work / "data").glob("ocr_scenario_*.txt"))
         if dumps:
             annotate("notice", "OCR scenario reads", "\n".join(d.read_text(errors="replace") for d in dumps))
         report = (work / "result.txt").read_text() if (work / "result.txt").exists() else "No result"
