@@ -270,12 +270,21 @@ FACTORY = r'''
 FactorySmoke:
     SetTimer, ScrambleTick, Off
     SetTimer, CdTick, Off
+    FileAppend, factory test started`n, % A_ScriptDir . "\factory-checks.txt"
     Gosub, ShowFactoryReset
     SetTimer, AcceptFactoryNotice, 150
+    FileAppend, factory dialog opened`n, % A_ScriptDir . "\factory-checks.txt"
     Gosub, FactoryConfirm
     ExitApp, 1
 Return
 AcceptFactoryNotice:
+    WinGetTitle, noticeTitle, A
+    WinGetText, noticeText, A
+    FileAppend, % "Active: " . noticeTitle . " | " . noticeText . "`n", % A_ScriptDir . "\factory-checks.txt"
+    if (!factoryCaptured) {
+        CaptureWindow(WinExist("A"), "factory-dialog")
+        factoryCaptured := true
+    }
     if WinExist("Backup Failed") {
         FileAppend, % "FAIL: backup dialog reported failure`n", % A_ScriptDir . "\result.txt"
         ExitApp, 1
@@ -334,7 +343,13 @@ def runtime_checks(source, ahk):
             candidate = isolated.replace("SetTimer, UiSmoke, -50", f"SetTimer, {mode}, -50", 1)
             script = work / (mode + ".ahk")
             script.write_text(candidate + "\n" + SMOKE + "\n" + extra, encoding="utf-8-sig")
-            check = subprocess.run([str(ahk), "/ErrorStdOut", str(script), *arguments], capture_output=True, text=True, timeout=40)
+            try:
+                check = subprocess.run([str(ahk), "/ErrorStdOut", str(script), *arguments], capture_output=True, text=True, timeout=15)
+            except subprocess.TimeoutExpired:
+                for artifact in list(work.glob("*.bmp")) + list(work.glob("*.txt")):
+                    shutil.copy2(artifact, artifacts / artifact.name)
+                report = (work / "factory-checks.txt").read_text() if (work / "factory-checks.txt").exists() else "No phase reached"
+                raise AssertionError(f"{mode} timed out: {report}")
             report = (work / "result.txt").read_text() if (work / "result.txt").exists() else "No result"
             assert check.returncode == 0, mode + ": " + report + check.stdout + check.stderr
             if mode == "BootSmoke":
