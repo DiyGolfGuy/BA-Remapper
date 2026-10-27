@@ -61,29 +61,45 @@ def static_checks(source, baseline):
     ]:
         # Section comments may surround a block; compare the complete original block.
         old = baseline[baseline.index(start):baseline.index(end, baseline.index(start))]
+        if start == "ScrambleWork:":
+            # v5.1.2 adds just one recovery call; countdown, cancellation,
+            # voting, cooldown, and sending logic must remain untouched.
+            old = old.replace('    scrUses := FindAllLinesExact(scrScan, "use")',
+                              '    scrScan := ScrambleRecoverCards(scrScan)\n    scrUses := FindAllLinesExact(scrScan, "use")', 1)
         assert old in source, f"Unexpected change to preserved section: {start}"
     # v5.1.1 changed the two distance parsers on purpose: typographic
     # quote marks are normalized first, because the Unicode 64-bit build
     # receives them as real Unicode characters (the 32-bit ANSI build got
-    # cp1252 bytes 145-148). Apart from that one call, both are unchanged.
-    for name, old_line, new_line in [
-        ("ScrambleParseDistance", "t := ScrambleStripMarks(text)", "t := ScrambleStripMarks(ScrambleNormQuotes(text))"),
-    ]:
-        assert function(source, name) == function(baseline, name).replace(old_line, new_line, 1), f"Unexpected core change: {name}"
+    # cp1252 bytes 145-148). v5.1.2 also sends both letter-recovery paths
+    # through the same distance guard instead of bypassing it.
+    expected_parser = function(baseline, "ScrambleParseDistance").replace(
+        "t := ScrambleStripMarks(text)", "t := ScrambleStripMarks(ScrambleNormQuotes(text))", 1
+    ).replace("return fm1 * 12 + fm2", "return ScrambleFtIn(fm1, fm2)")
+    assert function(source, "ScrambleParseDistance") == expected_parser, "Unexpected distance-parser change"
     assert "0x201D" in function(source, "ScrambleNormQuotes"), "Curly inch mark normalized"
     # FeetInches also changed on purpose (real Windows OCR read 29' 7" as
-    # "291 71'"): a lone trailing ' is the inch mark, and every result goes
-    # through ScrambleFtIn (inches 0-11, no green distance over 199 ft).
+    # "291 71'"): only a tick after TWO numbers is a misread inch mark.
+    # A single feet-only number such as 100' keeps its actual feet mark.
     feet = function(source, "FeetInches")
     assert "t := ScrambleNormQuotes(raw)" in feet and feet.count("ScrambleFtIn(") == 4 and "* 12 +" not in feet, "FeetInches routes every result through ScrambleFtIn"
+    # Exercise the actual production regex, without a second parser
+    # implementation. These patterns have the same syntax in PCRE/Python.
+    pattern = re.search(r'RegExMatch\(t, "([^"\n]+)"\)\)\n\s*t := RegExReplace', feet)
+    assert pattern, "Missing trailing-tick classification pattern"
+    for reading, inch_tick in [("100'", False), ("111'", False), ("199'", False),
+                               ("28'", False), ("100 '", False), ("291 71'", True),
+                               ("141 7'", True), ("29' 7'", False)]:
+        assert bool(re.search(pattern[1], reading)) == inch_tick, f"Wrong trailing-tick interpretation: {reading}"
+    print("PASS: 8 production trailing-tick regex cases preserve feet-only readings")
     assert "ft > 199" in function(source, "ScrambleFtIn"), "Oversized green distance refused"
+    assert 'ScrambleRecoverCards(scrScan)' in source, "Scramble watcher uses the card recovery path"
     assert 'SendMode, Input' in source  # Primary-key and scramble output mode preserved.
     assert 'if (FnIsDown)\n            return' in function(source, "HandleBoxKeyDown")
     assert 'SetKeyDelay, 15, 60' in function(source, "SendSecondaryKey")
     assert 'SendEvent, %keys%' in function(source, "SendSecondaryKey")
     assert 'gResetSmartSpots, Reset Smart Click Spots' in source
     assert 'gOnCleanup,' not in source
-    print(f"PASS: {len(unchanged)} core functions, diagnostics, hotkeys and exit preserved; distance parsers changed only as documented (quote marks, inch-mark misreads)")
+    print(f"PASS: {len(unchanged)} core functions, diagnostics, hotkeys and exit preserved; documented distance fixes and one scramble recovery call are the only algorithm changes")
 
 
 SINK = r'''
@@ -348,12 +364,23 @@ ScrambleSmoke:
             , ["14" . rs . "7" . rd, 1, 175], ["141 7" . rd, 1, 175], ["33110" . rd, 1, 406], ["14" . pr . " 7" . pd, 1, 175]
             , ["291 71'", 1, 355], ["29' 71" . q, 1, 355], ["28'", 1, 336], ["5' 11" . q, 1, 71], ["33110", 1, -1], ["9' 74" . q, 1, -1]
             , ["189", 0, 6804], ["8", 0, 288], ["15", 0, 540], ["!4E", 0, -1], ["l 87", 0, 3132]]
+        cases.Push(["100'", 1, 1200], ["111'", 1, 1332], ["199'", 1, 2388], ["100 '", 1, 1200])
+        cases.Push(["100" . rs, 1, 1200], ["111" . pr, 1, 1332], ["100' 0" . q, 1, 1200])
+        cases.Push(["291 71" . rs, 1, 355], ["8'", 0, 96], ["8", 1, 96], ["8", 0, 288])
+        cases.Push(["200'", 1, -1], ["200l 7u", 1, -1], ["200l Ou", 1, -1], ["199l 7u", 1, 2395])
         for i, c in cases {
             got := ScrambleParseDistance(c[1], c[2])
             ScrambleNote((got = c[3]) ? "PASS" : "FAIL", "parse [" . c[1] . "] " . (c[2] ? "green" : "yards") . " -> " . got . " (want " . c[3] . ")")
             if (got != c[3])
                 fails += 1
         }
+        ; The recovery rectangle follows GSPro, including negative
+        ; desktop origins, and never extends outside its client area.
+        band := ScrambleCardBand({x: -1920, y: -400, w: 1920, h: 1080})
+        bandOk := (band.x = -1920 && band.y = -130 && band.w = 1920 && band.h = 540)
+        ScrambleNote(bandOk ? "PASS" : "FAIL", "card strip preserves negative monitor coordinates")
+        if (!bandOk)
+            fails += 1
         if (A_Args[1] = "ocr") {
             ; ---- real Windows OCR on rendered scramble cards ----
             sc := []
@@ -364,12 +391,15 @@ ScrambleSmoke:
             sc.Push({name: "green 9' 2 beats fringe 3 yds", want: 2, cards: [["CARTER", "3", "FRINGE   4TH"], ["AL", "9' 2" . q, "GREEN   4TH"]]})
             sc.Push({name: "yards: fairway 2nd 179 beats tee 3rd 363", want: 2, cards: [["CARTER", "363", "TEE   3RD"], ["AL", "179", "FAIRWAY   2ND"]]})
             sc.Push({name: "three cards 212 / 87 / 143", want: 2, cards: [["AL", "212", "FAIRWAY   2ND"], ["ADY", "87", "FAIRWAY   2ND"], ["BOB", "143", "FAIRWAY   2ND"]]})
+            sc.Push({name: "four cards 212 / 87 / 143 / 98", want: 2, cards: [["AL", "212", "FAIRWAY   2ND"], ["ADY", "87", "FAIRWAY   2ND"], ["BOB", "143", "ROUGH   2ND"], ["JIM", "98", "ROUGH   2ND"]], cw: 200, gap: 30})
+            sc.Push({name: "green feet only 100 vs 99", want: 2, cards: [["AL", "100'", "GREEN   3RD"], ["BOB", "99'", "GREEN   3RD"]]})
+            sc.Push({name: "fewest strokes beats green preference", want: 2, cards: [["AL", "1' 0" . q, "GREEN   3RD"], ["BOB", "100", "FAIRWAY   2ND"]]})
             for i, s in sc {
-                ShowCards(s.cards)
+                ShowCards(s.cards, s.HasKey("cw") ? s.cw : 210, s.HasKey("gap") ? s.gap : 50)
                 ScrambleResetReads()
                 seen := ""
                 Loop, 3 {
-                    scan := ScanWinClient(GSProWinNeedle, GSProWinExclude)
+                    scan := ScrambleRecoverCards(ScanWinClient(GSProWinNeedle, GSProWinExclude))
                     uses := FindAllLinesExact(scan, "use")
                     n := uses.MaxIndex()
                     lc := scan.lines.MaxIndex()
@@ -398,8 +428,8 @@ ScrambleSmoke:
                     for k, cd in lr.cards
                         reads .= "  card " . k . ": " . cd.lie . " shot " . cd.shot . " dist " . cd.dist . " [" . cd.distRaw . "]"
                 }
-                ScrambleNote((pick = s.want) ? "PASS" : (InStr(s.name, "three cards") ? "KNOWN" : "FAIL"), "OCR " . s.name . ": picked " . pick . " (want " . s.want . ", " . ScrambleVoteSummary() . "; reads saw " . seen . ")" . reads)
-                if (pick != s.want && !InStr(s.name, "three cards"))
+                ScrambleNote((pick = s.want) ? "PASS" : "FAIL", "OCR " . s.name . ": picked " . pick . " (want " . s.want . ", " . ScrambleVoteSummary() . "; reads saw " . seen . ")" . reads)
+                if (pick != s.want)
                     fails += 1
             }
             ; ---- known Windows OCR behavior (2026-10-27, windows-latest) ----
@@ -416,6 +446,14 @@ ScrambleSmoke:
                 ww := 1000, wh := 540
                 scan := ScanWinClient(GSProWinNeedle, GSProWinExclude)
                 r := e[1] . ": full " . Cnt(FindAllLinesExact(scan, "use"))
+                recovered := ScrambleRecoverCards(scan)
+                actualN := Cnt(FindAllLinesExact(recovered, "use"))
+                ScrambleResetReads()
+                actualPick := actualN >= 2 ? ScrambleDecide(recovered, FindAllLinesExact(recovered, "use"), "", true) : 0
+                ok := (actualN = e[2].MaxIndex() && actualPick = 2)
+                ScrambleNote(ok ? "PASS" : "FAIL", e[1] . " recovery sees " . actualN . " cards and picks " . actualPick)
+                if (!ok)
+                    fails += 1
                 big := OcrRegionScaled(0, 0, ww, wh, 2)
                 r .= " | 2x " . Cnt(FindAllLinesExact(big, "use"))
                 band := OcrRegion(0, 150, ww, 250)
@@ -424,8 +462,21 @@ ScrambleSmoke:
                 r .= " | thirds " . TileUses(0, 0, ww, wh, 3)
                 r .= " | quarters " . TileUses(0, 0, ww, wh, 4)
                 r .= "   (USE found; " . e[2].MaxIndex() . " cards)"
-                ScrambleNote("KNOWN", r)
+                ScrambleNote("INFO", r)
             }
+            ; No cards and a single USE are not a scramble trigger.
+            ShowCards([])
+            empty := ScrambleRecoverCards(ScanWinClient(GSProWinNeedle, GSProWinExclude))
+            ok := (Cnt(FindAllLinesExact(empty, "use")) = 0)
+            ScrambleNote(ok ? "PASS" : "FAIL", "no cards remains unarmed")
+            if (!ok)
+                fails += 1
+            ShowCards([["AL", "212", "FAIRWAY   2ND"]])
+            single := ScrambleRecoverCards(ScanWinClient(GSProWinNeedle, GSProWinExclude))
+            ok := (Cnt(FindAllLinesExact(single, "use")) < 2)
+            ScrambleNote(ok ? "PASS" : "FAIL", "one card remains unarmed")
+            if (!ok)
+                fails += 1
             Loop, 4 {
                 Gui, SmokeUse%A_Index%:Destroy
                 Gui, SmokeCard%A_Index%:Destroy

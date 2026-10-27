@@ -1,5 +1,7 @@
 # Working on BA Remapper
 
+**Release hold — 2026-10-27:** v5.1.2 is in development on `dev/v5.1.2`. Bruce explicitly authorized uploading the code to this public development branch so Windows builds/tests can run. Keep the PR in draft and keep building features; do not merge to main, publish a release, or update the website until Bruce asks. Read [DEVELOPMENT.md](DEVELOPMENT.md) for the checkpoint and validation status.
+
 Read [AI_HANDOFF.md](AI_HANDOFF.md) before changing the app. It records the owner's decisions, implementation reasons, release state, and evidence from prior work. Check the current source and GitHub state when continuing; dated notes are historical context.
 
 ## Work with the owner
@@ -25,6 +27,8 @@ Read [AI_HANDOFF.md](AI_HANDOFF.md) before changing the app. It records the owne
 - Run `python tests/verify_remapper.py` for preserved-core checks when changing application code. Windows UI/input checks require the official AutoHotkey v1.1.37.02 Unicode 64-bit runtime; use the existing Windows workflow.
 - Preserve meaningful regression checks. If an intentional core change requires updating a baseline assertion, explain why and verify the resulting behavior.
 - For releases, also run the installer-upgrade/package checks in the release workflow. Keep version metadata, release notes, and asset names consistent.
+- Packaging/installer upgrade fixtures require a disposable Windows runner. Never seed them over an existing Remapper configuration on a simulator PC.
+- The staged workflow builds on push but publishes only through manual dispatch with publication enabled and the exact version confirmed, after the owner's release instruction.
 - A Windows event-receiver test is not a live GSPro test. Source comparison is not a physical multi-monitor test. State what was actually verified.
 - A GitHub source commit or Actions preview is not a public update. The BA website updater consumes a public release installer ZIP; see the handoff.
 - Documentation-only changes do not need an app version bump or a new installer release.

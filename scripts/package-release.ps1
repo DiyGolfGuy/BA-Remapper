@@ -1,4 +1,9 @@
 $ErrorActionPreference = 'Stop'
+# Upgrade verification seeds Documents and installs both versions. Never
+# run that fixture on a user's simulator PC or development workstation.
+if ($env:GITHUB_ACTIONS -ne 'true' -or $env:RUNNER_OS -ne 'Windows') {
+    throw 'Packaging with upgrade verification requires a disposable GitHub Windows runner. Do not run on a simulator PC.'
+}
 Set-Location (Split-Path $PSScriptRoot -Parent)
 $version = (Get-Content release-version.txt -Raw).Trim()
 if ($version -notmatch '^\d+\.\d+\.\d+$') { throw 'Invalid release version' }
@@ -28,6 +33,7 @@ if ($LASTEXITCODE -ne 0 -or !(Test-Path "BARemapper_Setup_v$version.exe")) { thr
 # Upgrade an actual v5.0.9 installation on this disposable Windows runner.
 # Seed a custom profile and preferences; both must survive both installs.
 $config = Join-Path ([Environment]::GetFolderPath('MyDocuments')) 'BA Custom Products/Remapper'
+if (Test-Path $config) { throw 'Refusing to seed upgrade tests over an existing Remapper configuration' }
 New-Item "$config/profiles" -ItemType Directory -Force | Out-Null
 Set-Content "$config/settings.ini" "[App]`r`nActiveProfile=UpgradeTest`r`nStartupProfile=UpgradeTest`r`nScrambleAutoPick=0`r`nScrambleDelay=15`r`n" -Encoding unicode
 Set-Content "$config/profiles/UpgradeTest.ini" "[Profile]`r`nFnButtonId=resetaim`r`nclubdown_Type=key`r`nclubdown_Value=b`r`n" -Encoding unicode

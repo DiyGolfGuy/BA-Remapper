@@ -1,5 +1,15 @@
 name: Publish Remapper release
 on:
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish publicly after the owner approves this version
+        type: boolean
+        default: false
+      confirm_version:
+        description: Exact version to publish (for example 5.1.2); ignored for builds only
+        type: string
+        default: ''
   push:
     branches: [main]
     paths: [release-version.txt, .github/workflows/release.yml, scripts/package-release.ps1]
@@ -27,11 +37,15 @@ jobs:
             verification/
             dist/
       - name: Publish complete release
+        if: github.event_name == 'workflow_dispatch' && inputs.publish
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
+          CONFIRM_VERSION: ${{ inputs.confirm_version }}
         run: |
           $version = (Get-Content release-version.txt -Raw).Trim()
+          if ($env:GITHUB_REF -ne 'refs/heads/main') { throw 'Public releases must use main' }
+          if ($env:CONFIRM_VERSION -cne $version) { throw 'Confirm the exact version before public publication' }
           $tag = "v$version"
           $existing = gh release view $tag --json isDraft --jq .isDraft 2>$null
           if ($LASTEXITCODE -eq 0 -and $existing -ne 'true') { throw 'Refusing to replace an already public release' }

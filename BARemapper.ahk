@@ -1,8 +1,8 @@
-#NoEnv
+﻿#NoEnv
 ;@Ahk2Exe-SetName BA Remapper
 ;@Ahk2Exe-SetDescription BA Custom Products Control Box Remapper
 ;@Ahk2Exe-SetCompanyName BA Custom Products
-;@Ahk2Exe-SetVersion 5.1.1
+;@Ahk2Exe-SetVersion 5.1.2
 ;@Ahk2Exe-SetOrigFilename BARemapper.exe
 ;@Ahk2Exe-SetMainIcon BARemapper.ico
 #SingleInstance Off
@@ -18,8 +18,16 @@ CoordMode, Mouse, Screen
 DllCall("SetProcessDPIAware")
 
 ; ============================================================
-;  BA CUSTOM PRODUCTS - CONTROL BOX REMAPPER v5.1.1
+;  BA CUSTOM PRODUCTS - CONTROL BOX REMAPPER v5.1.2
 ;  bacustomproducts@gmail.com   GitHub: DiyGolfGuy
+;
+;  DEVELOPMENT v5.1.2 - NOT RELEASED
+;  - A feet-only read such as 100' stays 100 feet. The trailing
+;    tick is treated as a misread inch mark only after TWO numbers,
+;    preserving Windows OCR's known 291 71' -> 29' 7" recovery.
+;  - All green letter-recovery paths use the same distance guard.
+;  - When a full GSPro read misses the scramble cards, retry the
+;    central card strip, relative to that game's client rectangle.
 ;
 ;  CHANGES IN v5.1.1
 ;  - 64-bit Unicode is the release build from v5.1.0 on (every
@@ -275,7 +283,7 @@ DllCall("SetProcessDPIAware")
 ; ============================================================
 ;  CONSTANTS / PATHS
 ; ============================================================
-AppVersion := "5.1.1"
+AppVersion := "5.1.2"
 MainWinTitle    := "BA Custom Control Box Remapper"
 BuilderWinTitle := "BA Custom Control Box - Button Builder"
 HelpWinTitle    := "BA Custom Control Box - Help"
@@ -2939,6 +2947,35 @@ FindAllLinesExact(scan, needle) {
     return out
 }
 
+; The Windows reader can miss every card when 3-4 columns are in
+; a full-window image, yet read them in a smaller strip. Keep the
+; normal full read when it sees cards; otherwise retry only the
+; middle of this GSPro client area. All coordinates remain physical
+; desktop pixels, including negative origins on another monitor.
+ScrambleRecoverCards(scan) {
+    if (!IsObject(scan) || !scan.HasKey("win") || !scan.win.found)
+        return scan
+    uses := FindAllLinesExact(scan, "use")
+    if (uses.MaxIndex() >= 2)
+        return scan
+    band := ScrambleCardBand(scan.win)
+    if (band.w <= 0 || band.h <= 0)
+        return scan
+    o := OcrRegion(band.x, band.y, band.w, band.h)
+    recovered := {found: true, win: scan.win, lines: o.lines, text: o.text, lc: LowerStr(o.text)}
+    recoveredUses := FindAllLinesExact(recovered, "use")
+    n := recoveredUses.MaxIndex()
+    if (n >= 2 && n <= 4)
+        return recovered
+    return scan
+}
+
+ScrambleCardBand(win) {
+    top := Floor(win.h * 0.25)
+    bottom := Ceil(win.h * 0.75)
+    return {x: win.x, y: win.y + top, w: win.w, h: bottom - top}
+}
+
 ScrambleDecide(scan, uses, ctx := "", quiet := false) {
     global ScrambleMemo
     ; Sort USE buttons left-to-right (position = shot key number)
@@ -3361,12 +3398,12 @@ ScrambleParseDistance(text, isGreen) {
     if (!isGreen)
         return -1
     if (RegExMatch(t, "^\D{0,2}(\d{1,3})\D{1,3}(\d{1,2})\D{0,3}$", fm) && fm2 <= 11)
-        return fm1 * 12 + fm2
+        return ScrambleFtIn(fm1, fm2)
     t2 := RegExReplace(t, "[oO]", "0")
     if (!RegExMatch(t2, "i)[a-z]"))
         return FeetInches(t2)
     if (RegExMatch(t2, "^\D{0,2}(\d{1,3})\D{1,3}(\d{1,2})\D{0,3}$", fm) && fm2 <= 11)
-        return fm1 * 12 + fm2
+        return ScrambleFtIn(fm1, fm2)
     return -1
 }
 
@@ -3476,11 +3513,11 @@ FeetInches(raw) {
     t := StrReplace(t, Chr(145), "'")
     t := StrReplace(t, Chr(146), "'")
     t := StrReplace(t, "``", "'")
-    ; A single ' at the very end, after the last digit, with no inch
-    ; mark anywhere, is the inch mark read as one tick: the real
-    ; Windows reader read 29' 7" as "291 71'" (' as 1, " as 1').  A
-    ; feet mark always has the inches after it.
-    if (!InStr(t, q) && RegExMatch(t, "^[^']*\d\s*'\s*$"))
+    ; A trailing tick after TWO numbers can be the inch mark read
+    ; as one tick (Windows: 29' 7" -> "291 71'"). After just ONE
+    ; number it is a real feet mark: 100' must remain 100 feet,
+    ; even when OCR has dropped the trailing zero-inch field.
+    if (!InStr(t, q) && RegExMatch(t, "^\s*\d+\s+\d+\s*'\s*$"))
         t := RegExReplace(t, "\s*'\s*$", q)
     ; An explicit feet mark: split on it.
     ap := InStr(t, "'")
@@ -3522,10 +3559,10 @@ FeetInches(raw) {
 
 ; Feet + inches -> inches, or -1 when the read cannot be a green
 ; distance.  Inches run 0-11: a trailing 1 above that is a misread
-; stroke of the inch mark (29' 71" is 29' 7").  No green is 200 ft
-; long: "29171 ft" or "33110 ft" is a misread, never a putt, and is
-; treated as unreadable (the next read or the close-up read decides)
-; instead of losing - or winning - a pick.
+; stroke of the inch mark (29' 71" is 29' 7"). The existing 199 ft
+; validation limit is a conservative OCR guard, not a conversion
+; rule. Larger reads stand down for a fresh/close-up read instead
+; of silently winning or losing a pick.
 ScrambleFtIn(ft, inch) {
     if (inch = "")
         inch := 0
@@ -4556,6 +4593,7 @@ ScrambleWork:
     } else {
         ScrambleFbTick := 0
     }
+    scrScan := ScrambleRecoverCards(scrScan)
     scrUses := FindAllLinesExact(scrScan, "use")
     useCount := scrUses.MaxIndex()
     if (useCount = "" || useCount < 2) {
