@@ -5097,6 +5097,7 @@ ConfigButton(btnIdVal, displayName, primaryKey) {
     global OcrActionList, OcrActionName, OcrActionByName
     global CfgTypeKey, CfgTypeOcr, CfgTypeClick, CfgTypeNone
     global CfgKeyChoice, CfgOcrChoice, CfgClickPos, CfgCapturedX, CfgCapturedY
+    global CfgPreview, CfgCaptureBtn
     global FnButtonId, ConfiguringProfile, CfgHwnd
     if (IsConfigDialogOpen())
         return

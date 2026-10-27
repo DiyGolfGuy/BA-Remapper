@@ -21,6 +21,11 @@ jobs:
       - name: Parse source and run isolated UI and hotkey regression checks
         shell: pwsh
         run: python tests/verify_remapper.py --ahk "$env:RUNNER_TEMP/ahk/AutoHotkeyU64.exe"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Remapper_verification
+          path: verification/
       - name: Compile portable preview
         shell: pwsh
         run: |

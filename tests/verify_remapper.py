@@ -8,6 +8,7 @@ import hashlib
 import os
 from pathlib import Path
 import re
+import shutil
 import subprocess
 import tempfile
 
@@ -90,6 +91,7 @@ UiSmoke:
         Assert(ScrambleAutoPick, "Mapping toggle does not turn Auto-Pick off")
         ScrambleAutoPick := false
         UpdateMainStatus()
+        CaptureWindow(MainHwnd, "main")
 
         ActiveProfile := "Basic Secondary"
         LoadProfile(ActiveProfile)
@@ -99,6 +101,7 @@ UiSmoke:
         Assert(!editable, "Preset FN selector is read only")
         GuiControlGet, editable, Builder:Enabled, BtnLeft
         Assert(!editable, "Preset buttons are visibly read only")
+        CaptureWindow(BuilderHwnd, "builder-preset")
         startupBefore := StartupProfile
         FileRead, presetBefore, % ProfilesDir . "\Basic Secondary.ini"
         SetTimer, FillCopyName, -100
@@ -120,6 +123,7 @@ UiSmoke:
         UpdateConfigPreview()
         GuiControlGet, preview, Cfg:, CfgPreview
         Assert(InStr(preview, "Reset Aim") && InStr(preview, "AIM LEFT") && InStr(preview, "Clear View"), "Readable action preview")
+        CaptureWindow(CfgHwnd, "action-preview")
         Gosub, CfgCancel
         Assert(SecType["left"] = "ocr", "Cancel retains previous action")
         ConfigButton("left", "AIM LEFT", "Left Arrow")
@@ -159,6 +163,7 @@ UiSmoke:
         SettingsScroll(7, 0, 0x115, BuilderHwnd)
         DllCall("GetScrollInfo", "Ptr", BuilderHwnd, "Int", 1, "Ptr", &si)
         Assert(NumGet(si, 20, "Int") > 0, "Scrollbar reaches lower controls")
+        CaptureWindow(BuilderHwnd, "builder-scrolled")
         WinMove, ahk_id %MainHwnd%, , 50000, 50000
         KeepWindowOnScreen(MainHwnd)
         WinGetPos, mx, my, mw, mh, ahk_id %MainHwnd%
@@ -217,6 +222,23 @@ Assert(ok, message) {
         throw Exception(message)
     FileAppend, % "PASS: " . message . "`n", % A_ScriptDir . "\checks.txt"
 }
+
+CaptureWindow(hwnd, name) {
+    WinGetPos, , , w, h, ahk_id %hwnd%
+    dc := DllCall("GetDC", "Ptr", 0, "Ptr")
+    memory := DllCall("CreateCompatibleDC", "Ptr", dc, "Ptr")
+    VarSetCapacity(info, 40, 0)
+    NumPut(40, info, 0, "UInt"), NumPut(w, info, 4, "Int"), NumPut(-h, info, 8, "Int")
+    NumPut(1, info, 12, "UShort"), NumPut(32, info, 14, "UShort")
+    bitmap := DllCall("CreateDIBSection", "Ptr", dc, "Ptr", &info, "UInt", 0, "Ptr*", pixels, "Ptr", 0, "UInt", 0, "Ptr")
+    old := DllCall("SelectObject", "Ptr", memory, "Ptr", bitmap, "Ptr")
+    DllCall("PrintWindow", "Ptr", hwnd, "Ptr", memory, "UInt", 2)
+    SaveDibBmp(A_ScriptDir . "\" . name . ".bmp", pixels, w, h)
+    DllCall("SelectObject", "Ptr", memory, "Ptr", old)
+    DllCall("DeleteObject", "Ptr", bitmap)
+    DllCall("DeleteDC", "Ptr", memory)
+    DllCall("ReleaseDC", "Ptr", 0, "Ptr", dc)
+}
 '''
 
 
@@ -241,6 +263,10 @@ def runtime_checks(source, ahk):
         (work / "smoke.ahk").write_text(isolated + "\n" + SMOKE, encoding="utf-8-sig")
         (work / "sink.ahk").write_text(SINK, encoding="utf-8-sig")
         result = subprocess.run([str(ahk), "/ErrorStdOut", str(work / "smoke.ahk")], capture_output=True, text=True, timeout=90)
+        artifacts = ROOT / "verification"
+        artifacts.mkdir(exist_ok=True)
+        for artifact in list(work.glob("*.bmp")) + list(work.glob("*.txt")):
+            shutil.copy2(artifact, artifacts / artifact.name)
         print((work / "checks.txt").read_text() if (work / "checks.txt").exists() else "No runtime checks reached")
         report = (work / "result.txt").read_text() if (work / "result.txt").exists() else "No result"
         assert result.returncode == 0 and report.startswith("PASS:"), report + "\n" + result.stdout + result.stderr
