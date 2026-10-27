@@ -199,6 +199,9 @@ UiSmoke:
         RemapActive := false
         Sleep, 300
         Process, Close, %sinkPid%
+        ActiveProfile := "Regression Copy"
+        StartupProfile := "Basic Secondary"
+        SaveSettings()
         FileAppend, % "PASS: UI, profile, reset, scrollbar and FN runtime checks`n", % A_ScriptDir . "\result.txt"
         Gosub, DoFullExit
     } catch failure {
@@ -239,6 +242,40 @@ CaptureWindow(hwnd, name) {
     DllCall("DeleteDC", "Ptr", memory)
     DllCall("ReleaseDC", "Ptr", 0, "Ptr", dc)
 }
+'''
+
+BOOT = r'''
+BootSmoke:
+    SetTimer, ScrambleTick, Off
+    SetTimer, CdTick, Off
+    try {
+        Assert(isStartupLaunch, "Startup argument recognized")
+        Assert(RemapActive, "Windows startup turns mapping on")
+        Assert(ActiveProfile = "Basic Secondary", "Startup loads the separate startup profile")
+        Assert(!DllCall("IsWindowVisible", "Ptr", MainHwnd), "Startup stays hidden in tray")
+        FileAppend, % "PASS: startup profile and hidden launch`n", % A_ScriptDir . "\result.txt"
+        Gosub, DoFullExit
+    } catch failure {
+        FileAppend, % "FAIL: " . failure.Message . "`n", % A_ScriptDir . "\result.txt"
+        ExitApp, 1
+    }
+Return
+'''
+
+FACTORY = r'''
+FactorySmoke:
+    SetTimer, ScrambleTick, Off
+    SetTimer, CdTick, Off
+    Gosub, ShowFactoryReset
+    SetTimer, AcceptFactoryNotice, 150
+    Gosub, FactoryConfirm
+    ExitApp, 1
+Return
+AcceptFactoryNotice:
+    ; The two explicit confirmation/result dialogs have this exact
+    ; title. The parent settings dialog starts with "BA Remapper".
+    ControlClick, Button1, Factory Reset
+Return
 '''
 
 
@@ -284,6 +321,24 @@ def runtime_checks(source, ahk):
         assert any(key == 0x11 for _, _, key in rows) and any(key == 0x4D for _, _, key in rows), "Ctrl+M was not received"
         print(f"PASS: four real B keypresses held {b_taps} ms; no A/I/K leak; arrow and Ctrl+M received")
         print("PASS: Exit completed without hanging")
+        for mode, extra, arguments in [("BootSmoke", BOOT, ["/startup"]), ("FactorySmoke", FACTORY, [])]:
+            (work / "result.txt").unlink(missing_ok=True)
+            candidate = isolated.replace("SetTimer, UiSmoke, -50", f"SetTimer, {mode}, -50", 1)
+            script = work / (mode + ".ahk")
+            script.write_text(candidate + "\n" + SMOKE + "\n" + extra, encoding="utf-8-sig")
+            check = subprocess.run([str(ahk), "/ErrorStdOut", str(script), *arguments], capture_output=True, text=True, timeout=40)
+            assert check.returncode == 0, mode + ": " + check.stdout + check.stderr
+            if mode == "BootSmoke":
+                assert (work / "result.txt").read_text().startswith("PASS:"), "Startup checks failed"
+                print("PASS: startup loads the chosen profile, enables mapping and stays hidden")
+            else:
+                backups = list((work / "data Backups").glob("*/settings.ini"))
+                assert len(backups) == 1, "Factory reset did not create one backup"
+                assert (backups[0].parent / "profiles" / "Regression Copy.ini").exists(), "Backup lost custom profile"
+                assert not (work / "data" / "settings.ini").exists(), "Factory reset retained preferences"
+                assert not (work / "data" / "profiles").exists(), "Factory reset retained profiles"
+                assert (work / "data" / "launch_log.txt").exists(), "Factory reset removed diagnostic log"
+                print("PASS: factory reset backs up profiles/preferences before clearing them; logs remain")
 
 
 def main():
