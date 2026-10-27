@@ -351,10 +351,12 @@ ScrambleSmoke:
             for i, s in sc {
                 ShowCards(s.cards)
                 ScrambleResetReads()
+                seen := ""
                 Loop, 3 {
                     scan := ScanWinClient(GSProWinNeedle, GSProWinExclude)
                     uses := FindAllLinesExact(scan, "use")
                     n := uses.MaxIndex()
+                    seen .= (seen = "" ? "" : ",") . (scan.found ? scan.lines.MaxIndex() + 0 . " lines/" . (n + 0) . " USE" : "no GSPro window")
                     w := (n >= 2) ? ScrambleDecide(scan, uses, "", true) : 0
                     ScrambleCountRead(n, w)
                     Sleep, 150
@@ -368,7 +370,7 @@ ScrambleSmoke:
                     for k, cd in lr.cards
                         reads .= "  card " . k . ": " . cd.lie . " shot " . cd.shot . " dist " . cd.dist . " [" . cd.distRaw . "]"
                 }
-                ScrambleNote((pick = s.want) ? "PASS" : "FAIL", "OCR " . s.name . ": picked " . pick . " (want " . s.want . ", " . ScrambleVoteSummary() . ")" . reads)
+                ScrambleNote((pick = s.want) ? "PASS" : "FAIL", "OCR " . s.name . ": picked " . pick . " (want " . s.want . ", " . ScrambleVoteSummary() . "; reads saw " . seen . ")" . reads)
                 if (pick != s.want)
                     fails += 1
             }
@@ -394,8 +396,10 @@ ScrambleNote(status, msg) {
 
 ; Scramble shot-select cards drawn the way GSPro lays them out:
 ; dark cards on green, NAME / big DISTANCE / LIE + SHOT /
-; USE button, centered on each card.  Cards and buttons are child
-; windows with their own colors (plain GDI, no themed controls).
+; USE button, centered on each card, in GSPro's proportions from
+; the 4K field dump (USE text height h: lie row 3.0h above USE, a
+; 1.55h-tall distance 5.7h above, name 9.4h above).  Cards and
+; buttons are child windows with their own colors (plain GDI).
 ; No grid lines: this checks the 64-bit read path and the parsing,
 ; not the putting-green noise the field logs already cover.
 ShowCards(cards) {
@@ -420,11 +424,11 @@ ShowCards(cards) {
         Gui, SmokeCard%i%:Color, 1B2233
         Gui, SmokeCard%i%:Margin, 0, 0
         Gui, SmokeCard%i%:Font, s15 cFFFFFF Bold, Arial
-        Gui, SmokeCard%i%:Add, Text, x0 y25 w%cw% Center BackgroundTrans, % c[1]
-        Gui, SmokeCard%i%:Font, s28 cFFFFFF Bold, Arial
-        Gui, SmokeCard%i%:Add, Text, x0 y98 w%cw% Center BackgroundTrans, % c[2]
+        Gui, SmokeCard%i%:Add, Text, x0 y100 w%cw% Center BackgroundTrans, % c[1]
+        Gui, SmokeCard%i%:Font, s19 cFFFFFF Bold, Arial
+        Gui, SmokeCard%i%:Add, Text, x0 y146 w%cw% Center BackgroundTrans, % c[2]
         Gui, SmokeCard%i%:Font, s13 cE8E8E8 Bold, Arial
-        Gui, SmokeCard%i%:Add, Text, x0 y162 w%cw% Center BackgroundTrans, % c[3]
+        Gui, SmokeCard%i%:Add, Text, x0 y179 w%cw% Center BackgroundTrans, % c[3]
         Gui, SmokeCard%i%:Show, x%cx% y100 w%cw% h290 NoActivate
         Gui, SmokeUse%i%:New, -Caption +ParentSmokeCard%i% -DPIScale
         Gui, SmokeUse%i%:Color, 2F6FD0
@@ -433,7 +437,8 @@ ShowCards(cards) {
         Gui, SmokeUse%i%:Add, Text, x0 y10 w%uw% Center BackgroundTrans, USE
         Gui, SmokeUse%i%:Show, x50 y205 w%uw% h42 NoActivate
     }
-    Sleep, 700
+    WinWait, ahk_id %SmokeCardsHwnd%, , 3
+    Sleep, 1200
 }
 '''
 
