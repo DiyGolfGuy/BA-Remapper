@@ -2,7 +2,7 @@
 ;@Ahk2Exe-SetName BA Remapper
 ;@Ahk2Exe-SetDescription BA Custom Products Control Box Remapper
 ;@Ahk2Exe-SetCompanyName BA Custom Products
-;@Ahk2Exe-SetVersion 5.1.0
+;@Ahk2Exe-SetVersion 5.1.1
 ;@Ahk2Exe-SetOrigFilename BARemapper.exe
 ;@Ahk2Exe-SetMainIcon BARemapper.ico
 #SingleInstance Off
@@ -18,8 +18,25 @@ CoordMode, Mouse, Screen
 DllCall("SetProcessDPIAware")
 
 ; ============================================================
-;  BA CUSTOM PRODUCTS - CONTROL BOX REMAPPER v5.1.0
+;  BA CUSTOM PRODUCTS - CONTROL BOX REMAPPER v5.1.1
 ;  bacustomproducts@gmail.com   GitHub: DiyGolfGuy
+;
+;  CHANGES IN v5.1.1
+;  - 64-bit Unicode is the release build from v5.1.0 on (every
+;    version through 5.0.9 was 32-bit ANSI).  Audited for the
+;    switch: handles/pointers are pointer-sized throughout; the one
+;    difference was typographic feet/inch marks on green distances.
+;    The 32-bit build got them as cp1252 bytes 145-148; 64-bit gets
+;    real Unicode, so 14' 7" read as "141 7" + a curly inch mark was
+;    taken as 141 ft (and could flip a green pick).
+;    ScrambleNormQuotes maps every quote/prime mark first, in both.
+;  - Green distances: the real Windows reader (tested on a Windows
+;    runner) read 29' 7" as "291 71'" - the inch mark as "1'" - and
+;    the parser took 29171 ft.  A lone trailing ' is now the inch
+;    mark, a trailing 1 past 11 inches is dropped, and a "green
+;    distance" over 199 ft is treated as unreadable, never scored.
+;  - Installer refuses 32-bit Windows with a plain message instead
+;    of installing an exe that cannot start there.
 ;
 ;  CHANGES IN v5.1.0
 ;  - UI: independent mapping/Auto-Pick status; copy a preset;
@@ -258,7 +275,7 @@ DllCall("SetProcessDPIAware")
 ; ============================================================
 ;  CONSTANTS / PATHS
 ; ============================================================
-AppVersion := "5.1.0"
+AppVersion := "5.1.1"
 MainWinTitle    := "BA Custom Control Box Remapper"
 BuilderWinTitle := "BA Custom Control Box - Button Builder"
 HelpWinTitle    := "BA Custom Control Box - Help"
@@ -3329,7 +3346,7 @@ ScrambleSendPick(pick, when) {
 ;   feet + inches, so a letter can only be a misread mark ("9l 7u"
 ;   is 9' 7") or a zero read as the letter O ("28' O"" is 28' 0").
 ScrambleParseDistance(text, isGreen) {
-    t := ScrambleStripMarks(text)
+    t := ScrambleStripMarks(ScrambleNormQuotes(text))
     if (t = "")
         return -1
     if (!RegExMatch(t, "i)[a-z]")) {
@@ -3399,6 +3416,32 @@ ScrambleRereadDistance(cardN, cx, useW, useH, rowTop, isGreen) {
     return out
 }
 
+; Typographic feet/inch marks -> plain ' and ".  Windows' reader
+; can return a curly or prime mark (right single/double quote,
+; prime, double prime) for the marks on a green distance.  The
+; 32-bit ANSI build received those as cp1252 bytes 145-148, which
+; the parser handled; the 64-bit Unicode build (v5.1.0 on) gets
+; the real Unicode characters, so "141 7" with a curly inch mark
+; (14' 7" with the ' misread as 1) was taken as 141 ft.  Every
+; quote-like mark is mapped first, in either build.
+ScrambleNormQuotes(t) {
+    static sq := "", dq := ""
+    if (!IsObject(sq)) {
+        if (A_IsUnicode) {
+            sq := [0x2018, 0x2019, 0x201A, 0x201B, 0x2032, 0x2035, 0x00B4, 0x02B9, 0x02BC]
+            dq := [0x201C, 0x201D, 0x201E, 0x201F, 0x2033, 0x2036, 0x02BA]
+        } else {
+            sq := [145, 146, 130, 180]
+            dq := [147, 148, 132]
+        }
+    }
+    for i, c in sq
+        t := StrReplace(t, Chr(c), "'")
+    for i, c in dq
+        t := StrReplace(t, Chr(c), Chr(34))
+    return t
+}
+
 ; Drop stand-alone marks that are not part of a number: a grid
 ; line on the putting green crossing a card reads as "l", "I",
 ; "|", "!" or a dot.
@@ -3426,13 +3469,19 @@ ScrambleOrdinal(t) {
 ; Returns -1 if nothing usable.
 FeetInches(raw) {
     q := Chr(34)
-    t := raw
+    t := ScrambleNormQuotes(raw)
     t := StrReplace(t, Chr(147), q)
     t := StrReplace(t, Chr(148), q)
     t := StrReplace(t, "''", q)
     t := StrReplace(t, Chr(145), "'")
     t := StrReplace(t, Chr(146), "'")
     t := StrReplace(t, "``", "'")
+    ; A single ' at the very end, after the last digit, with no inch
+    ; mark anywhere, is the inch mark read as one tick: the real
+    ; Windows reader read 29' 7" as "291 71'" (' as 1, " as 1').  A
+    ; feet mark always has the inches after it.
+    if (!InStr(t, q) && RegExMatch(t, "^[^']*\d\s*'\s*$"))
+        t := RegExReplace(t, "\s*'\s*$", q)
     ; An explicit feet mark: split on it.
     ap := InStr(t, "'")
     if (ap) {
@@ -3440,9 +3489,7 @@ FeetInches(raw) {
         inch := RegExReplace(SubStr(t, ap + 1), "[^0-9]", "")
         if (ft = "")
             return -1
-        if (inch = "")
-            inch := 0
-        return ft * 12 + inch
+        return ScrambleFtIn(ft, inch)
     }
     hasQ := InStr(t, q)
     d := Trim(RegExReplace(RegExReplace(t, "[^0-9 ]", " "), " +", " "))
@@ -3454,10 +3501,10 @@ FeetInches(raw) {
         inch := parts[parts.MaxIndex()]
         if (hasQ && StrLen(a) >= 2 && SubStr(a, 0) = "1")
             a := SubStr(a, 1, StrLen(a) - 1)
-        return a * 12 + inch
+        return ScrambleFtIn(a, inch)
     }
     if (!hasQ || StrLen(d) < 3)
-        return d * 12
+        return ScrambleFtIn(d, 0)
     last2 := SubStr(d, -1)
     if (last2 = "10" || last2 = "11") {
         inch := last2 + 0
@@ -3470,7 +3517,25 @@ FeetInches(raw) {
         a := SubStr(a, 1, StrLen(a) - 1)
     if (a = "")
         return -1
-    return a * 12 + inch
+    return ScrambleFtIn(a, inch)
+}
+
+; Feet + inches -> inches, or -1 when the read cannot be a green
+; distance.  Inches run 0-11: a trailing 1 above that is a misread
+; stroke of the inch mark (29' 71" is 29' 7").  No green is 200 ft
+; long: "29171 ft" or "33110 ft" is a misread, never a putt, and is
+; treated as unreadable (the next read or the close-up read decides)
+; instead of losing - or winning - a pick.
+ScrambleFtIn(ft, inch) {
+    if (inch = "")
+        inch := 0
+    if (inch + 0 > 11 && StrLen(inch) >= 2 && SubStr(inch, 0) = "1")
+        inch := SubStr(inch, 1, StrLen(inch) - 1)
+    ft += 0
+    inch += 0
+    if (inch > 11 || ft > 199)
+        return -1
+    return ft * 12 + inch
 }
 
 ; Shot number from the joined lie row.  The clean ordinal first;

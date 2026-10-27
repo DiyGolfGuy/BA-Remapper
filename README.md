@@ -20,7 +20,7 @@ The installer puts BA Remapper in Program Files, adds it to the Start Menu and *
 
 **Portable option:** prefer no installer? Download the portable zip from the same release instead, unzip `BARemapper.exe` to a permanent folder of your choosing, and run it — same app, you manage the location.
 
-**Requirements:** Windows 10 or 11, GSPro. Smart Clicks and Auto-Pick Scramble use the OCR engine built into Windows (standard English installs qualify) — no extra software, no internet, nothing sent anywhere.
+**Requirements:** 64-bit Windows 10 or 11, GSPro. Smart Clicks and Auto-Pick Scramble use the OCR engine built into Windows (standard English installs qualify) — no extra software, no internet, nothing sent anywhere.
 
 ---
 
@@ -141,6 +141,8 @@ The main window, Builder and action editor can be resized and scrolled when they
 ---
 
 ## Version History
+
+**v5.1.1** — Keeps the 64-bit build. Green distances: curly or prime feet/inch marks are read the same as plain ones (the 64-bit build was reading 14' 7" with a misread mark as 141 ft), and an inch mark read as `1'` (`291 71'` for 29' 7", found with the real Windows reader) is no longer taken as 29,171 ft; a green distance over 199 ft is treated as unreadable. The installer refuses 32-bit Windows. Windows CI now reads drawn scramble cards with the real Windows OCR in the 64-bit build.
 
 **v5.1.0** — Separate mapping/Auto-Pick status, Customize a Copy, visibly locked presets, action previews and modal Save/Cancel editing, readable scrollable settings windows, clearer Windows Startup Profile wording, Quick Start, and an OCR-only Reset Smart Click Spots that also clears transient click caches. Factory reset is separate and offers backup first. Repeated FN-down events no longer cause an extra Reset Aim when FN is released. FN hotkeys focus GSPro and use a 60 ms key press instead of an instantaneous SendInput tap; primary keys, Smart Click matching/learning and scramble choice logic are unchanged. Game behavior still needs a live GSPro check on the sim PC.
 

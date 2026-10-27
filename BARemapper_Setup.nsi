@@ -8,11 +8,12 @@
 ;  before touching settings.
 ; ============================================================
 !include "MUI2.nsh"
+!include "x64.nsh"
 
 !define APPNAME "BA Remapper"
 !define COMPANY "BA Custom Products"
-!define VERSION "5.1.0"
-!define VERSION4 "5.1.0.0"
+!define VERSION "5.1.1"
+!define VERSION4 "5.1.1.0"
 !define EXENAME "BARemapper.exe"
 !define MUTEX "BARemapper_BACustomProducts_SingleInstance"
 !define UNINSTKEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\BARemapper"
@@ -49,6 +50,11 @@ VIAddVersionKey "LegalCopyright" "(c) 2026 ${COMPANY}"
 !insertmacro MUI_LANGUAGE "English"
 
 Function .onInit
+  ; The app is a 64-bit build (v5.1.0 on).
+  ${IfNot} ${RunningX64}
+    MessageBox MB_OK|MB_ICONSTOP "${APPNAME} ${VERSION} needs 64-bit Windows.$\r$\n$\r$\nThis PC is running 32-bit Windows, so it cannot run this version." /SD IDOK
+    Abort
+  ${EndIf}
 retryMutex:
   System::Call 'kernel32::OpenMutex(i 0x100000, i 0, t "${MUTEX}") p .r0'
   IntPtrCmp $0 0 mutexDone

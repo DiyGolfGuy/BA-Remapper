@@ -8,7 +8,7 @@ permissions:
 jobs:
   windows:
     runs-on: windows-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
         with:
@@ -33,5 +33,5 @@ jobs:
           if ($compiler.ExitCode -ne 0 -or !(Test-Path BARemapper.exe)) { throw "Compile failed" }
       - uses: actions/upload-artifact@v4
         with:
-          name: BARemapper_v5.1.0_preview
+          name: BARemapper_preview
           path: BARemapper.exe

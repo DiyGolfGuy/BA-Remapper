@@ -10,10 +10,28 @@ from pathlib import Path
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 BASE = "a5f762113cc2645a385277b4e4941453c8527b63"
+
+
+def annotate(level, title, text):
+    """On GitHub Actions, also surface text as a check annotation."""
+    if os.environ.get("GITHUB_ACTIONS") != "true":
+        return
+    chunks, cur = [], ""
+    for line in text.replace("\r", "").split("\n"):
+        if len(cur) + len(line) > 3000 and cur:
+            chunks.append(cur)
+            cur = ""
+        cur += line[:2900] + "\n"
+    if cur.strip():
+        chunks.append(cur)
+    for n, chunk in enumerate(chunks[:8]):
+        body = chunk.replace("%", "%25").replace("\n", "%0A")
+        print(f"::{level} title={title}{' (' + str(n + 1) + ')' if len(chunks) > 1 else ''}::{body}")
 
 
 def function(source, name):
@@ -29,7 +47,7 @@ def static_checks(source, baseline):
         "LearnSpots", "SpotFastResolve", "SpotSlot2Confirm", "SaveSpots",
         "LoadSpots", "DpiClickAt", "DpiRepeatClick", "GsproWinRect",
         "ClientRectByTitle", "ScrambleDecide", "ScrambleSendPick",
-        "ScrambleCardsStillUp", "ScrambleParseDistance", "FeetInches",
+        "ScrambleCardsStillUp",
         "SetAutoStart", "EnsureStartupApproved", "RefreshAutoStartPath",
         "ScanWinClient", "ScanScreen", "OcrRegion", "ocr_words",
     ]
@@ -44,13 +62,28 @@ def static_checks(source, baseline):
         # Section comments may surround a block; compare the complete original block.
         old = baseline[baseline.index(start):baseline.index(end, baseline.index(start))]
         assert old in source, f"Unexpected change to preserved section: {start}"
+    # v5.1.1 changed the two distance parsers on purpose: typographic
+    # quote marks are normalized first, because the Unicode 64-bit build
+    # receives them as real Unicode characters (the 32-bit ANSI build got
+    # cp1252 bytes 145-148). Apart from that one call, both are unchanged.
+    for name, old_line, new_line in [
+        ("ScrambleParseDistance", "t := ScrambleStripMarks(text)", "t := ScrambleStripMarks(ScrambleNormQuotes(text))"),
+    ]:
+        assert function(source, name) == function(baseline, name).replace(old_line, new_line, 1), f"Unexpected core change: {name}"
+    assert "0x201D" in function(source, "ScrambleNormQuotes"), "Curly inch mark normalized"
+    # FeetInches also changed on purpose (real Windows OCR read 29' 7" as
+    # "291 71'"): a lone trailing ' is the inch mark, and every result goes
+    # through ScrambleFtIn (inches 0-11, no green distance over 199 ft).
+    feet = function(source, "FeetInches")
+    assert "t := ScrambleNormQuotes(raw)" in feet and feet.count("ScrambleFtIn(") == 4 and "* 12 +" not in feet, "FeetInches routes every result through ScrambleFtIn"
+    assert "ft > 199" in function(source, "ScrambleFtIn"), "Oversized green distance refused"
     assert 'SendMode, Input' in source  # Primary-key and scramble output mode preserved.
     assert 'if (FnIsDown)\n            return' in function(source, "HandleBoxKeyDown")
     assert 'SetKeyDelay, 15, 60' in function(source, "SendSecondaryKey")
     assert 'SendEvent, %keys%' in function(source, "SendSecondaryKey")
     assert 'gResetSmartSpots, Reset Smart Click Spots' in source
     assert 'gOnCleanup,' not in source
-    print(f"PASS: {len(unchanged)} core functions, diagnostics, hotkeys and exit preserved")
+    print(f"PASS: {len(unchanged)} core functions, diagnostics, hotkeys and exit preserved; distance parsers changed only as documented (quote marks, inch-mark misreads)")
 
 
 SINK = r'''
@@ -300,6 +333,216 @@ Return
 '''
 
 
+SCRAMBLE = r'''
+ScrambleSmoke:
+    SetTimer, ScrambleTick, Off
+    SetTimer, CdTick, Off
+    SetTimer, OcrWarmup, Off
+    fails := 0
+    try {
+        q := Chr(34)
+        rs := Chr(0x2019), rd := Chr(0x201D), pr := Chr(0x2032), pd := Chr(0x2033)
+        ; ---- single distance reads -> inches, in this exact build ----
+        cases := [["28' 0" . q, 1, 336], ["29' 7" . q, 1, 355], ["141 7" . q, 1, 175], ["291 7" . q, 1, 355]
+            , ["33110" . q, 1, 406], ["28' O" . q, 1, 336], ["9l 7u", 1, 115], ["0' 6" . q, 1, 6]
+            , ["14" . rs . "7" . rd, 1, 175], ["141 7" . rd, 1, 175], ["33110" . rd, 1, 406], ["14" . pr . " 7" . pd, 1, 175]
+            , ["291 71'", 1, 355], ["29' 71" . q, 1, 355], ["28'", 1, 336], ["5' 11" . q, 1, 71], ["33110", 1, -1], ["9' 74" . q, 1, -1]
+            , ["189", 0, 6804], ["8", 0, 288], ["15", 0, 540], ["!4E", 0, -1], ["l 87", 0, 3132]]
+        for i, c in cases {
+            got := ScrambleParseDistance(c[1], c[2])
+            ScrambleNote((got = c[3]) ? "PASS" : "FAIL", "parse [" . c[1] . "] " . (c[2] ? "green" : "yards") . " -> " . got . " (want " . c[3] . ")")
+            if (got != c[3])
+                fails += 1
+        }
+        if (A_Args[1] = "ocr") {
+            ; ---- real Windows OCR on rendered scramble cards ----
+            sc := []
+            sc.Push({name: "three cards first 150 / 98 / 121", want: 2, cards: [["JIM", "150", "ROUGH   2ND"], ["TOM", "98", "FAIRWAY   2ND"], ["SUE", "121", "FAIRWAY   2ND"]]})
+            sc.Push({name: "putting green 28' 0 vs 29' 7", want: 1, cards: [["CARTER", "28' 0" . q, "GREEN   4TH"], ["AL", "29' 7" . q, "GREEN   4TH"]]})
+            sc.Push({name: "green 14' 7 vs 9' 11", want: 2, cards: [["CARTER", "14' 7" . q, "GREEN   3RD"], ["AL", "9' 11" . q, "GREEN   3RD"]]})
+            sc.Push({name: "around the green: lone 8 yds fringe vs 13 yds rough", want: 1, cards: [["CARTER", "8", "FRINGE   4TH"], ["AL", "13", "ROUGH   4TH"]]})
+            sc.Push({name: "green 9' 2 beats fringe 3 yds", want: 2, cards: [["CARTER", "3", "FRINGE   4TH"], ["AL", "9' 2" . q, "GREEN   4TH"]]})
+            sc.Push({name: "yards: fairway 2nd 179 beats tee 3rd 363", want: 2, cards: [["CARTER", "363", "TEE   3RD"], ["AL", "179", "FAIRWAY   2ND"]]})
+            sc.Push({name: "three cards 212 / 87 / 143", want: 2, cards: [["AL", "212", "FAIRWAY   2ND"], ["ADY", "87", "FAIRWAY   2ND"], ["BOB", "143", "FAIRWAY   2ND"]]})
+            for i, s in sc {
+                ShowCards(s.cards)
+                ScrambleResetReads()
+                seen := ""
+                Loop, 3 {
+                    scan := ScanWinClient(GSProWinNeedle, GSProWinExclude)
+                    uses := FindAllLinesExact(scan, "use")
+                    n := uses.MaxIndex()
+                    lc := scan.lines.MaxIndex()
+                    seen .= (seen = "" ? "" : ",") . (scan.found ? (lc = "" ? 0 : lc) . " lines/" . (n = "" ? 0 : n) . " USE in " . scan.win.title . " " . scan.win.w . "x" . scan.win.h . "@" . scan.win.x . "," . scan.win.y . (scan.win.hwnd = SmokeCardsHwnd ? "" : " (NOT the test window)") : "no GSPro window")
+                    w := (n >= 2) ? ScrambleDecide(scan, uses, "", true) : 0
+                    ScrambleCountRead(n, w)
+                    Sleep, 150
+                }
+                pick := ScrambleVoteLeader()
+                if ((lc = "" || lc = 0) && !InStr(s.name, "three cards")) {
+                    ; Nothing read at all: is the window painted, and does a
+                    ; smaller or enlarged read of one card see anything?
+                    PixelGetColor, pc1, 240, 150, RGB
+                    PixelGetColor, pc2, 240, 325, RGB
+                    PixelGetColor, pc3, 50, 50, RGB
+                    part := OcrRegion(135, 100, 210, 290)
+                    big := OcrRegionScaled(135, 100, 210, 290, 2)
+                    full := ScanScreen()
+                    ScrambleNote("INFO", "0 lines: pixels card=" . pc1 . " use=" . pc2 . " bg=" . pc3 . "; one-card read " . Cnt(part.lines) . " lines [" . StrReplace(part.text, "`n", " / ") . "]; 2x read " . Cnt(big.lines) . " lines; whole screen " . Cnt(full.lines) . " lines [" . SubStr(StrReplace(full.text, "`n", " / "), 1, 300) . "]")
+                }
+                OcrDumpMiss("OCR scenario " . i . ": " . s.name, scan, "ocr_scenario_" . i . ".txt")
+                CaptureWindow(SmokeCardsHwnd, "ocr_scenario_" . i)
+                reads := ""
+                lr := ScrambleLastRead
+                if (IsObject(lr)) {
+                    for k, cd in lr.cards
+                        reads .= "  card " . k . ": " . cd.lie . " shot " . cd.shot . " dist " . cd.dist . " [" . cd.distRaw . "]"
+                }
+                ScrambleNote((pick = s.want) ? "PASS" : (InStr(s.name, "three cards") ? "KNOWN" : "FAIL"), "OCR " . s.name . ": picked " . pick . " (want " . s.want . ", " . ScrambleVoteSummary() . "; reads saw " . seen . ")" . reads)
+                if (pick != s.want && !InStr(s.name, "three cards"))
+                    fails += 1
+            }
+            ; ---- known Windows OCR behavior (2026-10-27, windows-latest) ----
+            ; With 3 or 4 cards side by side, a read of the WHOLE window
+            ; returned none of the card text (0 lines with no HUD; only the
+            ; HUD lines with it), while a read of just the card strip, or of
+            ; the window in halves/thirds/quarters, found every card.  Two
+            ; cards read fine either way.  Not confirmed on a live GSPro
+            ; screen.  Recorded here so a change in that behavior shows up.
+            c4 := [["CARTER", "212", "FAIRWAY   2ND"], ["AL", "87", "FAIRWAY   2ND"], ["BOB", "143", "ROUGH   2ND"], ["JIM", "98", "ROUGH   2ND"]]
+            exps := [["2 cards + HUD", [c4[1], c4[2]], 210, 50, true], ["3 cards + HUD", [c4[1], c4[2], c4[3]], 210, 50, true], ["4 cards + HUD", c4, 200, 30, true]]
+            for i, e in exps {
+                ShowCards(e[2], e[3], e[4], e[5])
+                ww := 1000, wh := 540
+                scan := ScanWinClient(GSProWinNeedle, GSProWinExclude)
+                r := e[1] . ": full " . Cnt(FindAllLinesExact(scan, "use"))
+                big := OcrRegionScaled(0, 0, ww, wh, 2)
+                r .= " | 2x " . Cnt(FindAllLinesExact(big, "use"))
+                band := OcrRegion(0, 150, ww, 250)
+                r .= " | band " . Cnt(FindAllLinesExact(band, "use"))
+                r .= " | halves " . TileUses(0, 0, ww, wh, 2)
+                r .= " | thirds " . TileUses(0, 0, ww, wh, 3)
+                r .= " | quarters " . TileUses(0, 0, ww, wh, 4)
+                r .= "   (USE found; " . e[2].MaxIndex() . " cards)"
+                ScrambleNote("KNOWN", r)
+            }
+            Loop, 4 {
+                Gui, SmokeUse%A_Index%:Destroy
+                Gui, SmokeCard%A_Index%:Destroy
+            }
+            Gui, SmokeCards:Destroy
+        } else {
+            ScrambleNote("SKIP", "Windows OCR is not available on this runner - real-OCR card reads not run")
+        }
+        FileAppend, % (fails ? "FAIL: " . fails . " scramble checks failed" : "PASS: scramble parsing and card reads") . "`n", % A_ScriptDir . "\result.txt"
+        ExitApp, % fails ? 1 : 0
+    } catch failure {
+        FileAppend, % "FAIL: " . failure.Message . " (line " . failure.Line . ")`n", % A_ScriptDir . "\result.txt"
+        ExitApp, 1
+    }
+Return
+
+; USE buttons found reading the area in n side-by-side tiles that
+; overlap by 70 px (a button on a seam is read by both; counted once).
+TileUses(x, y, w, h, n) {
+    seen := {}
+    tw := w // n
+    Loop, %n% {
+        tx := x + (A_Index - 1) * tw - 70
+        if (tx < x)
+            tx := x
+        o := OcrRegion(tx, y, tw + 140, h)
+        for k, u in FindAllLinesExact(o, "use")
+            seen[Round((u.x + u.w / 2) / 40)] := 1
+    }
+    c := 0
+    for k, v in seen
+        c += 1
+    return c
+}
+
+Cnt(arr) {
+    n := IsObject(arr) ? arr.MaxIndex() : ""
+    return (n = "") ? 0 : n
+}
+
+ScrambleNote(status, msg) {
+    FileAppend, % status . ": " . msg . "`n", % A_ScriptDir . "\scramble-checks.txt", UTF-8
+}
+
+; Scramble shot-select cards drawn the way GSPro lays them out:
+; dark cards on green, NAME / big DISTANCE / LIE + SHOT /
+; USE button, centered on each card, in GSPro's proportions from
+; the 4K field dump (USE text height h: lie row 3.0h above USE, a
+; 1.55h-tall distance 5.7h above, name 9.4h above).  Cards and
+; buttons are child windows with their own colors (plain GDI).
+; No grid lines: this checks the 64-bit read path and the parsing,
+; not the putting-green noise the field logs already cover.
+ShowCards(cards, cw := 210, gap := 50, hud := false) {
+    global SmokeCardsHwnd
+    Loop, 4 {
+        Gui, SmokeUse%A_Index%:Destroy
+        Gui, SmokeCard%A_Index%:Destroy
+    }
+    Gui, SmokeCards:Destroy
+    Gui, SmokeCards:New, -Caption +AlwaysOnTop +ToolWindow -DPIScale +HwndSmokeCardsHwnd, GSPro
+    Gui, SmokeCards:Color, 3C7A3C
+    Gui, SmokeCards:Margin, 0, 0
+    if (hud) {
+        ; GSPro's HUD around the edges (course, hole, shot data)
+        Gui, SmokeCards:Font, s12 cFFFFFF Bold, Arial
+        Gui, SmokeCards:Add, Text, x20 y12 BackgroundTrans, Acorns Golf Links
+        Gui, SmokeCards:Add, Text, x20 y34 BackgroundTrans, PAR 4   286 YDS
+        Gui, SmokeCards:Add, Text, x860 y12 BackgroundTrans, CLUB SPEED
+        Gui, SmokeCards:Add, Text, x860 y34 BackgroundTrans, CARRY (game)
+        Gui, SmokeCards:Add, Text, x860 y56 BackgroundTrans, BALL SPEED
+        Gui, SmokeCards:Add, Text, x20 y500 BackgroundTrans, 17.70 UP
+        Gui, SmokeCards:Add, Text, x860 y500 BackgroundTrans, L Wedge
+    }
+    Gui, SmokeCards:Show, x0 y0 w1000 h540 NoActivate
+    n := cards.MaxIndex()
+    uw := cw - 100
+    x0 := (1000 - (n * cw + (n - 1) * gap)) // 2
+    for i, c in cards {
+        cx := x0 + (i - 1) * (cw + gap)
+        Gui, SmokeCard%i%:New, -Caption +ParentSmokeCards -DPIScale
+        Gui, SmokeCard%i%:Color, 1B2233
+        Gui, SmokeCard%i%:Margin, 0, 0
+        Gui, SmokeCard%i%:Font, s15 cFFFFFF Bold, Arial
+        Gui, SmokeCard%i%:Add, Text, x0 y100 w%cw% Center BackgroundTrans, % c[1]
+        Gui, SmokeCard%i%:Font, s19 cFFFFFF Bold, Arial
+        Gui, SmokeCard%i%:Add, Text, x0 y146 w%cw% Center BackgroundTrans, % c[2]
+        Gui, SmokeCard%i%:Font, s13 cE8E8E8 Bold, Arial
+        Gui, SmokeCard%i%:Add, Text, x0 y179 w%cw% Center BackgroundTrans, % c[3]
+        Gui, SmokeCard%i%:Show, x%cx% y100 w%cw% h290 NoActivate
+        Gui, SmokeUse%i%:New, -Caption +ParentSmokeCard%i% -DPIScale
+        Gui, SmokeUse%i%:Color, 2F6FD0
+        Gui, SmokeUse%i%:Margin, 0, 0
+        Gui, SmokeUse%i%:Font, s13 cFFFFFF Bold, Arial
+        Gui, SmokeUse%i%:Add, Text, x0 y10 w%uw% Center BackgroundTrans, USE
+        ux := (cw - uw) // 2
+        Gui, SmokeUse%i%:Show, x%ux% y205 w%uw% h42 NoActivate
+    }
+    WinWait, ahk_id %SmokeCardsHwnd%, , 3
+    Sleep, 1200
+}
+'''
+
+
+def ocr_available():
+    """Ask Windows itself (outside AutoHotkey) whether an OCR engine exists."""
+    probe = ("Add-Type -AssemblyName System.Runtime.WindowsRuntime; "
+             "$null = [Windows.Media.Ocr.OcrEngine, Windows.Foundation, ContentType = WindowsRuntime]; "
+             "$e = [Windows.Media.Ocr.OcrEngine]::TryCreateFromUserProfileLanguages(); "
+             "if ($e) { 'OCR ' + $e.RecognizerLanguage.LanguageTag } else { 'NOOCR' }")
+    try:
+        out = subprocess.run(["powershell", "-NoProfile", "-Command", probe], capture_output=True, text=True, timeout=60)
+    except (OSError, subprocess.TimeoutExpired) as error:
+        return False, f"probe failed: {error}"
+    text = (out.stdout + out.stderr).strip()
+    return text.startswith("OCR "), text
+
+
 def runtime_checks(source, ahk):
     assert os.name == "nt", "AutoHotkey runtime checks require Windows"
     digest = hashlib.sha256(ahk.read_bytes()).hexdigest()
@@ -367,6 +610,29 @@ def runtime_checks(source, ahk):
                 assert not (work / "data" / "profiles").exists(), "Factory reset retained profiles"
                 assert (work / "data" / "launch_log.txt").exists(), "Factory reset removed diagnostic log"
                 print("PASS: factory reset backs up profiles/preferences before clearing them; logs remain")
+        has_ocr, ocr_note = ocr_available()
+        print(f"Windows OCR on this machine: {ocr_note}")
+        (work / "result.txt").unlink(missing_ok=True)
+        candidate = isolated.replace("SetTimer, UiSmoke, -50", "SetTimer, ScrambleSmoke, -50", 1)
+        script = work / "ScrambleSmoke.ahk"
+        script.write_text(candidate + "\n" + SMOKE + "\n" + SCRAMBLE, encoding="utf-8-sig")
+        try:
+            check = subprocess.run([str(ahk), "/ErrorStdOut", str(script), "ocr" if has_ocr else "noocr"], capture_output=True, text=True, timeout=180)
+            returncode = check.returncode
+            output = check.stdout + check.stderr
+        except subprocess.TimeoutExpired:
+            returncode, output = -1, "timed out"
+        for artifact in list(work.glob("*.bmp")) + list(work.glob("*.txt")):
+            shutil.copy2(artifact, artifacts / artifact.name)
+        notes = (work / "scramble-checks.txt").read_text(encoding="utf-8-sig") if (work / "scramble-checks.txt").exists() else "No scramble checks reached"
+        print(notes)
+        annotate("notice", "Scramble checks (" + ("real Windows OCR: " + ocr_note if has_ocr else "no OCR engine") + ")", notes)
+        dumps = sorted((work / "data").glob("ocr_scenario_*.txt"))
+        if dumps:
+            annotate("notice", "OCR scenario reads", "\n".join(d.read_text(errors="replace") for d in dumps))
+        report = (work / "result.txt").read_text() if (work / "result.txt").exists() else "No result"
+        assert returncode == 0 and report.startswith("PASS:"), "ScrambleSmoke: " + report + output
+        print("PASS: " + ("green feet/inches, around-the-green and yards cards read with the real Windows OCR in this build" if has_ocr else "distance parsing in this build (real-OCR card reads skipped: no OCR engine)"))
 
 
 def main():
@@ -376,9 +642,18 @@ def main():
     args = parser.parse_args()
     source = (ROOT / "BARemapper.ahk").read_text(encoding="utf-8-sig")
     baseline = args.baseline.read_text(encoding="utf-8-sig") if args.baseline else subprocess.check_output(["git", "show", BASE + ":BARemapper.ahk"], cwd=ROOT).decode("utf-8-sig")
-    static_checks(source, baseline)
-    if args.ahk:
-        runtime_checks(source, args.ahk.resolve())
+    # The scramble checks print feet/inch marks (curly quotes, primes) that
+    # the Windows console code page cannot encode.
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
+    try:
+        static_checks(source, baseline)
+        if args.ahk:
+            runtime_checks(source, args.ahk.resolve())
+    except Exception as failure:
+        annotate("error", "Regression check failed", f"{type(failure).__name__}: {failure}")
+        raise
 
 
 if __name__ == "__main__":
