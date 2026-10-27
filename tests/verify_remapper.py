@@ -21,8 +21,17 @@ def annotate(level, title, text):
     """On GitHub Actions, also surface text as a check annotation."""
     if os.environ.get("GITHUB_ACTIONS") != "true":
         return
-    body = text.replace("%", "%25").replace("\r", "").replace("\n", "%0A")
-    print(f"::{level} title={title}::{body[:60000]}")
+    chunks, cur = [], ""
+    for line in text.replace("\r", "").split("\n"):
+        if len(cur) + len(line) > 3000 and cur:
+            chunks.append(cur)
+            cur = ""
+        cur += line[:2900] + "\n"
+    if cur.strip():
+        chunks.append(cur)
+    for n, chunk in enumerate(chunks[:8]):
+        body = chunk.replace("%", "%25").replace("\n", "%0A")
+        print(f"::{level} title={title}{' (' + str(n + 1) + ')' if len(chunks) > 1 else ''}::{body}")
 
 
 def function(source, name):
@@ -393,23 +402,26 @@ ScrambleSmoke:
                 if (pick != s.want && !InStr(s.name, "three cards"))
                     fails += 1
             }
-            ; ---- experiments: what makes a full-window read come back empty ----
-            three := [["AL", "212", "FAIRWAY   2ND"], ["ADY", "87", "FAIRWAY   2ND"], ["BOB", "143", "FAIRWAY   2ND"]]
-            four := [["AL", "212", "FAIRWAY   2ND"], ["ADY", "87", "FAIRWAY   2ND"], ["BOB", "143", "FAIRWAY   2ND"], ["JIM", "98", "ROUGH   2ND"]]
-            exps := [["E1 3 cards (as above)", three, 210, 50, false], ["E2 3 cards + GSPro HUD text", three, 210, 50, true]
-                , ["E3 4 cards + HUD", four, 200, 30, true], ["E4 4 cards no HUD", four, 200, 30, false]
-                , ["E5 3 narrow cards", three, 160, 40, false], ["E6 2 cards far apart", [three[1], three[3]], 210, 310, false]
-                , ["E7 2 cards + HUD", [three[1], three[2]], 210, 50, true]]
+            ; ---- experiments: when does a full-window read drop the cards? ----
+            ; G = GSPro proportions from the 4K dump (card spacing 12.5 x USE
+            ; height, cards nearly touching), S = the sparser layout above.
+            c4 := [["CARTER", "212", "FAIRWAY   2ND"], ["AL", "87", "FAIRWAY   2ND"], ["BOB", "143", "ROUGH   2ND"], ["JIM", "98", "ROUGH   2ND"]]
+            exps := [["G2 2 cards", [c4[1], c4[2]], 140, 10, true], ["G3 3 cards", [c4[1], c4[2], c4[3]], 140, 10, true], ["G4 4 cards", c4, 140, 10, true]
+                , ["S2 2 cards", [c4[1], c4[2]], 210, 50, true], ["S3 3 cards", [c4[1], c4[2], c4[3]], 210, 50, true], ["S4 4 cards", c4, 200, 30, true]]
             for i, e in exps {
                 ShowCards(e[2], e[3], e[4], e[5])
+                wx := SmokeWinX(), wy := 0, ww := 1000, wh := 540
                 scan := ScanWinClient(GSProWinNeedle, GSProWinExclude)
-                uses := FindAllLinesExact(scan, "use")
-                big := OcrRegionScaled(scan.win.x, scan.win.y, scan.win.w, scan.win.h, 2)
-                bigUses := FindAllLinesExact(big, "use")
-                halfL := OcrRegion(scan.win.x, scan.win.y, scan.win.w // 2 + 60, scan.win.h)
-                halfR := OcrRegion(scan.win.x + scan.win.w // 2 - 60, scan.win.y, scan.win.w // 2 + 60, scan.win.h)
-                hu := Cnt(FindAllLinesExact(halfL, "use")) + Cnt(FindAllLinesExact(halfR, "use"))
-                ScrambleNote("INFO", e[1] . ": full read " . Cnt(scan.lines) . " lines/" . Cnt(uses) . " USE; 2x read " . Cnt(big.lines) . " lines/" . Cnt(bigUses) . " USE; halves " . Cnt(halfL.lines) . "+" . Cnt(halfR.lines) . " lines/" . hu . " USE [" . SubStr(StrReplace(scan.text, "`n", " / "), 1, 160) . "]")
+                r := e[1] . ": full " . Cnt(FindAllLinesExact(scan, "use"))
+                big := OcrRegionScaled(0, 0, ww, wh, 2)
+                r .= " | 2x " . Cnt(FindAllLinesExact(big, "use"))
+                band := OcrRegion(0, 150, ww, 250)
+                r .= " | band " . Cnt(FindAllLinesExact(band, "use"))
+                r .= " | halves " . TileUses(0, 0, ww, wh, 2)
+                r .= " | thirds " . TileUses(0, 0, ww, wh, 3)
+                r .= " | quarters " . TileUses(0, 0, ww, wh, 4)
+                r .= "   (USE found; " . e[2].MaxIndex() . " cards)"
+                ScrambleNote("INFO", r)
             }
             Loop, 4 {
                 Gui, SmokeUse%A_Index%:Destroy
@@ -426,6 +438,29 @@ ScrambleSmoke:
         ExitApp, 1
     }
 Return
+
+SmokeWinX() {
+    return 0
+}
+
+; USE buttons found reading the area in n side-by-side tiles that
+; overlap by 70 px (a button on a seam is read by both; counted once).
+TileUses(x, y, w, h, n) {
+    seen := {}
+    tw := w // n
+    Loop, %n% {
+        tx := x + (A_Index - 1) * tw - 70
+        if (tx < x)
+            tx := x
+        o := OcrRegion(tx, y, tw + 140, h)
+        for k, u in FindAllLinesExact(o, "use")
+            seen[Round((u.x + u.w / 2) / 40)] := 1
+    }
+    c := 0
+    for k, v in seen
+        c += 1
+    return c
+}
 
 Cnt(arr) {
     n := IsObject(arr) ? arr.MaxIndex() : ""
