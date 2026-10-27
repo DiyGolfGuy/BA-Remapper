@@ -16,6 +16,14 @@ ROOT = Path(__file__).resolve().parents[1]
 BASE = "a5f762113cc2645a385277b4e4941453c8527b63"
 
 
+def annotate(level, title, text):
+    """On GitHub Actions, also surface text as a check annotation."""
+    if os.environ.get("GITHUB_ACTIONS") != "true":
+        return
+    body = text.replace("%", "%25").replace("\r", "").replace("\n", "%0A")
+    print(f"::{level} title={title}::{body[:60000]}")
+
+
 def function(source, name):
     match = re.search(r"(?ms)^" + re.escape(name) + r"\([^\n]*\) \{\n.*?^\}", source)
     assert match, f"Missing function: {name}"
@@ -526,6 +534,10 @@ def runtime_checks(source, ahk):
             shutil.copy2(artifact, artifacts / artifact.name)
         notes = (work / "scramble-checks.txt").read_text(encoding="utf-8-sig") if (work / "scramble-checks.txt").exists() else "No scramble checks reached"
         print(notes)
+        annotate("notice", "Scramble checks (" + ("real Windows OCR: " + ocr_note if has_ocr else "no OCR engine") + ")", notes)
+        dumps = sorted(work.glob("ocr_scenario_*.txt"))
+        if dumps:
+            annotate("notice", "OCR scenario reads", "\n".join(d.read_text(errors="replace") for d in dumps))
         report = (work / "result.txt").read_text() if (work / "result.txt").exists() else "No result"
         assert returncode == 0 and report.startswith("PASS:"), "ScrambleSmoke: " + report + output
         print("PASS: " + ("green feet/inches, around-the-green and yards cards read with the real Windows OCR in this build" if has_ocr else "distance parsing in this build (real-OCR card reads skipped: no OCR engine)"))
@@ -538,9 +550,13 @@ def main():
     args = parser.parse_args()
     source = (ROOT / "BARemapper.ahk").read_text(encoding="utf-8-sig")
     baseline = args.baseline.read_text(encoding="utf-8-sig") if args.baseline else subprocess.check_output(["git", "show", BASE + ":BARemapper.ahk"], cwd=ROOT).decode("utf-8-sig")
-    static_checks(source, baseline)
-    if args.ahk:
-        runtime_checks(source, args.ahk.resolve())
+    try:
+        static_checks(source, baseline)
+        if args.ahk:
+            runtime_checks(source, args.ahk.resolve())
+    except AssertionError as failure:
+        annotate("error", "Regression check failed", str(failure))
+        raise
 
 
 if __name__ == "__main__":
