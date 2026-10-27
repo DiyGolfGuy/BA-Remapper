@@ -37,11 +37,17 @@ Invoke-WebRequest https://github.com/DiyGolfGuy/BA-Remapper/releases/download/v5
 Expand-Archive "$env:RUNNER_TEMP/previous.zip" "$env:RUNNER_TEMP/previous" -Force
 $previous = Get-ChildItem "$env:RUNNER_TEMP/previous" -Recurse -Filter '*.exe' | Select-Object -First 1
 if (!$previous) { throw 'Previous installer missing' }
-$installDir = "$env:RUNNER_TEMP/remapper-upgrade-test"
+$installDir = Join-Path $env:RUNNER_TEMP 'remapper-upgrade-test'
 foreach ($installer in @($previous.FullName, (Join-Path $pwd "BARemapper_Setup_v$version.exe"))) {
-    $process = Start-Process $installer -ArgumentList "/S /D=$installDir" -PassThru
-    if (!$process.WaitForExit(60000)) { $process.Kill(); throw 'Installer timed out' }
+    Write-Host "Verifying installer $installer into $installDir"
+    # -Wait follows the full installer process tree, including an
+    # elevation/relaunch child. WaitForExit follows only its parent.
+    $process = Start-Process $installer -ArgumentList "/S /D=$installDir" -Wait -PassThru
     if ($process.ExitCode -ne 0) { throw "Installer failed: $($process.ExitCode)" }
+    if (!(Test-Path "$installDir/BARemapper.exe")) {
+        Get-ItemProperty 'HKLM:/Software/WOW6432Node/Microsoft/Windows/CurrentVersion/Uninstall/BARemapper' -ErrorAction SilentlyContinue | Select-Object DisplayName,DisplayVersion,InstallLocation | Format-List
+        throw "Installer did not create $installDir/BARemapper.exe"
+    }
     if ((Get-FileHash "$config/settings.ini").Hash -ne $beforeSettings -or (Get-FileHash "$config/profiles/UpgradeTest.ini").Hash -ne $beforeProfile) { throw 'Installer changed existing settings/profile' }
 }
 if ((Get-FileHash "$installDir/BARemapper.exe").Hash -ne (Get-FileHash BARemapper.exe).Hash) { throw 'Upgrade did not install the new binary' }
