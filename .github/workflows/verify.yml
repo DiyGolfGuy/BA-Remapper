@@ -1,0 +1,32 @@
+name: Verify Remapper
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Download official AutoHotkey v1 runtime
+        shell: pwsh
+        run: |
+          Invoke-WebRequest https://github.com/AutoHotkey/AutoHotkey/releases/download/v1.1.37.02/AutoHotkey_1.1.37.02.zip -OutFile "$env:RUNNER_TEMP/ahk.zip"
+          Expand-Archive "$env:RUNNER_TEMP/ahk.zip" "$env:RUNNER_TEMP/ahk"
+      - name: Parse source and run isolated UI and hotkey regression checks
+        shell: pwsh
+        run: python tests/verify_remapper.py --ahk "$env:RUNNER_TEMP/ahk/AutoHotkeyU64.exe"
+      - name: Compile portable preview
+        shell: pwsh
+        run: |
+          $compiler = Start-Process "$env:RUNNER_TEMP/ahk/Compiler/Ahk2Exe.exe" -ArgumentList "/in `"$pwd/BARemapper.ahk`" /out `"$pwd/BARemapper.exe`" /base `"$env:RUNNER_TEMP/ahk/Compiler/Unicode 64-bit.bin`" /silent" -Wait -PassThru
+          if ($compiler.ExitCode -ne 0 -or !(Test-Path BARemapper.exe)) { throw "Compile failed" }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BARemapper_v5.1.0_preview
+          path: BARemapper.exe

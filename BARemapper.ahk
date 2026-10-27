@@ -12,8 +12,18 @@ CoordMode, Mouse, Screen
 DllCall("SetProcessDPIAware")
 
 ; ============================================================
-;  BA CUSTOM PRODUCTS - CONTROL BOX REMAPPER v5.0.9
+;  BA CUSTOM PRODUCTS - CONTROL BOX REMAPPER v5.1.0
 ;  bacustomproducts@gmail.com   GitHub: DiyGolfGuy
+;
+;  CHANGES IN v5.1.0
+;  - UI: independent mapping/Auto-Pick status; copy a preset;
+;    read-only preset labels; action previews; readable scrolling;
+;    Quick Start and clearer Windows Startup Profile controls.
+;  - Everyday OCR reset clears learned spots and transient click
+;    caches only. Factory reset is separate and offers backup.
+;  - FN autorepeat no longer forgets a secondary was used. FN
+;    hotkeys focus GSPro and send a 60ms keypress with SendEvent.
+;    Smart Click recognition, learning and scramble logic stay as-is.
 ;
 ;  CHANGES IN v5.0.9  (field report 9 Oct: FN + Club Down did not
 ;  Clear View on either bay; every Smart Click worked)
@@ -235,13 +245,14 @@ DllCall("SetProcessDPIAware")
 ;  AUTO-START
 ;    Uses a shortcut in the Windows Startup folder
 ;    (shell:startup) - visible, reliable, easy to remove.
-;    Cleanup button removes it plus all data files.
+;    Reset Smart Click Spots re-learns OCR positions only.
+;    Factory Reset separately removes profiles/settings/startup.
 ; ============================================================
 
 ; ============================================================
 ;  CONSTANTS / PATHS
 ; ============================================================
-AppVersion := "5.0.9"
+AppVersion := "5.1.0"
 MainWinTitle    := "BA Custom Control Box Remapper"
 BuilderWinTitle := "BA Custom Control Box - Button Builder"
 HelpWinTitle    := "BA Custom Control Box - Help"
@@ -451,6 +462,12 @@ SETTLE_MS       := 150
 ; Dialog/config dialog temp state
 ConfiguringBtnId         := ""
 ConfiguringDisplayName   := ""
+ConfiguringProfile       := ""
+MainHwnd                 := 0
+BuilderHwnd              := 0
+CfgHwnd                  := 0
+ScrollViews              := {}
+ScrollUpdating           := false
 
 ; ---- OCR / Smart Click state ----
 ; ClickDelayMs is the OCR library's hover-before-click pacing.
@@ -648,9 +665,15 @@ FileDelete, %TriggerFile%
 
 ; Register message handler for future second-instance signals
 OnMessage(WM_SHOWAPP, "ShowMainFromMessage")
+; Only the settings windows use these messages. The game, OCR
+; coordinates and keyboard mapping are unaffected.
+OnMessage(0x114, "SettingsScroll")
+OnMessage(0x115, "SettingsScroll")
+OnMessage(0x20A, "SettingsWheel")
 
 ShowMainFromMessage(wParam, lParam, msg, hwnd) {
     Gui, Main:Show
+    KeepWindowOnScreen(hwnd)
     WinActivate, BA Custom Control Box Remapper
 }
 
@@ -755,6 +778,155 @@ SaveWindowPos() {
         IniWrite, %wx%, %ConfigFile%, App, WinX
     if (wy != "")
         IniWrite, %wy%, %ConfigFile%, App, WinY
+}
+
+; Settings windows keep their readable, DPI-scaled layout. A
+; smaller display gets a scrollable viewport, not smaller text.
+SettingsWorkArea(ByRef left, ByRef top, ByRef right, ByRef bottom, x := "", y := "") {
+    SysGet, monitor, MonitorPrimary
+    if (RegExMatch(x, "^-?\d+$") && RegExMatch(y, "^-?\d+$")) {
+        SysGet, count, MonitorCount
+        Loop, %count% {
+            SysGet, area, MonitorWorkArea, %A_Index%
+            if (x >= areaLeft && x < areaRight && y >= areaTop && y < areaBottom) {
+                monitor := A_Index
+                break
+            }
+        }
+    }
+    SysGet, area, MonitorWorkArea, %monitor%
+    left := areaLeft, top := areaTop, right := areaRight, bottom := areaBottom
+}
+
+ShowSettingsWindow(name, hwnd, contentW, contentH, hidden := false, x := "", y := "") {
+    global ScrollViews
+    SettingsWorkArea(left, top, right, bottom, x, y)
+    scale := A_ScreenDPI / 96
+    viewW := Max(200, Min(contentW, Floor((right - left - 48) / scale)))
+    viewH := Max(160, Min(contentH, Floor((bottom - top - 80) / scale)))
+    ScrollViews[hwnd] := {w: Round(contentW * scale), h: Round(contentH * scale)}
+    if (!RegExMatch(x, "^-?\d+$") || !RegExMatch(y, "^-?\d+$")) {
+        x := left + 16
+        y := top + 16
+    }
+    ; Construct hidden, position inside the work area, then show.
+    ; Boot launches never flash a settings window.
+    Gui, %name%:Show, Hide w%viewW% h%viewH% x%x% y%y%
+    KeepWindowOnScreen(hwnd)
+    UpdateSettingsScroll(hwnd)
+    if (!hidden)
+        Gui, %name%:Show
+}
+
+KeepWindowOnScreen(hwnd) {
+    if (!hwnd)
+        return
+    oldDetect := A_DetectHiddenWindows
+    DetectHiddenWindows, On
+    WinGetPos, x, y, w, h, ahk_id %hwnd%
+    if (w != "") {
+        SettingsWorkArea(left, top, right, bottom, x + w // 2, y + h // 2)
+        w := Min(w, right - left)
+        h := Min(h, bottom - top)
+        x := Max(left, Min(x, right - w))
+        y := Max(top, Min(y, bottom - h))
+        WinMove, ahk_id %hwnd%, , %x%, %y%, %w%, %h%
+    }
+    DetectHiddenWindows, %oldDetect%
+}
+
+UpdateSettingsScroll(hwnd) {
+    global ScrollViews, ScrollUpdating
+    if (ScrollUpdating || !ScrollViews.HasKey(hwnd))
+        return
+    ScrollUpdating := true
+    try {
+        ; A scrollbar changes the other axis's available space.
+        ; Two passes settle both ranges after a resize.
+        Loop, 2 {
+            VarSetCapacity(rect, 16, 0)
+            DllCall("GetClientRect", "Ptr", hwnd, "Ptr", &rect)
+            Loop, 2 {
+                axis := A_Index - 1
+                page := NumGet(rect, axis ? 12 : 8, "Int")
+                extent := axis ? ScrollViews[hwnd].h : ScrollViews[hwnd].w
+                VarSetCapacity(si, 28, 0)
+                NumPut(28, si, 0, "UInt"), NumPut(0x17, si, 4, "UInt")
+                DllCall("GetScrollInfo", "Ptr", hwnd, "Int", axis, "Ptr", &si)
+                oldPos := NumGet(si, 20, "Int")
+                newPos := Max(0, Min(oldPos, extent - page))
+                NumPut(0, si, 8, "Int"), NumPut(extent - 1, si, 12, "Int")
+                NumPut(page, si, 16, "UInt"), NumPut(newPos, si, 20, "Int")
+                DllCall("SetScrollInfo", "Ptr", hwnd, "Int", axis, "Ptr", &si, "Int", true)
+                if (oldPos != newPos)
+                    DllCall("ScrollWindow", "Ptr", hwnd, "Int", axis ? 0 : oldPos - newPos
+                        , "Int", axis ? oldPos - newPos : 0, "Ptr", 0, "Ptr", 0)
+            }
+        }
+    } finally {
+        ScrollUpdating := false
+    }
+}
+
+SettingsScroll(wParam, lParam, msg, hwnd) {
+    global ScrollViews
+    ; lParam identifies a control scrollbar. Leave dropdowns,
+    ; edit boxes and every other window's scrolling alone.
+    if (lParam || !ScrollViews.HasKey(hwnd))
+        return
+    axis := (msg = 0x115) ? 1 : 0
+    VarSetCapacity(si, 28, 0)
+    NumPut(28, si, 0, "UInt"), NumPut(0x17, si, 4, "UInt")
+    DllCall("GetScrollInfo", "Ptr", hwnd, "Int", axis, "Ptr", &si)
+    oldPos := NumGet(si, 20, "Int")
+    maxPos := Max(0, NumGet(si, 12, "Int") - NumGet(si, 16, "UInt") + 1)
+    step := Round(40 * A_ScreenDPI / 96)
+    page := Max(step, NumGet(si, 16, "UInt") - step)
+    code := wParam & 0xFFFF
+    if (code = 0)
+        pos := oldPos - step
+    else if (code = 1)
+        pos := oldPos + step
+    else if (code = 2)
+        pos := oldPos - page
+    else if (code = 3)
+        pos := oldPos + page
+    else if (code = 4 || code = 5)
+        pos := NumGet(si, 24, "Int")
+    else if (code = 6)
+        pos := 0
+    else if (code = 7)
+        pos := maxPos
+    else
+        return 0
+    pos := Max(0, Min(pos, maxPos))
+    if (pos != oldPos) {
+        NumPut(0x4, si, 4, "UInt"), NumPut(pos, si, 20, "Int")
+        DllCall("SetScrollInfo", "Ptr", hwnd, "Int", axis, "Ptr", &si, "Int", true)
+        DllCall("ScrollWindow", "Ptr", hwnd, "Int", axis ? 0 : oldPos - pos
+            , "Int", axis ? oldPos - pos : 0, "Ptr", 0, "Ptr", 0)
+    }
+    return 0
+}
+
+SettingsWheel(wParam, lParam, msg, hwnd) {
+    global ScrollViews
+    root := DllCall("GetAncestor", "Ptr", hwnd, "UInt", 2, "Ptr")
+    if (!ScrollViews.HasKey(root))
+        return
+    ; Let a focused list/edit control retain its normal wheel.
+    if (hwnd != root) {
+        WinGetClass, cls, ahk_id %hwnd%
+        if (cls = "ComboBox" || cls = "Edit" || cls = "ComboLBox")
+            return
+    }
+    delta := (wParam >> 16) & 0xFFFF
+    if (delta & 0x8000)
+        delta -= 0x10000
+    axisMsg := (wParam & 0x4) ? 0x114 : 0x115 ; Shift = horizontal
+    Loop, % Max(1, Abs(delta) // 40)
+        SettingsScroll(delta > 0 ? 0 : 1, 0, axisMsg, root)
+    return 0
 }
 
 ; ============================================================
@@ -991,6 +1163,11 @@ HandleBoxKeyDown(keyName) {
         return
 
     if (btnId = FnButtonId) {
+        ; Windows repeats a held key. A repeated FN-down must
+        ; not forget that a secondary already used this hold,
+        ; or releasing FN would also fire Reset Aim afterward.
+        if (FnIsDown)
+            return
         ; Key trace (Smart Click profiles only): every FN and
         ; button event lands in ocr_trace.txt, so a press that
         ; never reached a Smart Click shows exactly why.
@@ -1060,10 +1237,10 @@ FireSecondary(btnId) {
     stype := SecType[btnId]
     if (stype = "key") {
         sval := SecValue[btnId]
-        if (AnyOcrSecondary())
-            OcrTrace("secondary fired: " . btnId . " -> sent " . sval)
-        if (sval != "")
-            Send, %sval%
+        if (sval != "") {
+            sent := SendSecondaryKey(sval)
+            OcrTrace("secondary " . btnId . " -> " . sval . (sent ? " sent (held keypress)" : " not sent (GSPro not focused)"))
+        }
     }
     else if (stype = "click") {
         ; Taught positions are captured AND clicked in physical
@@ -1077,6 +1254,38 @@ FireSecondary(btnId) {
         OcrTrace("secondary fired: " . btnId . " -> " . SecValue[btnId])
         RunOcrAction(SecValue[btnId])
     }
+}
+
+; GSPro polls key state once per frame. An instantaneous
+; SendInput down/up can fall entirely between frames. Match a
+; deliberate physical tap, and focus the same GSPro game window
+; Smart Clicks use. Only FN hotkeys use this path.
+SendSecondaryKey(keys) {
+    global GSProWinNeedle, GSProWinExclude
+    game := GsproWinRect(GSProWinNeedle, GSProWinExclude)
+    if (!game.found) {
+        ShowGsproTip("FN hotkey: open GSPro first", 1800)
+        return false
+    }
+    h := game.hwnd
+    if (!WinActive("ahk_id " . h)) {
+        WinActivate, ahk_id %h%
+        WinWaitActive, ahk_id %h%, , 0.6
+    }
+    if (!WinActive("ahk_id " . h))
+        return false
+    oldDelay := A_KeyDelay
+    oldDuration := A_KeyDuration
+    try {
+        SetKeyDelay, 15, 60
+        ; Explicit SendEvent is required: SendMode Input ignores
+        ; SetKeyDelay. Braced keys and Ctrl+M still use the normal
+        ; AutoHotkey key syntax and always release after the tap.
+        SendEvent, %keys%
+    } finally {
+        SetKeyDelay, %oldDelay%, %oldDuration%
+    }
+    return true
 }
 
 ; ============================================================
@@ -3400,27 +3609,30 @@ ToggleRemap() {
         FnIsDown := false
         FnUsedAsModifier := false
         FnLastDownTime := 0
-        Menu, Tray, Tip, BA Remapper v%AppVersion% - Mapping OFF
-    } else {
-        Menu, Tray, Tip, BA Remapper - Mapping ON (%ActiveProfile%)
     }
     UpdateMainStatus()
 }
 
 UpdateMainStatus() {
-    global RemapActive
+    global RemapActive, ScrambleAutoPick, ScrambleDelaySec, ActiveProfile, AppVersion
     Gui, Main:Default
     if (RemapActive) {
-        GuiControl,, StatusText, STATUS: ON
-        Gui, Main:Font, s22 c00FF00 Bold
+        GuiControl,, StatusText, Button Mapping: ON
+        Gui, Main:Font, s20 c00FF00 Bold
         GuiControl, Font, StatusText
-        GuiControl,, ToggleBtn, Turn OFF
+        GuiControl,, ToggleBtn, Turn Mapping OFF
     } else {
-        GuiControl,, StatusText, STATUS: OFF
-        Gui, Main:Font, s22 cFF4444 Bold
+        GuiControl,, StatusText, Button Mapping: OFF
+        Gui, Main:Font, s20 cFF4444 Bold
         GuiControl, Font, StatusText
-        GuiControl,, ToggleBtn, Turn ON
+        GuiControl,, ToggleBtn, Turn Mapping ON
     }
+    scrambleStatus := ScrambleAutoPick ? "ON - " . ScrambleDelaySec . " second delay" : "OFF"
+    GuiControl, Main:, ScrambleStatusText, % "Scramble Auto-Pick: " . scrambleStatus . " (independent of mapping)"
+    GuiControl, Main:Enable%ScrambleAutoPick%, ScrambleDelayChoice
+    GuiControl, Main:Enable%ScrambleAutoPick%, ScrambleCdCheck
+    mappingStatus := RemapActive ? "ON" : "OFF"
+    Menu, Tray, Tip, BA Remapper v%AppVersion% - Mapping %mappingStatus% (%ActiveProfile%) - Auto-Pick %scrambleStatus%
 }
 
 ; ============================================================
@@ -3453,124 +3665,88 @@ Menu, Tray, Default, Show Window
 ; ============================================================
 ;  MAIN WINDOW
 ;
-;  Layout (480 x 504):
-;
-;   Title / subtitle / divider
-;   STATUS (big colored)
-;   [Turn ON]
-;   --- divider ---
-;   Profile dropdown row  [New][Rename][Delete]
-;   Boot Profile: Default     [Set as Boot Profile]
-;   --- divider ---
-;   [Open Button Builder]    (wide)
-;   --- divider ---
-;   [x] Start with Windows   [x] Swap I/K
-;   --- divider ---
-;   Files saved at: <path>
-;   [Open Folder] [Cleanup] [Help]
-;   --- divider ---
-;   [Minimize to Tray] [Exit]
+ ;  Mapping and Auto-Pick are independent; show both explicitly.
 ; ============================================================
-Gui, Main:New, , %MainWinTitle%
+Gui, Main:New, +HwndMainHwnd +Resize +MinSize360x280 +0x300000, %MainWinTitle%
 Gui, Main:Color, 1a1a2e
-
 Gui, Main:Font, s18 cWhite Bold, Segoe UI
-Gui, Main:Add, Text, x20 y12 w440 Center, BA Custom Products
+Gui, Main:Add, Text, x20 y12 w520 Center, BA Custom Products
 Gui, Main:Font, s10 cSilver Normal, Segoe UI
-Gui, Main:Add, Text, x20 y42 w440 Center, Golf Simulator Control Box Remapper v%AppVersion%
-Gui, Main:Add, Text, x30 y65 w420 0x10
+Gui, Main:Add, Text, x20 y42 w520 Center, Golf Simulator Control Box Remapper v%AppVersion%
+Gui, Main:Add, Text, x25 y65 w510 0x10
 
-; STATUS
-Gui, Main:Font, s22 cFF4444 Bold, Segoe UI
-Gui, Main:Add, Text, x20 y75 w440 Center vStatusText, STATUS: OFF
+Gui, Main:Font, s20 cFF4444 Bold, Segoe UI
+Gui, Main:Add, Text, x20 y76 w520 h34 Center vStatusText, Button Mapping: OFF
+Gui, Main:Font, s10 cCCCCCC Normal, Segoe UI
+Gui, Main:Add, Text, x20 y112 w520 h24 Center vScrambleStatusText,
+Gui, Main:Font, s12 c000000 Bold, Segoe UI
+Gui, Main:Add, Button, x135 y142 w290 h38 gToggleFromMain vToggleBtn, Turn Mapping ON
+Gui, Main:Add, Text, x25 y194 w510 0x10
 
-Gui, Main:Font, s13 c000000 Bold, Segoe UI
-Gui, Main:Add, Button, x95 y115 w290 h45 gToggleFromMain vToggleBtn, Turn ON
-
-Gui, Main:Add, Text, x30 y170 w420 0x10
-
-; PROFILES
 Gui, Main:Font, s10 cFFFF00 Bold, Segoe UI
-Gui, Main:Add, Text, x30 y180 w70, Profile:
+Gui, Main:Add, Text, x25 y208 w130, Current Profile:
 Gui, Main:Font, s10 c000000 Normal, Segoe UI
-
 profDDL := BuildProfileDropdownString()
-Gui, Main:Add, DropDownList, x100 y178 w195 vProfileChoice gOnProfileChange, %profDDL%
+Gui, Main:Add, DropDownList, x160 y204 w375 vProfileChoice gOnProfileChange, %profDDL%
 SelectProfileInDropdown()
-
 Gui, Main:Font, s9 c000000 Normal, Segoe UI
-Gui, Main:Add, Button, x305 y178 w50 h25 gOnNewProfile,    + New
-Gui, Main:Add, Button, x360 y178 w55 h25 gOnRenameProfile, Rename
-Gui, Main:Add, Button, x420 y178 w40 h25 gOnDeleteProfile, Del
-
-; BOOT PROFILE
+Gui, Main:Add, Button, x160 y238 w80 h27 gOnNewProfile, New Blank
+Gui, Main:Add, Button, x247 y238 w140 h27 gOnCopyProfile, Customize a Copy
+Gui, Main:Add, Button, x394 y238 w65 h27 gOnRenameProfile vRenameProfileBtn, Rename
+Gui, Main:Add, Button, x466 y238 w69 h27 gOnDeleteProfile vDeleteProfileBtn, Delete
 Gui, Main:Font, s9 cCCCCCC Normal, Segoe UI
-Gui, Main:Add, Text, x30 y210 w130, Boot Profile:
-Gui, Main:Font, s9 cFFFF00 Bold, Segoe UI
-Gui, Main:Add, Text, x115 y210 w180 vBootProfileLabel, %StartupProfile%
+Gui, Main:Add, Text, x25 y277 w510 h32 vProfileNote,
+Gui, Main:Add, Text, x25 y316 w175, Windows Startup Profile:
+Gui, Main:Font, s10 cFFFF00 Bold, Segoe UI
+Gui, Main:Add, Text, x205 y314 w330 h24 vBootProfileLabel, %StartupProfile%
 Gui, Main:Font, s9 c000000 Normal, Segoe UI
-Gui, Main:Add, Button, x305 y207 w155 h22 gOnSetBootProfile, Set Current as Boot Profile
+Gui, Main:Add, Button, x205 y342 w330 h26 gOnSetBootProfile, Use Current Profile at Windows Startup
+Gui, Main:Font, s9 cAAAAAA Normal, Segoe UI
+Gui, Main:Add, Text, x25 y378 w510 h30, Start with Windows loads this profile and turns mapping ON. Switching profiles now does not change the startup profile.
+Gui, Main:Add, Text, x25 y416 w510 0x10
 
-Gui, Main:Add, Text, x30 y238 w420 0x10
-
-; BUILDER LAUNCHER
-Gui, Main:Font, s13 c000000 Bold, Segoe UI
-Gui, Main:Add, Button, x95 y248 w290 h40 gShowBuilder, Open Button Builder
-
-Gui, Main:Add, Text, x30 y298 w420 0x10
-
-; OPTIONS
+Gui, Main:Font, s12 c000000 Bold, Segoe UI
+Gui, Main:Add, Button, x25 y429 w320 h38 gShowBuilder, Open Button Builder
+Gui, Main:Font, s10 c000000 Normal, Segoe UI
+Gui, Main:Add, Button, x355 y429 w180 h38 gShowQuickStart, Quick Start
 Gui, Main:Font, s10 cCCCCCC Normal, Segoe UI
 autoStartChecked := IsAutoStart()
 swapChecked := SwapIK ? 1 : 0
-Gui, Main:Add, Checkbox, x30 y308 w200 vAutoStartCheck gOnAutoStartToggle Checked%autoStartChecked%, Start with Windows
-Gui, Main:Add, Checkbox, x250 y308 w220 vSwapIKCheck gOnSwapIKToggle Checked%swapChecked%, Swap Club Up/Down (I/K)
-
-; AUTO-PICK SCRAMBLE (global - applies to every profile)
+Gui, Main:Add, Checkbox, x25 y484 w220 vAutoStartCheck gOnAutoStartToggle Checked%autoStartChecked%, Start with Windows
+Gui, Main:Add, Checkbox, x265 y484 w270 vSwapIKCheck gOnSwapIKToggle Checked%swapChecked%, Swap Club Up/Down (I/K)
 scramChecked := ScrambleAutoPick ? 1 : 0
-Gui, Main:Add, Checkbox, x30 y338 w250 vScramblePickCheck gOnScrambleToggle Checked%scramChecked%, Auto-Pick Scramble Shot (all profiles)
+Gui, Main:Add, Checkbox, x25 y516 w320 vScramblePickCheck gOnScrambleToggle Checked%scramChecked%, Auto-Pick Scramble Shot (all profiles)
 Gui, Main:Font, s9 cCCCCCC Normal, Segoe UI
-Gui, Main:Add, Text, x290 y340 w55 Right, Delay:
+Gui, Main:Add, Text, x353 y518 w60, Delay:
 Gui, Main:Font, s9 c000000 Normal, Segoe UI
-Gui, Main:Add, DropDownList, x350 y336 w110 vScrambleDelayChoice gOnScrambleDelayChange, 5 seconds|10 seconds|15 seconds|20 seconds
+Gui, Main:Add, DropDownList, x415 y512 w120 vScrambleDelayChoice gOnScrambleDelayChange, 5 seconds|10 seconds|15 seconds|20 seconds
 GuiControl, Main:ChooseString, ScrambleDelayChoice, %ScrambleDelaySec% seconds
 Gui, Main:Font, s10 cCCCCCC Normal, Segoe UI
 cdChecked := ScrambleCountdown ? 1 : 0
-Gui, Main:Add, Checkbox, x30 y368 w400 vScrambleCdCheck gOnScrambleCdToggle Checked%cdChecked%, Show on-screen countdown before auto-pick
-
-Gui, Main:Add, Text, x30 y400 w420 0x10
-
-; FILE LOCATION + ACCESS
+Gui, Main:Add, Checkbox, x25 y548 w510 vScrambleCdCheck gOnScrambleCdToggle Checked%cdChecked%, Show on-screen countdown before auto-pick
+Gui, Main:Add, Text, x25 y580 w510 0x10
 Gui, Main:Font, s9 c999999 Normal, Segoe UI
-Gui, Main:Add, Text, x30 y410 w430, Files are saved at:
+Gui, Main:Add, Text, x25 y592 w510, Files are saved at:
 Gui, Main:Font, s9 cWhite Normal, Consolas
-Gui, Main:Add, Text, x30 y426 w430, %ConfigDir%
-
+Gui, Main:Add, Text, x25 y611 w510 h34, %ConfigDir%
 Gui, Main:Font, s9 c000000 Normal, Segoe UI
-Gui, Main:Add, Button, x30  y450 w100 h28 gOnOpenFolder, Open Folder
-Gui, Main:Add, Button, x136 y450 w110 h28 gOnCleanup,    Cleanup / Reset
-Gui, Main:Add, Button, x252 y450 w95  h28 gTrayOcrDump,  OCR Test
-Gui, Main:Add, Button, x353 y450 w107 h28 gShowHelp,     Help / Guide
-
-Gui, Main:Add, Text, x30 y486 w420 0x10
-
-; FOOTER
+Gui, Main:Add, Button, x25 y654 w95 h29 gOnOpenFolder, Open Folder
+Gui, Main:Add, Button, x128 y654 w188 h29 gResetSmartSpots, Reset Smart Click Spots
+Gui, Main:Add, Button, x324 y654 w91 h29 gTrayOcrDump, OCR Test
+Gui, Main:Add, Button, x423 y654 w112 h29 gShowHelp, Help / Guide
 Gui, Main:Font, s9 cAAAAAA Normal, Segoe UI
-Gui, Main:Add, Text, x20 y494 w440 Center, Ctrl+F12 toggles ON/OFF    |    Turn OFF to type normally
-
+Gui, Main:Add, Text, x25 y692 w345 h30, Reset Smart Click Spots re-learns click positions only.
+Gui, Main:Font, s9 c000000 Normal, Segoe UI
+Gui, Main:Add, Button, x385 y690 w150 h27 gShowFactoryReset, Factory Reset...
+Gui, Main:Font, s9 cAAAAAA Normal, Segoe UI
+Gui, Main:Add, Text, x20 y732 w520 Center, Ctrl+F12 toggles button mapping. Turn mapping OFF to type normally.
 Gui, Main:Font, s10 c000000 Normal, Segoe UI
-Gui, Main:Add, Button, x95  y516 w140 h35 gMinimizeMain, Minimize to Tray
-Gui, Main:Add, Button, x245 y516 w140 h35 gDoFullExit,   Exit
-
+Gui, Main:Add, Button, x125 y760 w150 h35 gMinimizeMain, Minimize to Tray
+Gui, Main:Add, Button, x285 y760 w150 h35 gDoFullExit, Exit
+RefreshProfileActions()
+UpdateMainStatus()
 LoadWindowPos(wx, wy)
-if (isStartupLaunch) {
-    ; Boot launch - create window hidden so user sees no flash
-    Gui, Main:Show, Hide w480 h566
-} else if (wx = "CENTER" || wy = "CENTER") {
-    Gui, Main:Show, w480 h566
-} else {
-    Gui, Main:Show, w480 h566 x%wx% y%wy%
-}
+ShowSettingsWindow("Main", MainHwnd, 560, 812, isStartupLaunch, wx, wy)
 
 ; ============================================================
 ;  STARTUP-LAUNCH FLOW
@@ -3587,14 +3763,13 @@ if (isStartupLaunch) {
         RefreshMainGuiFromState()
     }
     ToggleRemap()
-    Menu, Tray, Tip, BA Remapper - Mapping ON (%ActiveProfile%)
     TrayTip, BA Remapper, Mapping is ACTIVE  (profile: %ActiveProfile%)  -  double-click the tray icon to open, 10, 1
 }
 
 ; Trigger-file polling for reopen
 SetTimer, CheckTriggerFile, 500
 
-; Auto-Pick Scramble watcher (self-gates on RemapActive + setting)
+; Auto-Pick Scramble watcher (independent of the mapping toggle)
 SetTimer, ScrambleTick, 2000
 
 ; Countdown overlay updater (light, no OCR)
@@ -3650,6 +3825,19 @@ RefreshProfileDropdown() {
     out := BuildProfileDropdownString()
     GuiControl, Main:, ProfileChoice, |%out%
     SelectProfileInDropdown()
+    RefreshProfileActions()
+    UpdateMainStatus()
+}
+
+RefreshProfileActions() {
+    global ActiveProfile
+    preset := IsPresetProfile(ActiveProfile)
+    canRename := !preset
+    GuiControl, Main:Enable%canRename%, RenameProfileBtn
+    GuiControl, Main:, DeleteProfileBtn, % preset ? "Restore" : "Delete"
+    note := preset ? "Built-in preset - read only. Customize a Copy to keep these functions and change just what you need."
+        : "Changes save automatically. Customize a Copy keeps this profile intact while you experiment."
+    GuiControl, Main:, ProfileNote, %note%
 }
 
 RefreshBootProfileLabel() {
@@ -3675,6 +3863,8 @@ ToggleFromMain:
 Return
 
 OnProfileChange:
+    if (IsConfigDialogOpen())
+        Return
     Gui, Main:Submit, NoHide
     selected := StripBootMarker(ProfileChoice)
     if (selected = "" || selected = ActiveProfile)
@@ -3684,27 +3874,21 @@ OnProfileChange:
     ActiveProfile := selected
     LoadProfile(ActiveProfile)
     SaveSettings()
+    RefreshProfileActions()
+    UpdateMainStatus()
     RefreshBuilderIfOpen()
 Return
 
 OnNewProfile:
+    if (IsConfigDialogOpen())
+        Return
+    Gui, Main:+OwnDialogs
     InputBox, newName, New Profile, Enter a name for the new profile:, , 320, 150
     if (ErrorLevel || newName = "")
         Return
     newName := Trim(newName)
-    ; No special characters that break filenames
-    if RegExMatch(newName, "[\\/:*?""<>|]") {
-        MsgBox, 48, Invalid Name, A profile name cannot contain any of these characters:`n  \ / : * ? " < > |
+    if (!ValidNewProfileName(newName))
         Return
-    }
-    ; No duplicates
-    for i, p in ProfileList
-    {
-        if (p = newName) {
-            MsgBox, 48, Already Exists, A profile named "%newName%" already exists.
-            Return
-        }
-    }
     ; Save current, then create new
     SaveProfile(ActiveProfile)
     ActiveProfile := newName
@@ -3716,27 +3900,92 @@ OnNewProfile:
     RefreshBuilderIfOpen()
 Return
 
+OnCopyProfile:
+    if (IsConfigDialogOpen())
+        Return
+    sourceName := ActiveProfile
+    sourceFn := FnButtonId
+    sourceType := SecType.Clone()
+    sourceValue := SecValue.Clone()
+    sourceX := SecX.Clone()
+    sourceY := SecY.Clone()
+    ; Own the dialog to the active window, including the Builder.
+    copyOwner := (A_Gui = "Builder") ? "Builder" : "Main"
+    Gui, %copyOwner%:+OwnDialogs
+    InputBox, newName, Customize a Copy, Name your editable copy of "%sourceName%":, , 390, 160, , , , , %sourceName% Custom
+    if (ErrorLevel)
+        Return
+    newName := Trim(newName)
+    if (!ValidNewProfileName(newName))
+        Return
+    ; Write before switching: a failed copy must not replace the
+    ; current profile or modify the startup profile.
+    copyFile := ProfilesDir . "\" . newName . ".ini"
+    try {
+        IniWrite, %sourceFn%, %copyFile%, Profile, FnButtonId
+        for i, id in AllBtnIds {
+            st := sourceType.HasKey(id) ? sourceType[id] : "none"
+            sv := sourceValue.HasKey(id) ? sourceValue[id] : ""
+            sx := sourceX.HasKey(id) ? sourceX[id] : 0
+            sy := sourceY.HasKey(id) ? sourceY[id] : 0
+            IniWrite, %st%, %copyFile%, Profile, %id%_Type
+            IniWrite, %sv%, %copyFile%, Profile, %id%_Value
+            IniWrite, %sx%, %copyFile%, Profile, %id%_X
+            IniWrite, %sy%, %copyFile%, Profile, %id%_Y
+        }
+    } catch copyError {
+        SafeFileDelete(copyFile)
+        MsgBox, 48, Copy Failed, The profile could not be copied. Your current profile is unchanged.
+        Return
+    }
+    SaveProfile(ActiveProfile)
+    ProfileList.Push(newName)
+    ActiveProfile := newName
+    LoadProfile(ActiveProfile)
+    SaveSettings()
+    RefreshProfileDropdown()
+    RefreshBuilderIfOpen()
+Return
+
+IsConfigDialogOpen() {
+    global ConfiguringProfile
+    if (ConfiguringProfile = "")
+        return false
+    Gui, Cfg:Show
+    return true
+}
+
+ValidNewProfileName(name) {
+    global ProfileList
+    if (name = "" || StrLen(name) > 80 || RegExMatch(name, "[\\/:*?""<>|\x00-\x1F]")
+        || RegExMatch(name, "[. ]$") || RegExMatch(name, "i)^(CON|PRN|AUX|NUL|COM[0-9]|LPT[0-9])(\.|$)")) {
+        MsgBox, 48, Invalid Name, Enter a name up to 80 characters without Windows filename symbols or a trailing dot. Reserved device names cannot be used.
+        return false
+    }
+    for i, existing in ProfileList {
+        if (existing = name) {
+            MsgBox, 48, Already Exists, A profile named "%name%" already exists.
+            return false
+        }
+    }
+    return true
+}
+
 OnRenameProfile:
+    if (IsConfigDialogOpen())
+        Return
     if (IsPresetProfile(ActiveProfile)) {
         MsgBox, 64, Built-In Preset, "%ActiveProfile%" is a built-in preset and cannot be renamed.
         Return
     }
+    Gui, Main:+OwnDialogs
     oldName := ActiveProfile
     InputBox, newName, Rename Profile, Rename "%oldName%" to:, , 320, 150
     if (ErrorLevel || newName = "" || newName = oldName)
         Return
     newName := Trim(newName)
-    if RegExMatch(newName, "[\\/:*?""<>|]") {
-        MsgBox, 48, Invalid Name, A profile name cannot contain any of these characters:`n  \ / : * ? " < > |
+    if (!ValidNewProfileName(newName))
         Return
-    }
-    for i, p in ProfileList
-    {
-        if (p = newName) {
-            MsgBox, 48, Already Exists, A profile named "%newName%" already exists.
-            Return
-        }
-    }
     oldFile := ProfilesDir . "\" . oldName . ".ini"
     newFile := ProfilesDir . "\" . newName . ".ini"
     FileMove, %oldFile%, %newFile%
@@ -3757,6 +4006,8 @@ OnRenameProfile:
 Return
 
 OnDeleteProfile:
+    if (IsConfigDialogOpen())
+        Return
     if (IsPresetProfile(ActiveProfile)) {
         MsgBox, 4, Built-In Preset, "%ActiveProfile%" is a built-in preset.`n`nRestore it to factory defaults?
         IfMsgBox, Yes
@@ -3828,6 +4079,7 @@ OnScrambleToggle:
     ScrambleArmedTick := 0
     ScrambleCoolDown := false
     SaveSettings()
+    UpdateMainStatus()
     if (ScrambleAutoPick)
         TrayTip, BA Remapper, Auto-Pick Scramble ON (%ScrambleDelaySec%s delay) - watching while the app runs, 3, 1
 Return
@@ -3850,6 +4102,7 @@ OnScrambleDelayChange:
     if (newDelay = 5 || newDelay = 10 || newDelay = 15 || newDelay = 20)
         ScrambleDelaySec := newDelay
     SaveSettings()
+    UpdateMainStatus()
 Return
 
 ; ============================================================
@@ -4141,10 +4394,32 @@ Return
 ; Forget this PC's locked Smart Click spots; the next press
 ; re-learns them with two full screen reads.
 ResetSmartSpots:
+    ; Drop every cached/repeated click as well as saved spots.
+    ; Otherwise the repeat fast path can still use the old point
+    ; for up to four seconds after a reset.
+    if (OcrBusy || FnIsDown) {
+        MsgBox, 64, Smart Click Busy, Release FN and let the current screen read finish, then reset the Smart Click spots.
+        Return
+    }
+    SetTimer, OcrPrefetch, Off
+    SetTimer, OcrDeferred, Off
+    SetTimer, OcrVerifyTick, Off
+    SetTimer, OcrVerifyTick2, Off
+    SetTimer, ParkTick, Off
+    PendingOcrAction := ""
+    PendingOcrSince := 0
+    VerifyActionId := ""
+    LastActionId := ""
+    LastClickX := 0
+    LastClickY := 0
+    LastFireTick := 0
+    LastScanObj := ""
+    LastScanTick := 0
+    LastRef := {}
     Spots := {}
     SpotWin := ""
     SaveSpots()
-    TrayTip, BA Remapper, Smart Click spots cleared - the next press re-learns them, 4, 1
+    TrayTip, BA Remapper, Smart Click spots cleared. The next Smart Click reads the screen and learns again. Profiles and settings are kept., 5, 1
 Return
 
 ; One-time OCR engine warm-up (first call pays ~1s engine
@@ -4315,7 +4590,14 @@ OnOpenFolder:
 Return
 
 OnCleanup:
-    DoCleanup()
+    Gosub, ResetSmartSpots
+Return
+
+MainGuiSize:
+BuilderGuiSize:
+CfgGuiSize:
+    if (A_EventInfo != 1)
+        UpdateSettingsScroll(A_Gui = "Main" ? MainHwnd : (A_Gui = "Builder" ? BuilderHwnd : CfgHwnd))
 Return
 
 MinimizeMain:
@@ -4333,6 +4615,7 @@ Return
 ; ============================================================
 ShowMainFromTray:
     Gui, Main:Show
+    KeepWindowOnScreen(MainHwnd)
     WinActivate, BA Custom Control Box Remapper
 Return
 
@@ -4352,6 +4635,7 @@ CheckTriggerFile:
     if FileExist(TriggerFile) {
         FileDelete, %TriggerFile%
         Gui, Main:Show
+        KeepWindowOnScreen(MainHwnd)
         WinActivate, BA Custom Control Box Remapper
     }
 Return
@@ -4407,6 +4691,11 @@ Pause::return
 ; ============================================================
 ;  HELP WINDOW
 ; ============================================================
+ShowQuickStart:
+    Gui, Main:+OwnDialogs
+    MsgBox, 64, BA Remapper - Quick Start, 1. Select Basic Secondary for the yellow functions printed on your box.`n`n2. Turn Button Mapping ON.`n`n3. Tap a button for its white function. Hold Reset Aim (A) and press another button for its yellow function. FN + either club button gives Clear View (B).`n`n4. Want a different function? Choose Customize a Copy, open the Builder, click a button, choose its action, and Save.`n`n5. Optional: use Current Profile at Windows Startup and check Start with Windows.`n`nSmart Click used a wrong spot? Release FN, then use Reset Smart Click Spots. The next press reads the screen and learns again; your profiles stay.`n`nCtrl+F12 turns button mapping on/off. Scramble Auto-Pick has its own checkbox. Exit fully quits; closing the window keeps the app in the tray.
+Return
+
 ShowHelp:
     if WinExist(HelpWinTitle) {
         WinActivate
@@ -4456,15 +4745,17 @@ ShowHelp:
       walking the ball with Move Forward / Move Back).
 
     BUILT-IN PRESET: "Basic Secondary"
-    Pick "Basic Secondary" in the profile dropdown and the
+    QUICK START: pick "Basic Secondary" in the profile dropdown and the
     yellow print on your control box just works - zero
     programming: Clear View on Club Down (and Club Up), OB
     Rehit on Tee Left, Move Forward/Back on Aim Up/Down, Next Option on
     Aim Left, Drop Ball / Rehit on Aim Right.
     Basic Secondary is locked - it cannot be edited, reset,
     or renamed, so it always works exactly like the print on
-    the box.  To customize, create a new profile.  Pressing
-    Del on it restores it to factory defaults instantly.
+    the box. To customize, choose Customize a Copy. This keeps
+    every working function in your own editable profile.
+    New Blank starts with no secondary functions.
+    Restore resets the built-in preset only.
 
     AUTO-PICK SCRAMBLE
     Turn on the checkbox on the main window and BARemapper
@@ -4486,11 +4777,12 @@ ShowHelp:
     the cards while the timer runs - turn it off with the
     "Show on-screen countdown" checkbox if you prefer.
     These settings apply to ALL profiles.
+    Auto-Pick runs independently of Button Mapping ON/OFF.
 
     PROFILES
     Each profile is its own .ini file in the profiles folder.
     Use the dropdown to switch.  Every change auto-saves.
-    The [BOOT] tag marks your Boot Profile - the one auto-loaded
+    The [BOOT] tag marks your Windows Startup Profile - auto-loaded
     when "Start with Windows" is checked.
 
     "START WITH WINDOWS"
@@ -4502,10 +4794,19 @@ ShowHelp:
     re-points itself to the current .exe location on every
     launch, so moving the app never breaks boot.
 
-    IMPORTANT: BEFORE YOU DELETE BAREMAPPER
-    Click Cleanup first, OR uncheck Start with Windows.
-    That removes the startup shortcut so Windows won't try
-    to launch a program that no longer exists.
+    RESET SMART CLICK SPOTS
+    If a Smart Click used a wrong spot, release FN and choose
+    Reset Smart Click Spots. This clears the learned positions
+    and temporary click caches. The next press re-reads the
+    screen and learns again. Profiles, startup and other
+    settings are kept. It does not erase Taught Screen Clicks.
+
+    FACTORY RESET / REMOVAL
+    Factory Reset is a separate, advanced action that removes
+    profiles, settings and Start with Windows, then exits.
+    It offers a backup first. Use the Windows uninstaller to
+    remove an installed app; for a portable copy, uncheck
+    Start with Windows before deleting its exe.
 
     WHERE ARE MY FILES?
     The "Files are saved at" line on the main window shows the
@@ -4530,6 +4831,43 @@ HelpGuiClose:
     Gui, Help:Destroy
 Return
 
+ShowFactoryReset:
+    if (IsConfigDialogOpen())
+        Return
+    Gui, Main:+Disabled
+    Gui, Factory:New, +OwnerMain +AlwaysOnTop, BA Remapper - Factory Reset
+    Gui, Factory:Font, s10, Segoe UI
+    Gui, Factory:Add, Text, x20 y15 w420 h120, Factory reset removes all profiles, preferences and the Start with Windows shortcut, then exits the app. The program itself and diagnostic logs stay.`n`nTo correct an OCR click position, Cancel and use Reset Smart Click Spots instead.
+    Gui, Factory:Add, Checkbox, x20 y145 w420 h40 vFactoryBackup Checked, Back up profiles and settings before factory reset
+    Gui, Factory:Add, Button, x20 y202 w195 h32 gFactoryConfirm, Factory Reset and Exit
+    Gui, Factory:Add, Button, x240 y202 w195 h32 gFactoryCancel Default, Cancel
+    Gui, Factory:Show, w455 h255
+Return
+
+FactoryConfirm:
+    Gui, Factory:Submit, NoHide
+    if (FactoryBackup) {
+        backupDir := ConfigDir . " Backups\" . A_Now
+        try {
+            FileCopyDir, %ConfigDir%, %backupDir%, 0
+            if (ErrorLevel)
+                throw Exception("Backup failed")
+        } catch backupError {
+            Gui, Factory:+OwnDialogs
+            MsgBox, 48, Backup Failed, Could not back up the settings. Nothing has been reset. Choose Cancel to keep using the app.
+            Return
+        }
+    }
+    DoCleanup()
+Return
+
+FactoryCancel:
+FactoryGuiClose:
+FactoryGuiEscape:
+    Gui, Main:-Disabled
+    Gui, Factory:Destroy
+Return
+
 ; ============================================================
 ;  BUILDER GUI
 ;
@@ -4537,12 +4875,15 @@ Return
 ;  "Save & Close" needed.  Just configure and close.
 ; ============================================================
 ShowBuilder:
+    if (IsConfigDialogOpen())
+        Return
     if WinExist(BuilderWinTitle) {
+        KeepWindowOnScreen(BuilderHwnd)
         WinActivate
         Return
     }
     Gui, Builder:Destroy
-    Gui, Builder:New, +AlwaysOnTop, %BuilderWinTitle%
+    Gui, Builder:New, +AlwaysOnTop +HwndBuilderHwnd +Resize +MinSize480x300 +0x300000, %BuilderWinTitle%
     Gui, Builder:Color, 1c1c1c   ; near-black, like the physical box
 
     Gui, Builder:Font, s16 cWhite Bold, Segoe UI
@@ -4562,6 +4903,10 @@ ShowBuilder:
     }
     Gui, Builder:Add, DropDownList, x400 y65 w200 vFnChoice gOnFnChange, %fnList%
     GuiControl, Builder:ChooseString, FnChoice, %fnDefault%
+    Gui, Builder:Font, s9 cFFD400 Normal, Segoe UI
+    Gui, Builder:Add, Text, x20 y65 w250 h30 vBuilderLockNote,
+    Gui, Builder:Font, s9 c000000 Normal, Segoe UI
+    Gui, Builder:Add, Button, x710 y62 w240 h29 gOnCopyProfile, Customize a Copy
 
     Gui, Builder:Add, Text, x30 y98 w920 0x10
 
@@ -4651,16 +4996,17 @@ ShowBuilder:
     Gui, Builder:Add, Text, x787 y639 w121 Center vSecShotcam,
 
     ; Bottom action buttons
-    Gui, Builder:Font, s11 cWhite Bold, Segoe UI
-    Gui, Builder:Add, Button, x340 y662 w150 h40 gBuilderReset, Reset Profile
+    Gui, Builder:Font, s11 c000000 Bold, Segoe UI
+    Gui, Builder:Add, Button, x340 y662 w150 h40 gBuilderReset vBuilderResetBtn, Reset Profile
     Gui, Builder:Add, Button, x510 y662 w150 h40 gBuilderClose, Close
 
     Gui, Builder:Font, s9 cC8E6C2 Normal, Segoe UI
     Gui, Builder:Add, Text, x20 y712 w940 Center vBuilderStatus, Click a button to set its FN secondary  -  yellow text = current secondary  -  auto-saves
 
     UpdateBuilderLabels()
-
-    Gui, Builder:Show, w980 h748
+    RefreshBuilderPresetControls()
+    WinGetPos, bx, by, , , ahk_id %MainHwnd%
+    ShowSettingsWindow("Builder", BuilderHwnd, 980, 748, false, bx, by)
 Return
 
 OnFnChange:
@@ -4751,13 +5097,22 @@ ConfigButton(btnIdVal, displayName, primaryKey) {
     global OcrActionList, OcrActionName, OcrActionByName
     global CfgTypeKey, CfgTypeOcr, CfgTypeClick, CfgTypeNone
     global CfgKeyChoice, CfgOcrChoice, CfgClickPos, CfgCapturedX, CfgCapturedY
+    global FnButtonId, ConfiguringProfile, CfgHwnd
+    if (IsConfigDialogOpen())
+        return
     if (IsPresetProfile(ActiveProfile)) {
         Gui, Builder:+OwnDialogs
-        MsgBox, 64, Built-In Preset, "%ActiveProfile%" is a built-in preset and cannot be changed.`n`nTo customize: create a new profile (+ New on the main window) and set it up in the Builder.
+        MsgBox, 64, Built-In Preset, "%ActiveProfile%" is read only. Choose Customize a Copy to keep its functions and edit your own version.
         Return
+    }
+    if (btnIdVal = FnButtonId) {
+        Gui, Builder:+OwnDialogs
+        MsgBox, 64, FN Button, This is your FN modifier. Tap it alone for its normal action, or hold it with another button for that button's secondary.`n`nChoose a different FN button above if you want to give this button a secondary.
+        return
     }
     ConfiguringBtnId := btnIdVal
     ConfiguringDisplayName := displayName
+    ConfiguringProfile := ActiveProfile
 
     curType := SecType.HasKey(btnIdVal) ? SecType[btnIdVal] : "none"
     curVal  := SecValue.HasKey(btnIdVal) ? SecValue[btnIdVal] : ""
@@ -4765,36 +5120,40 @@ ConfigButton(btnIdVal, displayName, primaryKey) {
     CfgCapturedY := SecY.HasKey(btnIdVal) ? SecY[btnIdVal] : 0
 
     Gui, Cfg:Destroy
-    Gui, Cfg:New, +AlwaysOnTop +OwnerBuilder, %displayName% - Secondary Function
+    Gui, Main:+Disabled
+    Gui, Builder:+Disabled
+    Gui, Cfg:New, +AlwaysOnTop +OwnerBuilder +HwndCfgHwnd +Resize +MinSize300x220 +0x300000, %displayName% - Secondary Function
     Gui, Cfg:Color, 1a1a2e
     Gui, Cfg:Font, s11 cWhite Bold, Segoe UI
-    Gui, Cfg:Add, Text, x15 y10 w370, FN + %displayName%
+    Gui, Cfg:Add, Text, x15 y10 w430, FN + %displayName%
     Gui, Cfg:Font, s9 cCCCCCC Normal, Segoe UI
-    Gui, Cfg:Add, Text, x15 y32 w370, Primary key (%primaryKey%) always works alone. This sets the FN layer.
+    Gui, Cfg:Add, Text, x15 y34 w430 h30, Tap alone: %displayName% (%primaryKey%). Choose what holding FN adds.
 
     Gui, Cfg:Font, s10 cWhite Normal, Segoe UI
-    Gui, Cfg:Add, Radio, x15 y62 w360 vCfgTypeKey Group, GSPro Hotkey - send a keyboard key
+    Gui, Cfg:Add, Radio, x15 y72 w430 vCfgTypeKey gCfgTypeChanged Group, GSPro Hotkey - send a keyboard key
     Gui, Cfg:Font, s9 c000000 Normal, Segoe UI
-    Gui, Cfg:Add, DropDownList, x35 y86 w330 vCfgKeyChoice, %GSProActions%
+    Gui, Cfg:Add, DropDownList, x35 y96 w395 vCfgKeyChoice gCfgKeyChanged, %GSProActions%
 
     Gui, Cfg:Font, s10 cWhite Normal, Segoe UI
-    Gui, Cfg:Add, Radio, x15 y122 w360 vCfgTypeOcr, Smart Click - reads the screen, clicks the menu button
+    Gui, Cfg:Add, Radio, x15 y132 w430 vCfgTypeOcr gCfgTypeChanged, Smart Click - find a GSPro menu button on screen
     Gui, Cfg:Font, s9 c000000 Normal, Segoe UI
-    Gui, Cfg:Add, DropDownList, x35 y146 w330 vCfgOcrChoice, %OcrActionList%
+    Gui, Cfg:Add, DropDownList, x35 y156 w395 vCfgOcrChoice gCfgOcrChanged, %OcrActionList%
 
     Gui, Cfg:Font, s10 cWhite Normal, Segoe UI
-    Gui, Cfg:Add, Radio, x15 y182 w360 vCfgTypeClick, Taught Screen Click - a fixed position you capture
+    Gui, Cfg:Add, Radio, x15 y192 w430 vCfgTypeClick gCfgTypeChanged, Taught Screen Click - a fixed position you capture
     Gui, Cfg:Font, s9 c000000 Normal, Segoe UI
-    Gui, Cfg:Add, Button, x35 y206 w150 h24 gCfgCapture, Capture Position
+    Gui, Cfg:Add, Button, x35 y216 w150 h26 gCfgCapture vCfgCaptureBtn, Capture Position
     Gui, Cfg:Font, s9 cCCCCCC Normal, Segoe UI
-    Gui, Cfg:Add, Text, x195 y210 w180 vCfgClickPos, (none captured)
+    Gui, Cfg:Add, Text, x195 y220 w235 vCfgClickPos, (none captured)
 
     Gui, Cfg:Font, s10 cWhite Normal, Segoe UI
-    Gui, Cfg:Add, Radio, x15 y242 w360 vCfgTypeNone, None - FN + this button does nothing
+    Gui, Cfg:Add, Radio, x15 y254 w430 vCfgTypeNone gCfgTypeChanged, None - no secondary action
+    Gui, Cfg:Font, s10 cFFD400 Normal, Segoe UI
+    Gui, Cfg:Add, Text, x15 y287 w430 h60 vCfgPreview,
 
     Gui, Cfg:Font, s10 c000000 Normal, Segoe UI
-    Gui, Cfg:Add, Button, x70 y280 w120 h32 gCfgOK, Save
-    Gui, Cfg:Add, Button, x210 y280 w120 h32 gCfgCancel, Cancel
+    Gui, Cfg:Add, Button, x90 y365 w120 h32 gCfgOK Default, Save
+    Gui, Cfg:Add, Button, x240 y365 w120 h32 gCfgCancel, Cancel
 
     ; Preselect from the button's current configuration
     if (curType = "key") {
@@ -4812,7 +5171,58 @@ ConfigButton(btnIdVal, displayName, primaryKey) {
         GuiControl, Cfg:, CfgTypeNone, 1
         GuiControl, Cfg:ChooseString, CfgKeyChoice, None
     }
-    Gui, Cfg:Show, w390 h328
+    UpdateConfigPreview()
+    ShowSettingsWindow("Cfg", CfgHwnd, 460, 416)
+}
+
+CfgTypeChanged:
+    UpdateConfigPreview()
+Return
+
+CfgKeyChanged:
+    GuiControl, Cfg:, CfgTypeKey, 1
+    UpdateConfigPreview()
+Return
+
+CfgOcrChanged:
+    GuiControl, Cfg:, CfgTypeOcr, 1
+    UpdateConfigPreview()
+Return
+
+UpdateConfigPreview() {
+    global FnChoiceMap, FnButtonId, ConfiguringDisplayName, CfgCapturedX, CfgCapturedY
+    GuiControlGet, keyMode, Cfg:, CfgTypeKey
+    GuiControlGet, ocrMode, Cfg:, CfgTypeOcr
+    GuiControlGet, clickMode, Cfg:, CfgTypeClick
+    GuiControlGet, keyChoice, Cfg:, CfgKeyChoice
+    GuiControlGet, ocrChoice, Cfg:, CfgOcrChoice
+    GuiControl, Cfg:Enable%keyMode%, CfgKeyChoice
+    GuiControl, Cfg:Enable%ocrMode%, CfgOcrChoice
+    GuiControl, Cfg:Enable%clickMode%, CfgCaptureBtn
+    fnName := "FN"
+    for name, id in FnChoiceMap {
+        if (id = FnButtonId)
+            fnName := name
+    }
+    if (keyMode)
+        action := (keyChoice = "" || keyChoice = "None") ? "no secondary action" : keyChoice
+    else if (ocrMode)
+        action := (ocrChoice = "") ? "choose a Smart Click action" : ocrChoice
+    else if (clickMode)
+        action := (CfgCapturedX = 0 && CfgCapturedY = 0) ? "capture a screen position first" : "click at " . CfgCapturedX . ", " . CfgCapturedY
+    else
+        action := "no secondary action"
+    GuiControl, Cfg:, CfgPreview, % "Hold " . fnName . " + " . ConfiguringDisplayName . " -> " . action
+}
+
+CloseButtonConfig() {
+    global ConfiguringProfile, CfgHwnd, ScrollViews
+    Gui, Main:-Disabled
+    Gui, Builder:-Disabled
+    Gui, Cfg:Destroy
+    ScrollViews.Delete(CfgHwnd)
+    CfgHwnd := 0
+    ConfiguringProfile := ""
 }
 
 CfgCapture:
@@ -4845,9 +5255,14 @@ CfgCapture:
         GuiControl, Cfg:, CfgClickPos, % "at " . capX . ", " . capY
         GuiControl, Cfg:, CfgTypeClick, 1
     }
+    UpdateConfigPreview()
 Return
 
 CfgOK:
+    if (ConfiguringProfile != ActiveProfile) {
+        CloseButtonConfig()
+        Return
+    }
     Gui, Cfg:Submit, NoHide
     if (CfgTypeKey) {
         sendKey := GSProKeyMap.HasKey(CfgKeyChoice) ? GSProKeyMap[CfgKeyChoice] : ""
@@ -4887,7 +5302,7 @@ CfgOK:
         SecX[ConfiguringBtnId] := 0
         SecY[ConfiguringBtnId] := 0
     }
-    Gui, Cfg:Destroy
+    CloseButtonConfig()
     SaveProfile(ActiveProfile)
     UpdateBuilderLabels()
     GuiControl, Builder:, BuilderStatus, % ConfiguringDisplayName . ": secondary updated  (saved)"
@@ -4895,7 +5310,8 @@ Return
 
 CfgCancel:
 CfgGuiClose:
-    Gui, Cfg:Destroy
+CfgGuiEscape:
+    CloseButtonConfig()
 Return
 
 ; ============================================================
@@ -4985,13 +5401,30 @@ RefreshBuilderIfOpen() {
         }
     }
     UpdateBuilderLabels()
-    GuiControl, Builder:, BuilderStatus, Now editing profile: %ActiveProfile%
+    RefreshBuilderPresetControls()
+}
+
+RefreshBuilderPresetControls() {
+    global ActiveProfile
+    editable := !IsPresetProfile(ActiveProfile)
+    GuiControl, Builder:Enable%editable%, FnChoice
+    GuiControl, Builder:Enable%editable%, BuilderResetBtn
+    controls := "BtnHeatmap|BtnPutt|BtnFlyover|BtnClubup|BtnClubdown|BtnLeft|BtnRight|BtnUp|BtnDown|BtnResetaim|BtnTeeleft|BtnTeeright|BtnShotcam"
+    Loop, Parse, controls, |
+        GuiControl, Builder:Enable%editable%, %A_LoopField%
+    note := editable ? "Editable copy - changes auto-save" : "Built-in preset - read only"
+    GuiControl, Builder:, BuilderLockNote, %note%
+    status := editable ? "Click a button to set its FN secondary. Yellow text shows the current action. Changes auto-save."
+        : "This preset matches the box print. Choose Customize a Copy above to change any secondary functions."
+    GuiControl, Builder:, BuilderStatus, %status%
 }
 
 ; ============================================================
 ;  BUILDER RESET / CLOSE
 ; ============================================================
 BuilderReset:
+    if (IsConfigDialogOpen())
+        Return
     Gui, Builder:+OwnDialogs
     if (IsPresetProfile(ActiveProfile)) {
         MsgBox, 64, Built-In Preset, "%ActiveProfile%" is a built-in preset and cannot be reset or changed.`n`nTo customize: create a new profile (+ New on the main window).
@@ -5009,6 +5442,10 @@ Return
 
 BuilderClose:
 BuilderGuiClose:
+    if (IsConfigDialogOpen())
+        Return
+    ScrollViews.Delete(BuilderHwnd)
+    BuilderHwnd := 0
     Gui, Builder:Destroy
 Return
 
@@ -5027,7 +5464,8 @@ Return
 DoCleanup() {
     global RegistryRunKey, RegistryRunName, ConfigDir, ProfilesDir, ConfigFile, TriggerFile
     Gui, Main:+OwnDialogs
-    MsgBox, 4 + 48, Cleanup, This will remove EVERYTHING BARemapper has created:`n`n  - Windows Startup folder shortcut`n  - Any legacy registry boot entry`n  - All profile files`n  - Settings file`n  - Temp files`n`nYour BARemapper.exe is NOT touched.`nThe app will then exit so you can start fresh.`n`nContinue?
+    Gui, Factory:+OwnDialogs
+    MsgBox, 4 + 48 + 256, Factory Reset, Remove all saved profiles, settings and Start with Windows?`n`nThe program and diagnostic logs stay. BA Remapper will exit.`n`nFor an incorrect OCR click, choose No and use Reset Smart Click Spots instead.
     IfMsgBox, No
         return
 
@@ -5065,7 +5503,7 @@ DoCleanup() {
             FileRemoveDir, %ConfigDir%
     }
 
-    MsgBox, 64, Cleanup, Cleanup complete.`n`nBARemapper will now exit.`nLaunch it again any time to start fresh.
+    MsgBox, 64, Factory Reset, Profiles, settings and Start with Windows removed.`n`nBA Remapper will now exit. Launch it again to start fresh.
     ; Skip OnExit-driven save (it would just recreate settings.ini)
     ExitApp
 }
@@ -5521,4 +5959,5 @@ WaitForAsync(ByRef Object) {
     ObjRelease(Object)
     Object := ObjectResult
 }
+
 

@@ -24,6 +24,15 @@ The installer puts BA Remapper in Program Files, adds it to the Start Menu and *
 
 ---
 
+## Quick Start
+
+1. Choose **Basic Secondary** for the yellow functions printed on the box.
+2. Turn **Button Mapping ON**. Tap for a white function; hold Reset Aim (A) and tap another button for its yellow function. FN + either club button sends Clear View (B).
+3. To change a function, choose **Customize a Copy**, give it a name, open the Builder, click a button, choose the action, and **Save**. The original preset and Windows Startup Profile stay unchanged. **New Blank** starts without secondary actions.
+4. Optional: choose **Use Current Profile at Windows Startup**, then check **Start with Windows**.
+
+**Button Mapping and Scramble Auto-Pick have separate status indicators.** Turning mapping off with Ctrl+F12 does not turn Auto-Pick off; use its own checkbox. **Reset Smart Click Spots** clears only learned OCR positions and temporary click caches so the next press reads the screen and learns again. Profiles, startup preferences, and Taught Screen Click positions are kept.
+
 ## What It Does
 
 ### Primary keys — always working
@@ -57,7 +66,7 @@ Select **Basic Secondary** from the profile dropdown and the yellow print on the
 | AIM LEFT | Next Option |
 | AIM RIGHT | Drop Ball / Rehit |
 
-The preset is locked so it always matches the print — it can't be edited, reset, or renamed. Pressing **Del** on it restores factory defaults instantly. To customize, create your own profile with **+ New**.
+The preset is locked so it always matches the print — it can't be edited, reset, or renamed. Its **Restore** button restores that preset only. To customize, use **Customize a Copy** to keep its working functions in an editable profile; **New Blank** starts with no secondaries.
 
 ### Auto-Pick Scramble
 Turn on the checkbox and BA Remapper watches for GSPro's scramble shot-select cards whenever the app is running. After your chosen delay (5 / 10 / 15 / 20 seconds, with an optional on-screen countdown), it picks the best ball by pressing its shot key (1–4):
@@ -73,13 +82,13 @@ The cards are read over and over while the countdown runs (every 2 seconds, from
 Lie and shot number are read from each card's lie row only, so a player name like "Woods" or "Sandy" can never be mistaken for a lie. The row is read whether the screen reader returns it as one piece ("ROUGH 4TH") or two, and a single misread letter ("R0UGH") is tolerated. When the screen reader skips a card's distance (it can miss one on the putting-green grid, and skips a lone digit like "8"), that card's distance area is read again close up. Pick manually any time — when the cards close, the countdown cancels silently. If nothing can be decided by zero, it keeps reading a few more seconds; if the cards still can't be read completely, the picker stands down and leaves the choice to the players. It never guesses. Works with 2, 3, or 4 player groups. The setting is global (all profiles).
 
 ### Button Builder
-The Builder window mirrors the physical panel — same layout, with each button's current secondary printed in yellow beneath it, exactly like the box. Click any button to set its secondary in one dialog (hotkey list, Smart Click list, position capture, or none). Everything auto-saves the moment you change it.
+The Builder window mirrors the physical panel — same layout, with each button's current secondary printed in yellow beneath it, exactly like the box. Click any button to set its secondary in one dialog (hotkey list, Smart Click list, position capture, or none). The action dialog shows a plain-language preview, enables only the selected action type, and applies the action when you press **Save**. Cancel leaves the profile unchanged. Other Builder changes save automatically. The FN modifier itself explains its role instead of offering a secondary that cannot fire. Built-in presets are visibly read only and offer **Customize a Copy**.
 
 ### Profiles
-Each profile is a plain .ini file in the profiles folder — copy them, back them up, share them. The **Boot Profile** (tagged [BOOT]) is what loads at Windows startup, kept separate from whatever you're experimenting with, so the sim always boots into a known state.
+Each profile is a plain .ini file in the profiles folder — copy them, back them up, share them. The **Windows Startup Profile** (tagged [BOOT]) is what loads at Windows startup, kept separate from whatever you're experimenting with, so the sim always boots into a known state.
 
 ### Start with Windows
-Check the box and BA Remapper launches hidden at every boot — straight to the tray, Boot Profile loaded, mapping ON, nothing to touch. The tray balloon confirms it, and the green BA icon's tooltip shows the live state. The startup chain is self-healing: the app repairs its startup shortcut, re-enables itself if Windows' Startup-apps list has it disabled, clears the download flag that can silently block logon launches, and writes every launch to `launch_log.txt` so boot behavior is never a mystery.
+Check the box and BA Remapper launches hidden at every boot — straight to the tray, Windows Startup Profile loaded, mapping ON, nothing to touch. The tray balloon confirms it, and the green BA icon's tooltip shows the live state. The startup chain is self-healing: the app repairs its startup shortcut, re-enables itself if Windows' Startup-apps list has it disabled, clears the download flag that can silently block logon launches, and writes every launch to `launch_log.txt` so boot behavior is never a mystery.
 
 ---
 
@@ -103,7 +112,11 @@ Everything lives in `Documents\BA Custom Products\Remapper\` — visible, plain 
 
 The **OCR Test** button (main window and tray menu) scans the GSPro window on demand and opens the result in Notepad — the first stop for any "it didn't click" question. With scramble cards on screen it also shows which card the auto-pick would choose from that exact frame (no key is sent).
 
-**Cleanup / Reset** removes the auto-start entry and all data files if you ever want a factory-fresh start or a clean uninstall. Deleting the folder plus the exe removes every trace.
+**Reset Smart Click Spots** is the everyday OCR reset: it clears saved spots and temporary repeat/scan/verification caches. Release FN and let any current screen read finish before using it. The next Smart Click performs a fresh learn. It does not change profiles, settings, auto-start, or Taught Screen Clicks.
+
+**Factory Reset** is a separate action with explicit confirmation and an optional backup enabled by default. It removes profiles, preferences and the auto-start shortcut, then exits. Backups go beside the Remapper folder under `Remapper Backups`, outside the folder being reset. The program and diagnostic logs remain. Use Windows Add/Remove Programs to uninstall an installed copy.
+
+The main window, Builder and action editor can be resized and scrolled when they exceed the available screen area. Text keeps its normal Windows scaling, and reopening a window moves it back into a connected monitor's usable area.
 
 ---
 
@@ -121,11 +134,15 @@ The **OCR Test** button (main window and tray menu) scans the GSPro window on de
 
 **A box button does nothing** — press it a few times, then open tray menu → **Key Test (last keys received)** (F5 in that window refreshes it). A button that never shows up there isn't reaching the PC at all — a hardware problem, not a settings one.
 
+**FN keyboard actions are missed** — the app focuses GSPro and holds each secondary key for 60 ms. If GSPro runs as administrator and BA Remapper does not, Windows can block injected input; run both at the same privilege level. Confirm Button Mapping is ON and the intended profile is selected. Smart Clicks and primary key behavior are separate paths.
+
 **Typing goes weird in other apps** — mapping is ON and catching your keys. Ctrl+F12 toggles it off instantly.
 
 ---
 
 ## Version History
+
+**v5.1.0** — Separate mapping/Auto-Pick status, Customize a Copy, visibly locked presets, action previews and modal Save/Cancel editing, readable scrollable settings windows, clearer Windows Startup Profile wording, Quick Start, and an OCR-only Reset Smart Click Spots that also clears transient click caches. Factory reset is separate and offers backup first. Repeated FN-down events no longer cause an extra Reset Aim when FN is released. FN hotkeys focus GSPro and use a 60 ms key press instead of an instantaneous SendInput tap; primary keys, Smart Click matching/learning and scramble choice logic are unchanged. Game behavior still needs a live GSPro check on the sim PC.
 
 **v5.0.9** — Basic Secondary: Clear View (B) now works with FN on either club button. On a box whose club buttons send I and K the other way round (the reason to tick Swap Club Up/Down), FN + Club Down landed on Club Up, which had nothing assigned, so Clear View did nothing. The key trace now logs the key a secondary sent, an FN combo with nothing assigned, and the active profile.
 
@@ -155,3 +172,4 @@ The complete application source (`BARemapper.ahk`) and the installer script (`BA
 
 BA Custom Products — bacustomproducts@gmail.com
 Include the relevant file from the Diagnostics table above and it's usually a one-reply fix.
+
