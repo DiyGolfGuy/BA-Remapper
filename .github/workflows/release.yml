@@ -1,0 +1,46 @@
+name: Publish Remapper release
+on:
+  push:
+    branches: [main]
+    paths: [release-version.txt, .github/workflows/release.yml, scripts/package-release.ps1]
+permissions:
+  contents: write
+concurrency:
+  group: remapper-release
+  cancel-in-progress: false
+jobs:
+  release:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Build, verify upgrade and package
+        shell: pwsh
+        run: ./scripts/package-release.ps1
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Remapper_release_verification
+          path: |
+            verification/
+            dist/
+      - name: Publish complete release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $version = (Get-Content release-version.txt -Raw).Trim()
+          $tag = "v$version"
+          $existing = gh release view $tag --json isDraft --jq .isDraft 2>$null
+          if ($LASTEXITCODE -eq 0 -and $existing -ne 'true') { throw 'Refusing to replace an already public release' }
+          if ($LASTEXITCODE -ne 0) {
+            gh release create $tag --target $env:GITHUB_SHA --title "BA Remapper $tag - setup improvements and FN hotkey fix" --notes-file RELEASE_NOTES.md --draft
+            if ($LASTEXITCODE -ne 0) { throw 'Draft release creation failed' }
+          }
+          $assets = (Get-ChildItem dist -File).FullName
+          gh release upload $tag @assets --clobber
+          if ($LASTEXITCODE -ne 0) { throw 'Release upload failed' }
+          gh release edit $tag --draft=false --latest
+          if ($LASTEXITCODE -ne 0) { throw 'Release publication failed' }
