@@ -1,9 +1,16 @@
 $ErrorActionPreference = 'Stop'
+# Upgrade verification seeds Documents and installs both versions. Never
+# run that fixture on a user's simulator PC or development workstation.
+if ($env:GITHUB_ACTIONS -ne 'true' -or $env:RUNNER_OS -ne 'Windows') {
+    throw 'Packaging with upgrade verification requires a disposable GitHub Windows runner. Do not run on a simulator PC.'
+}
 Set-Location (Split-Path $PSScriptRoot -Parent)
+& "$PSScriptRoot/../tests/verify_release_request.ps1"
 $version = (Get-Content release-version.txt -Raw).Trim()
 if ($version -notmatch '^\d+\.\d+\.\d+$') { throw 'Invalid release version' }
 if (!(Select-String -Path BARemapper.ahk -SimpleMatch ('AppVersion := "' + $version + '"') -Quiet)) { throw 'App version mismatch' }
 if (!(Select-String -Path BARemapper_Setup.nsi -SimpleMatch ('!define VERSION "' + $version + '"') -Quiet)) { throw 'Installer version mismatch' }
+if (!(Select-String -Path HOW_TO_USE.txt -SimpleMatch ('BA REMAPPER ' + $version + ' - HOW TO USE') -Quiet)) { throw 'How-to version mismatch' }
 
 $ahk = "$env:RUNNER_TEMP/ahk"
 Invoke-WebRequest https://github.com/AutoHotkey/AutoHotkey/releases/download/v1.1.37.02/AutoHotkey_1.1.37.02.zip -OutFile "$env:RUNNER_TEMP/ahk.zip"
@@ -28,6 +35,7 @@ if ($LASTEXITCODE -ne 0 -or !(Test-Path "BARemapper_Setup_v$version.exe")) { thr
 # Upgrade an actual v5.0.9 installation on this disposable Windows runner.
 # Seed a custom profile and preferences; both must survive both installs.
 $config = Join-Path ([Environment]::GetFolderPath('MyDocuments')) 'BA Custom Products/Remapper'
+if (Test-Path $config) { throw 'Refusing to seed upgrade tests over an existing Remapper configuration' }
 New-Item "$config/profiles" -ItemType Directory -Force | Out-Null
 Set-Content "$config/settings.ini" "[App]`r`nActiveProfile=UpgradeTest`r`nStartupProfile=UpgradeTest`r`nScrambleAutoPick=0`r`nScrambleDelay=15`r`n" -Encoding unicode
 Set-Content "$config/profiles/UpgradeTest.ini" "[Profile]`r`nFnButtonId=resetaim`r`nclubdown_Type=key`r`nclubdown_Value=b`r`n" -Encoding unicode
@@ -51,13 +59,14 @@ foreach ($installer in @($previous.FullName, (Join-Path $pwd "BARemapper_Setup_v
     if ((Get-FileHash "$config/settings.ini").Hash -ne $beforeSettings -or (Get-FileHash "$config/profiles/UpgradeTest.ini").Hash -ne $beforeProfile) { throw 'Installer changed existing settings/profile' }
 }
 if ((Get-FileHash "$installDir/BARemapper.exe").Hash -ne (Get-FileHash BARemapper.exe).Hash) { throw 'Upgrade did not install the new binary' }
+if (!(Test-Path "$installDir/HOW_TO_USE.txt") -or (Get-FileHash "$installDir/HOW_TO_USE.txt").Hash -ne (Get-FileHash HOW_TO_USE.txt).Hash) { throw 'Installed how-to guide missing or incorrect' }
 if (!(Test-Path "$installDir/Uninstall.exe")) { throw 'Uninstaller missing after upgrade' }
 Write-Host 'PASS: v5.0.9 to new-version installer upgrade preserved profiles/preferences and installed the exact new binary'
 
 New-Item dist -ItemType Directory -Force | Out-Null
 Compress-Archive -Path "BARemapper_Setup_v$version.exe" -DestinationPath "dist/BARemapper_Setup_v$version.zip" -Force
 Copy-Item README.md "$env:RUNNER_TEMP/README.txt"
-Compress-Archive -Path BARemapper.exe,"$env:RUNNER_TEMP/README.txt" -DestinationPath "dist/BARemapper_v${version}_portable.zip" -Force
+Compress-Archive -Path BARemapper.exe,HOW_TO_USE.txt,"$env:RUNNER_TEMP/README.txt" -DestinationPath "dist/BARemapper_v${version}_portable.zip" -Force
 $sums = Get-ChildItem dist -Filter '*.zip' | Sort-Object Name | ForEach-Object { "{0}  {1}" -f (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower(), $_.Name }
 [IO.File]::WriteAllText((Join-Path $pwd 'dist/SHA256SUMS.txt'), ($sums -join "`n") + "`n", [Text.UTF8Encoding]::new($false))
 Write-Host "PASS: release $version packaged with SHA-256 checksums"

@@ -47,7 +47,8 @@ def static_checks(source, baseline):
         "LearnSpots", "SpotFastResolve", "SpotSlot2Confirm", "SaveSpots",
         "LoadSpots", "DpiClickAt", "DpiRepeatClick", "GsproWinRect",
         "ClientRectByTitle", "ScrambleDecide", "ScrambleSendPick",
-        "ScrambleCardsStillUp",
+        "ScrambleCardsStillUp", "ScrambleVoteLeader", "ScrambleCountRead",
+        "ScrambleVoteSummary", "ScrambleKeepRead",
         "SetAutoStart", "EnsureStartupApproved", "RefreshAutoStartPath",
         "ScanWinClient", "ScanScreen", "OcrRegion", "ocr_words",
     ]
@@ -61,29 +62,57 @@ def static_checks(source, baseline):
     ]:
         # Section comments may surround a block; compare the complete original block.
         old = baseline[baseline.index(start):baseline.index(end, baseline.index(start))]
-        assert old in source, f"Unexpected change to preserved section: {start}"
+        if start == "ScrambleWork:":
+            # v5.1.2 adds just one recovery call; countdown, cancellation,
+            # voting, cooldown, and sending logic must remain untouched.
+            old = old.replace('    scrUses := FindAllLinesExact(scrScan, "use")',
+                              '    scrScan := ScrambleRecoverCards(scrScan)\n    scrUses := FindAllLinesExact(scrScan, "use")', 1)
+        # The highlight only observes reads and hides before sending. Strip
+        # the explicitly tagged visual hooks, then require the original
+        # watcher/cancel/deadline/send code, including its branch structure.
+        preserved = source.replace('        if (ScrambleCardsStillUp()) { ; preview only',
+                                   '        if (ScrambleCardsStillUp())')
+        preserved = "\n".join(line for line in preserved.split("\n") if not line.endswith('; preview only'))
+        assert old in preserved, f"Unexpected change to preserved section: {start}"
+    for name in ["ScrambleResetReads", "OcrLockTake"]:
+        current = function(source, name)
+        current = current.replace('global OcrBusy, OcrBusySince, ScramblePreviewExcluded, CdVisible, ScrambleFrameVisible',
+                                  'global OcrBusy, OcrBusySince')
+        current = "\n".join(line for line in current.split("\n") if not line.endswith('; preview only'))
+        assert current == function(baseline, name), f"Unexpected non-visual change: {name}"
     # v5.1.1 changed the two distance parsers on purpose: typographic
     # quote marks are normalized first, because the Unicode 64-bit build
     # receives them as real Unicode characters (the 32-bit ANSI build got
-    # cp1252 bytes 145-148). Apart from that one call, both are unchanged.
-    for name, old_line, new_line in [
-        ("ScrambleParseDistance", "t := ScrambleStripMarks(text)", "t := ScrambleStripMarks(ScrambleNormQuotes(text))"),
-    ]:
-        assert function(source, name) == function(baseline, name).replace(old_line, new_line, 1), f"Unexpected core change: {name}"
+    # cp1252 bytes 145-148). v5.1.2 also sends both letter-recovery paths
+    # through the same distance guard instead of bypassing it.
+    expected_parser = function(baseline, "ScrambleParseDistance").replace(
+        "t := ScrambleStripMarks(text)", "t := ScrambleStripMarks(ScrambleNormQuotes(text))", 1
+    ).replace("return fm1 * 12 + fm2", "return ScrambleFtIn(fm1, fm2)")
+    assert function(source, "ScrambleParseDistance") == expected_parser, "Unexpected distance-parser change"
     assert "0x201D" in function(source, "ScrambleNormQuotes"), "Curly inch mark normalized"
     # FeetInches also changed on purpose (real Windows OCR read 29' 7" as
-    # "291 71'"): a lone trailing ' is the inch mark, and every result goes
-    # through ScrambleFtIn (inches 0-11, no green distance over 199 ft).
+    # "291 71'"): only a tick after TWO numbers is a misread inch mark.
+    # A single feet-only number such as 100' keeps its actual feet mark.
     feet = function(source, "FeetInches")
     assert "t := ScrambleNormQuotes(raw)" in feet and feet.count("ScrambleFtIn(") == 4 and "* 12 +" not in feet, "FeetInches routes every result through ScrambleFtIn"
+    # Exercise the actual production regex, without a second parser
+    # implementation. These patterns have the same syntax in PCRE/Python.
+    pattern = re.search(r'RegExMatch\(t, "([^"\n]+)"\)\)\n\s*t := RegExReplace', feet)
+    assert pattern, "Missing trailing-tick classification pattern"
+    for reading, inch_tick in [("100'", False), ("111'", False), ("199'", False),
+                               ("28'", False), ("100 '", False), ("291 71'", True),
+                               ("141 7'", True), ("29' 7'", False)]:
+        assert bool(re.search(pattern[1], reading)) == inch_tick, f"Wrong trailing-tick interpretation: {reading}"
+    print("PASS: 8 production trailing-tick regex cases preserve feet-only readings")
     assert "ft > 199" in function(source, "ScrambleFtIn"), "Oversized green distance refused"
+    assert 'ScrambleRecoverCards(scrScan)' in source, "Scramble watcher uses the card recovery path"
     assert 'SendMode, Input' in source  # Primary-key and scramble output mode preserved.
     assert 'if (FnIsDown)\n            return' in function(source, "HandleBoxKeyDown")
     assert 'SetKeyDelay, 15, 60' in function(source, "SendSecondaryKey")
     assert 'SendEvent, %keys%' in function(source, "SendSecondaryKey")
     assert 'gResetSmartSpots, Reset Smart Click Spots' in source
     assert 'gOnCleanup,' not in source
-    print(f"PASS: {len(unchanged)} core functions, diagnostics, hotkeys and exit preserved; distance parsers changed only as documented (quote marks, inch-mark misreads)")
+    print(f"PASS: {len(unchanged)} core functions, diagnostics, hotkeys and exit preserved; preview hooks do not change voting, deadlines, cancellation or shot-key delivery")
 
 
 SINK = r'''
@@ -348,12 +377,23 @@ ScrambleSmoke:
             , ["14" . rs . "7" . rd, 1, 175], ["141 7" . rd, 1, 175], ["33110" . rd, 1, 406], ["14" . pr . " 7" . pd, 1, 175]
             , ["291 71'", 1, 355], ["29' 71" . q, 1, 355], ["28'", 1, 336], ["5' 11" . q, 1, 71], ["33110", 1, -1], ["9' 74" . q, 1, -1]
             , ["189", 0, 6804], ["8", 0, 288], ["15", 0, 540], ["!4E", 0, -1], ["l 87", 0, 3132]]
+        cases.Push(["100'", 1, 1200], ["111'", 1, 1332], ["199'", 1, 2388], ["100 '", 1, 1200])
+        cases.Push(["100" . rs, 1, 1200], ["111" . pr, 1, 1332], ["100' 0" . q, 1, 1200])
+        cases.Push(["291 71" . rs, 1, 355], ["8'", 0, 96], ["8", 1, 96], ["8", 0, 288])
+        cases.Push(["200'", 1, -1], ["200l 7u", 1, -1], ["200l Ou", 1, -1], ["199l 7u", 1, 2395])
         for i, c in cases {
             got := ScrambleParseDistance(c[1], c[2])
             ScrambleNote((got = c[3]) ? "PASS" : "FAIL", "parse [" . c[1] . "] " . (c[2] ? "green" : "yards") . " -> " . got . " (want " . c[3] . ")")
             if (got != c[3])
                 fails += 1
         }
+        ; The recovery rectangle follows GSPro, including negative
+        ; desktop origins, and never extends outside its client area.
+        band := ScrambleCardBand({x: -1920, y: -400, w: 1920, h: 1080})
+        bandOk := (band.x = -1920 && band.y = -130 && band.w = 1920 && band.h = 540)
+        ScrambleNote(bandOk ? "PASS" : "FAIL", "card strip preserves negative monitor coordinates")
+        if (!bandOk)
+            fails += 1
         if (A_Args[1] = "ocr") {
             ; ---- real Windows OCR on rendered scramble cards ----
             sc := []
@@ -364,12 +404,15 @@ ScrambleSmoke:
             sc.Push({name: "green 9' 2 beats fringe 3 yds", want: 2, cards: [["CARTER", "3", "FRINGE   4TH"], ["AL", "9' 2" . q, "GREEN   4TH"]]})
             sc.Push({name: "yards: fairway 2nd 179 beats tee 3rd 363", want: 2, cards: [["CARTER", "363", "TEE   3RD"], ["AL", "179", "FAIRWAY   2ND"]]})
             sc.Push({name: "three cards 212 / 87 / 143", want: 2, cards: [["AL", "212", "FAIRWAY   2ND"], ["ADY", "87", "FAIRWAY   2ND"], ["BOB", "143", "FAIRWAY   2ND"]]})
+            sc.Push({name: "four cards 212 / 87 / 143 / 98", want: 2, cards: [["AL", "212", "FAIRWAY   2ND"], ["ADY", "87", "FAIRWAY   2ND"], ["BOB", "143", "ROUGH   2ND"], ["JIM", "98", "ROUGH   2ND"]], cw: 200, gap: 30})
+            sc.Push({name: "green feet only 100 vs 99", want: 2, cards: [["AL", "100'", "GREEN   3RD"], ["BOB", "99'", "GREEN   3RD"]]})
+            sc.Push({name: "fewest strokes beats green preference", want: 2, cards: [["AL", "1' 0" . q, "GREEN   3RD"], ["BOB", "100", "FAIRWAY   2ND"]]})
             for i, s in sc {
-                ShowCards(s.cards)
+                ShowCards(s.cards, s.HasKey("cw") ? s.cw : 210, s.HasKey("gap") ? s.gap : 50)
                 ScrambleResetReads()
                 seen := ""
                 Loop, 3 {
-                    scan := ScanWinClient(GSProWinNeedle, GSProWinExclude)
+                    scan := ScrambleRecoverCards(ScanWinClient(GSProWinNeedle, GSProWinExclude))
                     uses := FindAllLinesExact(scan, "use")
                     n := uses.MaxIndex()
                     lc := scan.lines.MaxIndex()
@@ -398,8 +441,8 @@ ScrambleSmoke:
                     for k, cd in lr.cards
                         reads .= "  card " . k . ": " . cd.lie . " shot " . cd.shot . " dist " . cd.dist . " [" . cd.distRaw . "]"
                 }
-                ScrambleNote((pick = s.want) ? "PASS" : (InStr(s.name, "three cards") ? "KNOWN" : "FAIL"), "OCR " . s.name . ": picked " . pick . " (want " . s.want . ", " . ScrambleVoteSummary() . "; reads saw " . seen . ")" . reads)
-                if (pick != s.want && !InStr(s.name, "three cards"))
+                ScrambleNote((pick = s.want) ? "PASS" : "FAIL", "OCR " . s.name . ": picked " . pick . " (want " . s.want . ", " . ScrambleVoteSummary() . "; reads saw " . seen . ")" . reads)
+                if (pick != s.want)
                     fails += 1
             }
             ; ---- known Windows OCR behavior (2026-10-27, windows-latest) ----
@@ -416,6 +459,14 @@ ScrambleSmoke:
                 ww := 1000, wh := 540
                 scan := ScanWinClient(GSProWinNeedle, GSProWinExclude)
                 r := e[1] . ": full " . Cnt(FindAllLinesExact(scan, "use"))
+                recovered := ScrambleRecoverCards(scan)
+                actualN := Cnt(FindAllLinesExact(recovered, "use"))
+                ScrambleResetReads()
+                actualPick := actualN >= 2 ? ScrambleDecide(recovered, FindAllLinesExact(recovered, "use"), "", true) : 0
+                ok := (actualN = e[2].MaxIndex() && actualPick = 2)
+                ScrambleNote(ok ? "PASS" : "FAIL", e[1] . " recovery sees " . actualN . " cards and picks " . actualPick)
+                if (!ok)
+                    fails += 1
                 big := OcrRegionScaled(0, 0, ww, wh, 2)
                 r .= " | 2x " . Cnt(FindAllLinesExact(big, "use"))
                 band := OcrRegion(0, 150, ww, 250)
@@ -424,8 +475,21 @@ ScrambleSmoke:
                 r .= " | thirds " . TileUses(0, 0, ww, wh, 3)
                 r .= " | quarters " . TileUses(0, 0, ww, wh, 4)
                 r .= "   (USE found; " . e[2].MaxIndex() . " cards)"
-                ScrambleNote("KNOWN", r)
+                ScrambleNote("INFO", r)
             }
+            ; No cards and a single USE are not a scramble trigger.
+            ShowCards([])
+            empty := ScrambleRecoverCards(ScanWinClient(GSProWinNeedle, GSProWinExclude))
+            ok := (Cnt(FindAllLinesExact(empty, "use")) = 0)
+            ScrambleNote(ok ? "PASS" : "FAIL", "no cards remains unarmed")
+            if (!ok)
+                fails += 1
+            ShowCards([["AL", "212", "FAIRWAY   2ND"]])
+            single := ScrambleRecoverCards(ScanWinClient(GSProWinNeedle, GSProWinExclude))
+            ok := (Cnt(FindAllLinesExact(single, "use")) < 2)
+            ScrambleNote(ok ? "PASS" : "FAIL", "one card remains unarmed")
+            if (!ok)
+                fails += 1
             Loop, 4 {
                 Gui, SmokeUse%A_Index%:Destroy
                 Gui, SmokeCard%A_Index%:Destroy
@@ -525,6 +589,225 @@ ShowCards(cards, cw := 210, gap := 50, hud := false) {
     }
     WinWait, ahk_id %SmokeCardsHwnd%, , 3
     Sleep, 1200
+}
+'''
+
+
+PREVIEW = r'''
+PreviewSmoke:
+    SetTimer, ScrambleTick, Off
+    SetTimer, CdTick, Off
+    SetTimer, OcrWarmup, Off
+    try {
+        ; Geometry uses physical coordinates at 1x/2x and negative
+        ; desktop origins, for every card in 2/3/4-player groups.
+        for a, n in [2, 3, 4] {
+            for b, scale in [1, 2] {
+                wr := {found: true, hwnd: 1, x: -2000, y: -500, w: 1000 * scale, h: 540 * scale}
+                us := []
+                Loop, %n%
+                    us.Push({x: wr.x + (100 + (A_Index - 1) * 230) * scale, y: wr.y + 320 * scale, w: 32 * scale, h: 16 * scale})
+                Loop, %n% {
+                    chosen := A_Index
+                    r := ScramblePreviewRect(us, chosen, wr)
+                    Assert(IsObject(r) && r.x >= wr.x && r.y >= wr.y && r.x + r.w <= wr.x + wr.w && r.y + r.h <= wr.y + wr.h, "Frame stays in game at negative origin " . n . "/" . chosen . "/" . scale)
+                    for k, u in us {
+                        if (k != chosen)
+                            Assert(u.x + u.w / 2 < r.x || u.x + u.w / 2 > r.x + r.w, "Frame excludes neighboring card " . n . "/" . chosen . "/" . k)
+                    }
+                }
+            }
+        }
+        wr := {found: true, hwnd: 1, x: -2000, y: -500, w: 1000, h: 540}
+        us := [{x: -1700, y: -180, w: 32, h: 16}, {x: -1400, y: -180, w: 32, h: 16}]
+        examples := [{reason: "Fewest strokes", inches: 175, green: false, raw: "14" . Chr(0x2019) . "7" . Chr(0x201D), lie: "fringe", shot: 2, otherShot: 3, otherDist: 72}
+            , {reason: "Green preferred", inches: 110, green: true, raw: "91 2" . Chr(34), lie: "green", shot: 4, otherShot: 4, otherDist: 108}]
+        for i, ex in examples {
+            ScrambleResetReads()
+            ScrambleCountRead(2, 1)
+            ScrambleLastRead := {n: 2, winner: 1, cards: [{dist: ex.inches, green: ex.green, distRaw: ex.raw, lie: ex.lie, shot: ex.shot}
+                , {dist: ex.otherDist, green: false, distRaw: "3", lie: "fringe", shot: ex.otherShot}]}
+            ScrambleRememberPreview({win: wr}, us)
+            example := ScramblePreviewModel(wr)
+            Assert(example.reason = ex.reason, "Preview explains actual ranking: " . ex.reason)
+            wanted := (ex.inches // 12) . Chr(0x2032) . " " . Mod(ex.inches, 12) . Chr(0x2033)
+            Assert(InStr(example.detail, wanted), "Preview normalizes explicit/green feet marks: " . wanted)
+        }
+        q := Chr(34)
+        for scenario, n in [2, 4] {
+            cards := [["CARTER", "28' 0" . q, "GREEN   4TH"], ["AL", "29' 7" . q, "GREEN   4TH"]]
+            if (n = 4)
+                cards := [["AL", "212", "FAIRWAY   2ND"], ["ADY", "87", "FAIRWAY   2ND"], ["BOB", "143", "ROUGH   2ND"], ["JIM", "98", "ROUGH   2ND"]]
+            ShowCards(cards, n = 4 ? 200 : 210, n = 4 ? 30 : 50)
+            WinActivate, ahk_id %SmokeCardsHwnd%
+            WinWaitActive, ahk_id %SmokeCardsHwnd%, , 3
+            ScrambleResetReads()
+            scan := ScrambleRecoverCards(ScanWinClient(GSProWinNeedle, GSProWinExclude))
+            uses := FindAllLinesExact(scan, "use")
+            winner := ScrambleDecide(scan, uses, "", true)
+            ScrambleCountRead(Cnt(uses), winner)
+            ScrambleRememberPreview(scan, uses)
+            ScrambleAutoPick := true
+            ScrambleCountdown := true
+            ScrambleArmedTick := A_TickCount
+            ScrambleCoolDown := false
+            ScrambleMissTicks := 0
+            model := ScramblePreviewModel(scan.win)
+            Assert(IsObject(model) && model.pick = (n = 4 ? 2 : 1), "Preview matches voted card in " . n . "-card real OCR scene")
+            Assert(InStr(model.detail, n = 4 ? "87 yd" : "28" . Chr(0x2032) . " 0" . Chr(0x2033)), "Preview displays parsed units in " . n . "-card scene: " . model.detail)
+            activeBefore := WinExist("A")
+            Gosub, CdTick
+            Assert(CdVisible && ScrambleFrameVisible, "Countdown and frame are shown for " . n . " cards")
+            Assert(WinExist("A") = activeBefore, "Showing preview keeps GSPro focused")
+            Assert(ScramblePreviewExcluded, "Windows confirms all preview windows excluded from capture")
+            for i, h in ScramblePreviewWindows {
+                WinGet, style, ExStyle, ahk_id %h%
+                Assert((style & 0x08080020) = 0x08080020, "Overlay is layered, transparent and no-activate " . i)
+            }
+            ; The actual production reader must still see the cards, with
+            ; all five overlays visible. No screenshot-only OCR substitute.
+            again := ScrambleRecoverCards(ScanWinClient(GSProWinNeedle, GSProWinExclude))
+            againUses := FindAllLinesExact(again, "use")
+            againWinner := ScrambleDecide(again, againUses, "", true)
+            Assert(Cnt(againUses) = n && againWinner = winner, "Visible preview does not contaminate real OCR for " . n . " cards")
+            Assert(ScrambleCardsStillUpForTest(uses), "USE-strip confirmation still succeeds under preview")
+            ; Temporarily remove display affinity solely to capture the
+            ; user-visible composition as evidence, then restore it.
+            CapturePreview(scan.win, "scramble-preview-" . n)
+            OnMessage(0x201, "PreviewClick")
+            PreviewClickRoot := 0
+            u := uses[model.pick]
+            DpiClickAt(u.x + u.w // 2, u.y + u.h // 2)
+            Assert(PreviewClickRoot = SmokeCardsHwnd, "Click reaches original USE button under preview")
+            PreviewClickRoot := 0
+            DpiClickAt(model.rect.x + 1, model.rect.y + model.rect.h // 2)
+            Assert(PreviewClickRoot = SmokeCardsHwnd, "Click passes through highlight border to GSPro")
+            OnMessage(0x201, "")
+            Assert(WinExist("A") = SmokeCardsHwnd, "Click-through preview leaves game focused")
+            ; Vote leader is the real pick even when the latest read
+            ; votes differently. Partial sets cannot misnumber a frame.
+            ScrambleCountRead(n, winner)
+            other := winner = 1 ? 2 : 1
+            ScrambleCountRead(n, other)
+            ScrambleLastRead.winner := other
+            ScrambleRememberPreview(scan, uses)
+            model2 := ScramblePreviewModel(scan.win)
+            Assert(model2.pick = winner, "Highlight follows majority rather than latest vote")
+            ScrambleCountRead(n, other)
+            model2 := ScramblePreviewModel(scan.win)
+            Assert(model2.pick = other, "Highlight updates with vote-leader tie breaker")
+            saved := ScramblePreviewRead
+            if (n = 4) {
+                ScramblePreviewRead := {win: scan.win, uses: [uses[1], uses[2]], cards: saved.cards, n: 2, at: A_TickCount}
+                Assert(!IsObject(ScramblePreviewModel(scan.win)), "Partial card read cannot highlight wrong shot number")
+                ScramblePreviewRead := saved
+            }
+            ScrambleLastRead.winner := 0
+            ScrambleRememberPreview(scan, uses)
+            Gosub, CdTick
+            Assert(CdVisible && !ScrambleFrameVisible, "Unreadable decision shows reading status without a chosen frame")
+            ScramblePreviewRead := saved
+            Gosub, CdTick
+            Gui, Main:Show
+            WinActivate, ahk_id %MainHwnd%
+            WinWaitActive, ahk_id %MainHwnd%, , 3
+            Gosub, CdTick
+            Assert(!CdVisible && !ScrambleFrameVisible, "Preview hides when another app has focus")
+            Gui, Main:Hide
+            WinActivate, ahk_id %SmokeCardsHwnd%
+            WinWaitActive, ahk_id %SmokeCardsHwnd%, , 3
+            Gosub, CdTick
+            WinMove, ahk_id %SmokeCardsHwnd%, , 40, 20
+            Gosub, CdTick
+            Assert(!ScrambleFrameVisible, "Moved game invalidates old highlight coordinates")
+            WinMove, ahk_id %SmokeCardsHwnd%, , 0, 0
+            ScramblePreviewRead.at := A_TickCount
+            Gosub, CdTick
+            Assert(ScrambleFrameVisible, "Highlight returns at verified game geometry")
+            WinMinimize, ahk_id %SmokeCardsHwnd%
+            Gosub, CdTick
+            Assert(!CdVisible && !ScrambleFrameVisible, "Minimized GSPro hides preview")
+            WinRestore, ahk_id %SmokeCardsHwnd%
+            WinActivate, ahk_id %SmokeCardsHwnd%
+            WinWaitActive, ahk_id %SmokeCardsHwnd%, , 3
+            ScramblePreviewRead.at := A_TickCount
+            Gosub, CdTick
+            ScramblePreviewExcluded := false
+            OcrLockTake()
+            Assert(!CdVisible && !ScrambleFrameVisible, "Capture-exclusion fallback hides overlays before OCR")
+            Gosub, CdTick
+            Assert(!CdVisible, "Fallback cannot reappear during an OCR lock")
+            OcrBusy := false
+            ScramblePreviewExcluded := true
+            ScramblePreviewRead.at := A_TickCount
+            Gosub, CdTick
+            Assert(CdVisible && ScrambleFrameVisible, "Preview resumes after fallback read")
+            ScrambleCountdown := false
+            Gosub, CdTick
+            Assert(!CdVisible && !ScrambleFrameVisible, "Existing countdown preference hides all visual feedback")
+            ScrambleCountdown := true
+            ScrambleAutoPick := false
+            Gosub, CdTick
+            Assert(!CdVisible, "Auto-Pick off hides preview")
+            ScrambleAutoPick := true
+            ScrambleCoolDown := true
+            Gosub, CdTick
+            Assert(!CdVisible, "Sent or stood-down pick hides preview")
+            ScrambleCoolDown := false
+            ScrambleMissTicks := 1
+            Gosub, CdTick
+            Assert(!CdVisible, "First missing-card scan hides preview without changing cancellation rule")
+            ScrambleMissTicks := 0
+            ScramblePreviewRead.at := A_TickCount - 5000
+            Gosub, CdTick
+            Assert(!ScrambleFrameVisible, "Stale card geometry is never highlighted")
+            ScramblePreviewRead.at := A_TickCount
+            ScrambleArmedTick := A_TickCount - ScrambleDelaySec * 1000 - 9000
+            Gosub, CdTick
+            Assert(!CdVisible, "Stalled countdown clears visual feedback")
+            ScrambleResetReads()
+            Assert(!IsObject(ScramblePreviewRead) && !CdVisible && !ScrambleFrameVisible, "New card set clears previous highlight")
+        }
+        FileAppend, PASS: scramble preview geometry and Windows UI/OCR checks`n, % A_ScriptDir . "\result.txt"
+        ExitApp, 0
+    } catch failure {
+        FileAppend, % "FAIL: " . failure.Message . " (line " . failure.Line . ")`n", % A_ScriptDir . "\result.txt"
+        ExitApp, 1
+    }
+Return
+
+PreviewClick(wParam, lParam, msg, hwnd) {
+    global PreviewClickRoot
+    PreviewClickRoot := DllCall("GetAncestor", "Ptr", hwnd, "UInt", 2, "Ptr")
+}
+
+ScrambleCardsStillUpForTest(uses) {
+    global ScrambleLastUses
+    ScrambleLastUses := uses
+    return ScrambleCardsStillUp()
+}
+
+CapturePreview(win, name) {
+    global ScramblePreviewWindows
+    for i, h in ScramblePreviewWindows
+        DllCall("SetWindowDisplayAffinity", "Ptr", h, "UInt", 0)
+    DllCall("dwmapi\DwmFlush")
+    Sleep, 150
+    dc := DllCall("GetDC", "Ptr", 0, "Ptr")
+    memory := DllCall("CreateCompatibleDC", "Ptr", dc, "Ptr")
+    VarSetCapacity(info, 40, 0)
+    NumPut(40, info, 0, "UInt"), NumPut(win.w, info, 4, "Int"), NumPut(-win.h, info, 8, "Int")
+    NumPut(1, info, 12, "UShort"), NumPut(32, info, 14, "UShort")
+    bitmap := DllCall("CreateDIBSection", "Ptr", dc, "Ptr", &info, "UInt", 0, "Ptr*", pixels, "Ptr", 0, "UInt", 0, "Ptr")
+    old := DllCall("SelectObject", "Ptr", memory, "Ptr", bitmap, "Ptr")
+    DllCall("BitBlt", "Ptr", memory, "Int", 0, "Int", 0, "Int", win.w, "Int", win.h, "Ptr", dc, "Int", win.x, "Int", win.y, "UInt", 0x40CC0020)
+    SaveDibBmp(A_ScriptDir . "\" . name . ".bmp", pixels, win.w, win.h)
+    DllCall("SelectObject", "Ptr", memory, "Ptr", old)
+    DllCall("DeleteObject", "Ptr", bitmap)
+    DllCall("DeleteDC", "Ptr", memory)
+    DllCall("ReleaseDC", "Ptr", 0, "Ptr", dc)
+    for i, h in ScramblePreviewWindows
+        DllCall("SetWindowDisplayAffinity", "Ptr", h, "UInt", 0x11)
 }
 '''
 
@@ -633,6 +916,27 @@ def runtime_checks(source, ahk):
         report = (work / "result.txt").read_text() if (work / "result.txt").exists() else "No result"
         assert returncode == 0 and report.startswith("PASS:"), "ScrambleSmoke: " + report + output
         print("PASS: " + ("green feet/inches, around-the-green and yards cards read with the real Windows OCR in this build" if has_ocr else "distance parsing in this build (real-OCR card reads skipped: no OCR engine)"))
+
+        if has_ocr:
+            (work / "result.txt").unlink(missing_ok=True)
+            (work / "checks.txt").unlink(missing_ok=True)
+            candidate = isolated.replace("SetTimer, UiSmoke, -50", "SetTimer, PreviewSmoke, -50", 1)
+            script = work / "PreviewSmoke.ahk"
+            script.write_text(candidate + "\n" + SMOKE + "\n" + SCRAMBLE + "\n" + PREVIEW, encoding="utf-8-sig")
+            try:
+                check = subprocess.run([str(ahk), "/ErrorStdOut", str(script)], capture_output=True, text=True, timeout=90)
+                returncode, output = check.returncode, check.stdout + check.stderr
+            except subprocess.TimeoutExpired:
+                returncode, output = -1, "timed out"
+            for artifact in list(work.glob("*.bmp")) + list(work.glob("*.txt")):
+                shutil.copy2(artifact, artifacts / artifact.name)
+            checks = (work / "checks.txt").read_text() if (work / "checks.txt").exists() else "No preview checks reached"
+            print(checks)
+            annotate("notice", "Scramble preview checks", checks)
+            report = (work / "result.txt").read_text() if (work / "result.txt").exists() else "No result"
+            assert returncode == 0 and report.startswith("PASS:"), "PreviewSmoke: " + report + output
+            print("PASS: voted-card preview, parsed units, physical geometry, focus, click-through, capture exclusion, real OCR and visual cleanup")
+
 
 
 def main():

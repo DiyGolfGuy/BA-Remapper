@@ -1,0 +1,135 @@
+BA REMAPPER 5.1.2 - HOW TO USE
+BA Custom Products LLC | bacustomproducts.com
+
+1. INSTALL OR UPDATE
+
+Download BARemapper_Setup_v5.1.2.zip from the BA website or:
+https://github.com/DiyGolfGuy/BA-Remapper/releases/latest
+
+Extract the ZIP. If Remapper is running, right-click its green BA tray
+icon and choose Exit. Run the Setup EXE and follow the installer.
+Installing over your old version keeps profiles and settings.
+
+Open BA Remapper from the Start menu. This guide is also available there
+as BA Remapper How To. The portable ZIP includes the same guide; extract
+all its files into a permanent folder and run BARemapper.exe.
+
+Requires 64-bit Windows 10 or 11 and GSPro. Smart Clicks and Scramble
+Auto-Pick use built-in Windows OCR. They do not upload screen images.
+
+2. USE THE PRINTED CONTROL-BOX FUNCTIONS
+
+Select Basic Secondary. Turn Button Mapping ON.
+Tap a button for its white printed function.
+Hold Reset Aim (A), then press another button for its yellow function.
+Reset Aim is the default FN button. Keep it held for repeated actions.
+
+FN + Club Up or Club Down: Camera Clip / Clear View (B)
+FN + Tee Left:             OB Rehit
+FN + Aim Up:               Move Forward
+FN + Aim Down:             Move Back
+FN + Aim Left:             Next Option
+FN + Aim Right:            Drop Ball / Rehit
+
+The relief menu must be visible for its Smart Click actions. The first
+successful use reads and learns the menu; later presses verify smaller
+areas at the learned spots for faster response.
+
+Ctrl+F12 toggles Button Mapping. Turn mapping OFF to type normally.
+Closing the main window keeps the app running in the tray; Exit quits.
+
+3. TURN ON SCRAMBLE AUTO-PICK AND THE CARD HIGHLIGHT
+
+Open BA Remapper and check Auto-Pick Scramble Shot (all profiles).
+Choose a delay: 5, 10, 15 or 20 seconds. Start with 15 seconds so the
+players have time to see the choice and choose differently if desired.
+Check Show chosen card highlight and countdown.
+Return to GSPro and play a scramble with two, three or four cards.
+
+When the shot-selection cards appear, Remapper reads them repeatedly.
+A bright green outline marks the card currently leading the automatic
+choice. A panel beneath the cards shows:
+
+- CARD number: the card's left-to-right position, 1 through 4.
+- Distance: feet/inches or yards, followed by lie and shot number.
+- Reason: Fewest strokes, Green preferred, or Shortest distance.
+- Countdown: seconds until the automatic choice is due.
+
+Example: CARD 2 | 12s, then 87 yd | FAIRWAY | Shot 2 means card 2 is
+currently the planned pick, at 87 yards, with 12 seconds remaining.
+The choice can update as additional reads vote.
+
+4. UNDERSTAND THE CHOICE AND OVERRIDE IT
+
+The rules run in this order:
+1) Fewest strokes first. A 2nd-shot ball beats a closer 3rd-shot ball.
+2) Among those balls, GREEN is preferred.
+3) Shortest distance decides among the remaining eligible balls.
+
+Other lies are not ranked: it does not prefer fairway over rough or
+avoid trees. Choose manually if you want a different ball for strategy.
+
+A single mark ' (or a curved/prime equivalent) means feet. The double
+mark " means inches. 14' 7" means fourteen feet, seven inches. One yard
+is three feet. An unmarked number is feet on GREEN and yards elsewhere.
+FRINGE is not GREEN; green status comes from the card's lie row.
+
+You can click any GSPro USE button before the automatic choice. The
+outline and panel let clicks through and do not take keyboard focus.
+When the card screen closes, Remapper stops that selection cycle. It
+also checks that the USE buttons are still present before sending the
+choice at zero. Do not wait for a Pick Now or Skip button: this version
+uses GSPro's existing USE buttons and the automatic countdown.
+
+Reading Cards means there is no current readable preview. Checking at
+zero means it is confirming/re-reading. If it cannot decide, choose a
+card yourself. Turning off the highlight checkbox hides the visuals;
+turn off Auto-Pick Scramble Shot to disable automatic choices entirely.
+
+Auto-Pick is independent of Button Mapping and works across profiles.
+Turning Button Mapping OFF does not turn Scramble Auto-Pick OFF.
+
+5. SCREENS, CUSTOM PROFILES AND STARTUP
+
+Keep GSPro active to see the highlight on its game display. It follows
+the detected game window on multi-screen desktops. Moving or resizing
+GSPro hides an old outline until a fresh read supplies its new position.
+A minimized/inactive game, missing cards or stale positions hide it too.
+Taught Screen Clicks store desktop positions; re-teach them after moving
+the target. They do not automatically follow a moved game window.
+
+To customize: choose Customize a Copy, name it, open Button Builder,
+select a button, choose Hotkey, Smart Click, Taught Screen Click or None,
+review the preview and Save. Cancel leaves the old action in place.
+Basic Secondary stays locked to the printed yellow functions.
+
+For Windows startup, choose Use Current Profile at Windows Startup and
+check Start with Windows. The startup profile is separate from the one
+you are currently editing. Windows startup loads it with mapping ON.
+
+6. IF SOMETHING LOOKS WRONG
+
+Wrong learned Smart Click: release FN and choose Reset Smart Click
+Spots. The next use reads and learns again. Profiles, preferences and
+Taught Screen Click positions stay. Factory Reset is a separate action.
+
+No highlight: check both scramble checkboxes, make GSPro active and
+ensure at least two USE cards are visible. The panel can briefly hide
+while it re-reads uncertain card positions or during an OCR scan.
+
+Want normal typing: Button Mapping OFF (Ctrl+F12).
+Want no automatic scramble choice: uncheck Auto-Pick Scramble Shot.
+Camera Clip: use Basic Secondary, turn mapping ON, hold Reset Aim (A)
+and press either club button; release FN afterward.
+
+If it picks incorrectly or stands down, use Open Folder and keep
+scramble_last_decision.txt and scramble_log.txt for troubleshooting.
+OCR Test reads the screen for a diagnostic report without selecting a
+scramble card. Send the report with the GSPro/card screenshot when
+asking BA Custom Products for help.
+
+ILLUSTRATED GUIDE
+https://github.com/DiyGolfGuy/BA-Remapper/blob/main/docs/scramble-preview.md
+
+The example images show the real Remapper UI over drawn GSPro-style
+Windows test cards. They are not screenshots of a live GSPro round.

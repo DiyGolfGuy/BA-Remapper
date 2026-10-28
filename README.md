@@ -1,6 +1,8 @@
 # BA Remapper
 
-**Control box software for GSPro — by BA Custom Products**
+**Control box software for GSPro — by BA Custom Products LLC**
+
+[Full how-to guide](HOW_TO_USE.txt) · [Scramble highlight with screenshots](docs/scramble-preview.md)
 
 BA Remapper is the companion app for the BA Custom Products wireless control box. Out of the box, every button sends its printed GSPro hotkey with no software at all. BA Remapper adds the FN secondary layer (the yellow print), on-screen Smart Clicks powered by built-in Windows OCR, and an automatic scramble shot picker. Free with your box; installs like any normal Windows program (a portable version is available too).
 
@@ -16,7 +18,7 @@ BA Remapper is the companion app for the BA Custom Products wireless control box
 
 The installer puts BA Remapper in Program Files, adds it to the Start Menu and **Add/Remove Programs** with a proper uninstaller, and keeps your settings and profiles in `Documents\BA Custom Products\Remapper` — uninstalling asks before touching them, so a reinstall picks up right where you left off. Installing a newer version over an older one upgrades in place.
 
-**Upgrading:** run the newer Setup right over the installed version — your profiles and settings are kept.
+**Upgrading:** exit the running app from its tray menu, then run the newer Setup over the installed version — your profiles and settings are kept. The installer adds **BA Remapper How To** to the Start menu; the portable ZIP includes **HOW_TO_USE.txt** beside the EXE.
 
 **Portable option:** prefer no installer? Download the portable zip from the same release instead, unzip `BARemapper.exe` to a permanent folder of your choosing, and run it — same app, you manage the location.
 
@@ -69,13 +71,17 @@ Select **Basic Secondary** from the profile dropdown and the yellow print on the
 The preset is locked so it always matches the print — it can't be edited, reset, or renamed. Its **Restore** button restores that preset only. To customize, use **Customize a Copy** to keep its working functions in an editable profile; **New Blank** starts with no secondaries.
 
 ### Auto-Pick Scramble
-Turn on the checkbox and BA Remapper watches for GSPro's scramble shot-select cards whenever the app is running. After your chosen delay (5 / 10 / 15 / 20 seconds, with an optional on-screen countdown), it picks the best ball by pressing its shot key (1–4):
+Check **Auto-Pick Scramble Shot**, choose a delay (15 seconds is a useful starting point), and check **Show chosen card highlight and countdown**. Return to GSPro and keep it active. BA Remapper watches for GSPro's scramble shot-select cards whenever the app is running. After your chosen delay (5 / 10 / 15 / 20 seconds, with an optional chosen-card highlight and countdown), it picks the best ball by pressing its shot key (1–4):
 
 1. **Fewest strokes first** — a 2nd-shot ball always beats a closer 3rd-shot ball from a penalty drop
 2. **Green always wins** among those — a ball on the green beats any distance advantage elsewhere
 3. **Shortest distance** decides the rest
 
 The lie is not judged otherwise — rough, woods and concrete never stop a pick. If the group wants a longer ball from a better lie, they pick it themselves before the countdown ends.
+
+[See the Windows preview screenshots and behavior notes](docs/scramble-preview.md).
+
+**Chosen-card preview (v5.1.2):** a bright green outline marks the card leading the same vote the picker uses. The panel shows its card number, parsed feet/inches or yards, lie, shot number, selection reason and remaining time. It is click-through and keeps GSPro focused; you can still pick another USE button yourself. The existing countdown preference now controls both the highlight and panel. If no readable choice is available it says Reading Cards without highlighting a card. The frame hides when the game loses focus, moves/resizes before its next read, or the card positions become stale. Nothing new is assigned to the printed box buttons.
 
 The cards are read over and over while the countdown runs (every 2 seconds, from the moment they appear), so the decision is made before zero. Each read votes for the card it would pick; at zero, after a quick look that the cards are still up, the card most reads agree on gets its key — one bad frame can't swing it, and a pick the players make in the last second is never overridden.
 
@@ -141,6 +147,8 @@ The main window, Builder and action editor can be resized and scrolled when they
 ---
 
 ## Version History
+
+**v5.1.2** Adds a click-through highlight and explanation for the voted scramble card. Feet-only OCR readings such as `100'` retain their actual value; letter-based green-distance recovery uses the same validation as numeric readings. If a full GSPro read misses the scramble cards, the watcher retries the central card strip on the same game display. Windows regression cases now require three/four-card selection and preserve green/fringe/yard behavior. See [DEVELOPMENT.md](DEVELOPMENT.md) for validation status. [Download v5.1.2](https://github.com/DiyGolfGuy/BA-Remapper/releases/tag/v5.1.2).
 
 **v5.1.1** — Keeps the 64-bit build. Green distances: curly or prime feet/inch marks are read the same as plain ones (the 64-bit build was reading 14' 7" with a misread mark as 141 ft), and an inch mark read as `1'` (`291 71'` for 29' 7", found with the real Windows reader) is no longer taken as 29,171 ft; a green distance over 199 ft is treated as unreadable. The installer refuses 32-bit Windows. Windows CI now reads drawn scramble cards with the real Windows OCR in the 64-bit build.
 
