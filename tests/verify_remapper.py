@@ -638,7 +638,7 @@ PreviewSmoke:
             ScrambleMissTicks := 0
             model := ScramblePreviewModel(scan.win)
             Assert(IsObject(model) && model.pick = (n = 4 ? 2 : 1), "Preview matches voted card in " . n . "-card real OCR scene")
-            Assert(InStr(model.detail, n = 4 ? "87 yd" : "28" . Chr(0x2032) . " 0" . Chr(0x2033)), "Preview displays parsed units in " . n . "-card scene")
+            Assert(InStr(model.detail, n = 4 ? "87 yd" : "28" . Chr(0x2032) . " 0" . Chr(0x2033)), "Preview displays parsed units in " . n . "-card scene: " . model.detail)
             activeBefore := WinExist("A")
             Gosub, CdTick
             Assert(CdVisible && ScrambleFrameVisible, "Countdown and frame are shown for " . n . " cards")

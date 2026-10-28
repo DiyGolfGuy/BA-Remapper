@@ -3467,7 +3467,7 @@ ScramblePreviewModel(win) {
     if (card.green || markedFeet)
         distance := (card.dist // 12) . Chr(0x2032) . " " . Mod(card.dist, 12) . Chr(0x2033)
     else
-        distance := Round(card.dist / 36, 1) . " yd"
+        distance := (Mod(card.dist, 36) = 0 ? card.dist // 36 : Round(card.dist / 36, 1)) . " yd"
     lie := card.lie
     StringUpper, lie, lie
     return {pick: pick, rect: rect, detail: distance . "  |  " . lie . "  |  Shot " . card.shot, reason: reason}
@@ -3546,11 +3546,12 @@ ScrambleDrawPreview() {
     ; Font size follows game resolution in physical pixels, independent
     ; of the settings GUI's Windows DPI scaling.
     fontPt := Max(12, Min(24, Round(win.h / 38))) * 96 / A_ScreenDPI
-    Gui, Countdown:Font, s%fontPt% Bold, Segoe UI
+    Gui, Countdown:Font, s%fontPt% c41F0A0 Bold, Segoe UI
     GuiControl, Countdown:Font, CdText
     smallPt := fontPt * 0.74
-    Gui, Countdown:Font, s%smallPt% Norm, Segoe UI
+    Gui, Countdown:Font, s%smallPt% cFFFFFF Norm, Segoe UI
     GuiControl, Countdown:Font, CdDetails
+    Gui, Countdown:Font, s%smallPt% cD3DDE3 Norm, Segoe UI
     GuiControl, Countdown:Font, CdReason
     scale := Max(1, win.h / 720)
     panelH := Round(104 * scale)
