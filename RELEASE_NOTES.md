@@ -14,7 +14,7 @@ This version is being built with the owner while more features are considered. I
 
 ### Validation status
 
-The new highlight has passed local source checks; its Windows preview/focus/click-through/OCR checks and rebuilt packages are pending. The older successful run below predates this feature.
+The new highlight passed [Windows run 40614795112](https://github.com/DiyGolfGuy/BA-Remapper/actions/runs/40614795112): 83 preview assertions including real OCR while visible, click-through, focus, capture exclusion/fallback, voting and cleanup; all existing checks; x64 compilation; installer upgrade preservation; and new candidate packages. Both candidate ZIPs were downloaded and their checksums/integrity checked. [Screenshots and behavior](docs/scramble-preview.md). The older run below predates this feature.
 
 Local preserved-core checks, the production trailing-tick regex cases, Python syntax, workflow YAML parsing, publication defaults, and version consistency have passed.
 

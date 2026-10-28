@@ -608,14 +608,30 @@ PreviewSmoke:
                 Loop, %n%
                     us.Push({x: wr.x + (100 + (A_Index - 1) * 230) * scale, y: wr.y + 320 * scale, w: 32 * scale, h: 16 * scale})
                 Loop, %n% {
-                    r := ScramblePreviewRect(us, A_Index, wr)
-                    Assert(IsObject(r) && r.x >= wr.x && r.y >= wr.y && r.x + r.w <= wr.x + wr.w && r.y + r.h <= wr.y + wr.h, "Frame stays in game at negative origin " . n . "/" . A_Index . "/" . scale)
+                    chosen := A_Index
+                    r := ScramblePreviewRect(us, chosen, wr)
+                    Assert(IsObject(r) && r.x >= wr.x && r.y >= wr.y && r.x + r.w <= wr.x + wr.w && r.y + r.h <= wr.y + wr.h, "Frame stays in game at negative origin " . n . "/" . chosen . "/" . scale)
                     for k, u in us {
-                        if (k != A_Index)
-                            Assert(u.x + u.w / 2 < r.x || u.x + u.w / 2 > r.x + r.w, "Frame excludes neighboring card " . n . "/" . A_Index . "/" . k)
+                        if (k != chosen)
+                            Assert(u.x + u.w / 2 < r.x || u.x + u.w / 2 > r.x + r.w, "Frame excludes neighboring card " . n . "/" . chosen . "/" . k)
                     }
                 }
             }
+        }
+        wr := {found: true, hwnd: 1, x: -2000, y: -500, w: 1000, h: 540}
+        us := [{x: -1700, y: -180, w: 32, h: 16}, {x: -1400, y: -180, w: 32, h: 16}]
+        examples := [{reason: "Fewest strokes", inches: 175, green: false, raw: "14" . Chr(0x2019) . "7" . Chr(0x201D), lie: "fringe", shot: 2, otherShot: 3, otherDist: 72}
+            , {reason: "Green preferred", inches: 110, green: true, raw: "91 2" . Chr(34), lie: "green", shot: 4, otherShot: 4, otherDist: 108}]
+        for i, ex in examples {
+            ScrambleResetReads()
+            ScrambleCountRead(2, 1)
+            ScrambleLastRead := {n: 2, winner: 1, cards: [{dist: ex.inches, green: ex.green, distRaw: ex.raw, lie: ex.lie, shot: ex.shot}
+                , {dist: ex.otherDist, green: false, distRaw: "3", lie: "fringe", shot: ex.otherShot}]}
+            ScrambleRememberPreview({win: wr}, us)
+            example := ScramblePreviewModel(wr)
+            Assert(example.reason = ex.reason, "Preview explains actual ranking: " . ex.reason)
+            wanted := (ex.inches // 12) . Chr(0x2032) . " " . Mod(ex.inches, 12) . Chr(0x2033)
+            Assert(InStr(example.detail, wanted), "Preview normalizes explicit/green feet marks: " . wanted)
         }
         q := Chr(34)
         for scenario, n in [2, 4] {

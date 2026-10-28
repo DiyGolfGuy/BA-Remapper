@@ -77,6 +77,8 @@ Turn on the checkbox and BA Remapper watches for GSPro's scramble shot-select ca
 
 The lie is not judged otherwise — rough, woods and concrete never stop a pick. If the group wants a longer ball from a better lie, they pick it themselves before the countdown ends.
 
+[See the Windows preview screenshots and behavior notes](docs/scramble-preview.md).
+
 **Chosen-card preview (v5.1.2 development):** a bright green outline marks the card leading the same vote the picker uses. The panel shows its card number, parsed feet/inches or yards, lie, shot number, selection reason and remaining time. It is click-through and keeps GSPro focused; you can still pick another USE button yourself. The existing countdown preference now controls both the highlight and panel. If no readable choice is available it says Reading Cards without highlighting a card. The frame hides when the game loses focus, moves/resizes before its next read, or the card positions become stale. Nothing new is assigned to the printed box buttons.
 
 The cards are read over and over while the countdown runs (every 2 seconds, from the moment they appear), so the decision is made before zero. Each read votes for the card it would pick; at zero, after a quick look that the cards are still up, the card most reads agree on gets its key — one bad frame can't swing it, and a pick the players make in the last second is never overridden.
