@@ -17,6 +17,14 @@ Current owner instruction, 2026-10-27: upload the code to the development branch
 5. Regression coverage includes 38 distance cases, strip geometry at a negative origin, required two/three/four-card OCR selection, zero/one-card non-trigger cases, and the prior hotkey/UI/reset/startup checks.
 6. App, installer and package version metadata are 5.1.2. The staged workflow defaults to building only; actual publication is manual and requires an exact version confirmation. Installer upgrade fixtures refuse an existing Documents configuration and a non-disposable runner.
 
+## Scramble highlight added for Windows verification
+
+Bruce approved the scramble feature and requested a highlight on the chosen card. The source now has a GSPro-relative green frame and a panel showing the vote-leading card, parsed distance/lie/shot, reason, and countdown. The existing countdown setting controls the visuals. There are no new default box mappings or Pick Now/Skip actions in this focused change. The vote/decision/deadline/send algorithms remain unchanged.
+
+The repository and all tracked history contain no original GSPro photos. Reviewed the existing Windows OCR scene captures and the measured layout documented in the tests/source, plus GSPro's official UI guide and shortcut changelog. The frame is a visual bound around card contents derived from USE spacing/text height, not pixel-exact card-edge detection, and is never used to click. Live GSPro appearance still needs owner review.
+
+Local preserved-source checks now cover 27 unchanged core functions, plus the watcher with explicitly visual hooks removed. Windows tests are prepared for negative-origin/scaled two/three/four-card geometry; real-OCR two/four-card previews; vote-leader changes; parsed units; capture exclusion; click-through; focus; and lifecycle cleanup. **New highlight runtime/build validation is pending at this checkpoint.** Earlier successful runs below apply to the pre-highlight candidate.
+
 ## Verification completed here
 
 - `python tests/verify_remapper.py`: passed preserved-source checks, including 23 unchanged core functions and original sections with the documented one-line watcher addition.
@@ -42,7 +50,7 @@ Downloaded candidate artifact `12776293996` (`BARemapper_candidate_packages`), c
 - Installer ZIP SHA-256: `8b0c356b46119ff66f925c9a07b8bbbf8f57423e1639c8c04246b7d2294dc355`.
 - Portable ZIP SHA-256: `fc16be1ef4c6c970580ae63ffc86fe3d5a8d2184ad090369d6e9a0a96937cfde`.
 
-These are Actions candidate artifacts, not a public release or the website update. App source remains identical to the verified source after this documentation update. More features may change the candidate and require new verification.
+These are Actions candidate artifacts, not a public release or the website update. Those artifacts predate the new highlight. The highlight needs its own Windows verification and replacement candidate packages before it is called tested.
 
 A live GSPro session, physical control box, and physical multi-monitor acceptance remain unverified. The Windows build was verified on GitHub's disposable runner after the owner authorized source upload; no local Windows result is claimed.
 

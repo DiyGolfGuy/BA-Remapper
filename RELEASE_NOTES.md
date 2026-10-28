@@ -4,6 +4,8 @@ This version is being built with the owner while more features are considered. I
 
 ### Changes prepared
 
+- **See the scramble choice.** A green click-through frame follows the vote-leading card. The panel shows card number, parsed distance/lie/shot, selection reason and countdown without taking focus or covering USE with a clickable control. The existing countdown setting controls the visuals.
+
 - **Feet-only readings stay feet.** A reading such as `100'` retains 100 feet instead of being split into 10 feet. Recovery of the known Windows OCR form `291 71'` for 29 feet 7 inches is preserved.
 - **Consistent green-distance validation.** Letter-recovery paths now use the same validation as numeric readings. The existing 199-foot OCR guard is retained.
 - **Scramble card recovery.** When the normal GSPro window read misses the cards, the watcher retries a smaller central strip of that same client area. Monitor position and Windows scaling remain in physical desktop coordinates.
@@ -11,6 +13,8 @@ This version is being built with the owner while more features are considered. I
 - **Controlled publication.** The staged release workflow builds without publishing by default. Public publication requires an explicit manual run and the exact version. Upgrade fixtures refuse an existing configuration and require a disposable Windows runner.
 
 ### Validation status
+
+The new highlight has passed local source checks; its Windows preview/focus/click-through/OCR checks and rebuilt packages are pending. The older successful run below predates this feature.
 
 Local preserved-core checks, the production trailing-tick regex cases, Python syntax, workflow YAML parsing, publication defaults, and version consistency have passed.
 

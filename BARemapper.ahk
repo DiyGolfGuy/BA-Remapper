@@ -25,6 +25,8 @@ DllCall("SetProcessDPIAware")
 ;  - A feet-only read such as 100' stays 100 feet. The trailing
 ;    tick is treated as a misread inch mark only after TWO numbers,
 ;    preserving Windows OCR's known 291 71' -> 29' 7" recovery.
+;  - Show the voted scramble card with a click-through outline,
+;    parsed distance/lie, selection reason and countdown.
 ;  - All green letter-recovery paths use the same distance guard.
 ;  - When a full GSPro read misses the scramble cards, retry the
 ;    central card strip, relative to that game's client rectangle.
@@ -547,6 +549,11 @@ CdVisible         := false   ; countdown overlay currently shown
 CdWinW            := 240     ; measured overlay size (set at creation)
 CdWinH            := 46
 CdHwndVar         := 0       ; countdown overlay window handle
+ScramblePreviewRead := ""   ; latest valid geometry/details, visual feedback only
+ScramblePreviewWindows := []
+ScramblePreviewOwner := 0
+ScramblePreviewExcluded := false
+ScrambleFrameVisible := false
 
 ; ============================================================
 ;  STARTUP-LAUNCH DETECTION
@@ -2830,9 +2837,13 @@ ParkMouse() {
 ; and any lock older than 6s is treated as stale and cleared so
 ; no glitch can starve the watcher, the clicks, or the prefetch.
 OcrLockTake() {
-    global OcrBusy, OcrBusySince
+    global OcrBusy, OcrBusySince, ScramblePreviewExcluded, CdVisible, ScrambleFrameVisible
     OcrBusy := true
     OcrBusySince := A_TickCount
+    if (!ScramblePreviewExcluded && (CdVisible || ScrambleFrameVisible)) { ; preview only
+        ScrambleHidePreview() ; preview only
+        DllCall("dwmapi\DwmFlush") ; preview only
+    } ; preview only
 }
 OcrStaleCheck() {
     global OcrBusy, OcrBusySince, ScrambleBusy
@@ -3301,6 +3312,9 @@ ScrambleVoteSummary() {
 ; Fresh start for a new set of cards.
 ScrambleResetReads() {
     global ScrambleVotes, ScrambleReadsN, ScrambleVoteLast, ScrambleLastRead, ScrambleLastUses, ScrambleMemo, ScrambleTries
+    global ScramblePreviewRead ; preview only
+    ScramblePreviewRead := "" ; preview only
+    ScrambleHidePreview() ; preview only
     ScrambleVotes := {}
     ScrambleReadsN := {}
     ScrambleVoteLast := ""
@@ -3372,6 +3386,207 @@ ScrambleSendPick(pick, when) {
         ScrambleLogDecision(lr.n, lr.cards, lr.minShot, pick, note)
     }
     TrayTip, BA Remapper, Auto-picked scramble shot %pick%, 3, 1
+}
+
+; Visual feedback only: the decision, votes, countdown deadline and
+; shot-key delivery are unchanged. Coordinates are physical desktop
+; pixels from the same GSPro client/USE read, never monitor 1.
+ScrambleRememberPreview(scan, uses) {
+    global ScramblePreviewRead, ScrambleLastRead
+    ScramblePreviewRead := ""
+    lr := ScrambleLastRead
+    if (!scan.HasKey("win") || !scan.win.found || !IsObject(lr) || lr.winner <= 0)
+        return
+    ScramblePreviewRead := {win: scan.win, uses: uses, cards: lr.cards, n: lr.n, at: A_TickCount}
+}
+
+; Frame the card's content, using GSPro's measured name/distance/
+; lie/USE proportions. Neighbor centers bound the width so a frame
+; cannot spill onto another card. This rectangle never drives a click.
+ScramblePreviewRect(uses, pick, win) {
+    n := uses.MaxIndex()
+    if (n < 2 || n > 4 || pick < 1 || pick > n || !win.found)
+        return ""
+    gap := win.w
+    for i, u in uses {
+        if (u.w <= 0 || u.h <= 0 || u.x < win.x || u.y < win.y
+            || u.x + u.w > win.x + win.w || u.y + u.h > win.y + win.h)
+            return ""
+        if (Abs(u.y - uses[1].y) > uses[1].h * 2)
+            return ""
+        if (i > 1) {
+            d := (u.x + u.w / 2) - (uses[i-1].x + uses[i-1].w / 2)
+            if (d <= Max(u.w, uses[i-1].w) * 2)
+                return ""
+            gap := Min(gap, d)
+        }
+    }
+    u := uses[pick]
+    cx := u.x + u.w / 2
+    half := Min(gap * 0.44, u.h * 7)
+    x := Max(win.x + 2, Floor(cx - half))
+    y := Max(win.y + 2, Floor(u.y - u.h * 14))
+    right := Min(win.x + win.w - 2, Ceil(cx + half))
+    bottom := Min(win.y + win.h - 2, Ceil(u.y + u.h * 5))
+    return {x: x, y: y, w: right - x, h: bottom - y}
+}
+
+ScramblePreviewModel(win) {
+    global ScramblePreviewRead, ScrambleReadsN
+    r := ScramblePreviewRead
+    if (!IsObject(r) || A_TickCount - r.at > 4500)
+        return ""
+    ; Moving/resizing the game invalidates the old rectangles. Wait
+    ; for its next normal read rather than projecting stale positions.
+    if (win.hwnd != r.win.hwnd || win.x != r.win.x || win.y != r.win.y
+        || win.w != r.win.w || win.h != r.win.h)
+        return ""
+    most := 0
+    for n, count in ScrambleReadsN
+        most := Max(most, n)
+    pick := ScrambleVoteLeader()
+    if (r.n != most || pick <= 0 || pick > r.n)
+        return ""
+    rect := ScramblePreviewRect(r.uses, pick, win)
+    card := r.cards[pick]
+    if (!IsObject(rect) || !IsObject(card) || card.dist < 0)
+        return ""
+    reason := "Shortest distance"
+    for i, other in r.cards {
+        if (other.shot > card.shot) {
+            reason := "Fewest strokes"
+            break
+        }
+        if (card.green && !other.green && other.shot = card.shot)
+            reason := "Green preferred"
+    }
+    ; Format parsed units, not raw OCR (291 71' must never appear
+    ; as 29,171 feet). Explicit feet marks off-green stay feet too.
+    markedFeet := InStr(ScrambleNormQuotes(card.distRaw), "'")
+        || InStr(ScrambleNormQuotes(card.distRaw), Chr(34))
+    if (card.green || markedFeet)
+        distance := (card.dist // 12) . Chr(0x2032) . " " . Mod(card.dist, 12) . Chr(0x2033)
+    else
+        distance := Round(card.dist / 36, 1) . " yd"
+    lie := card.lie
+    StringUpper, lie, lie
+    return {pick: pick, rect: rect, detail: distance . "  |  " . lie . "  |  Shot " . card.shot, reason: reason}
+}
+
+ScrambleHidePreview() {
+    global CdVisible, ScrambleFrameVisible
+    Gui, Countdown:Hide
+    Loop, 4
+        Gui, ScrambleEdge%A_Index%:Hide
+    CdVisible := false
+    ScrambleFrameVisible := false
+}
+
+; Both layered + transparent and NOACTIVATE: clicks/keys keep
+; reaching GSPro, including the USE button under the open frame.
+ScramblePreviewWindow(name, owner, color) {
+    Gui, %name%:New, +AlwaysOnTop -Caption +ToolWindow -DPIScale +E0x08080020 +Owner%owner% +Hwndh
+    Gui, %name%:Color, %color%
+    DllCall("SetLayeredWindowAttributes", "Ptr", h, "UInt", 0, "UChar", 255, "UInt", 2)
+    DllCall("SetWindowDisplayAffinity", "Ptr", h, "UInt", 0x11)
+    affinity := 0
+    DllCall("GetWindowDisplayAffinity", "Ptr", h, "UInt*", affinity)
+    return {hwnd: h, excluded: affinity = 0x11}
+}
+
+ScrambleDrawPreview() {
+    global ScrambleCountdown, ScrambleAutoPick, ScrambleArmedTick, ScrambleCoolDown
+    global GSProWinNeedle, GSProWinExclude, OcrBusy, ScrambleMissTicks
+    global CdVisible, CdHwndVar, ScrambleFrameVisible, ScramblePreviewWindows, ScramblePreviewOwner
+    global ScramblePreviewExcluded, ScrambleDelaySec, CdText, CdDetails, CdReason
+    elapsed := A_TickCount - ScrambleArmedTick
+    if (!ScrambleCountdown || !ScrambleAutoPick || !ScrambleArmedTick || ScrambleCoolDown
+        || ScrambleMissTicks || elapsed > ScrambleDelaySec * 1000 + 8000) {
+        ScrambleHidePreview()
+        return
+    }
+    win := ClientRectByTitle(GSProWinNeedle, GSProWinExclude)
+    if (!win.found || !WinActive("ahk_id " . win.hwnd)) {
+        ScrambleHidePreview()
+        return
+    }
+    ; Older Windows may return WDA_MONITOR instead of true capture
+    ; exclusion. In that case OcrLockTake hides us before every scan.
+    if (OcrBusy && !ScramblePreviewExcluded) {
+        ScrambleHidePreview()
+        return
+    }
+    if (ScramblePreviewOwner != win.hwnd) {
+        ScrambleHidePreview()
+        Gui, Countdown:Destroy
+        Loop, 4
+            Gui, ScrambleEdge%A_Index%:Destroy
+        ScramblePreviewWindows := []
+        ScramblePreviewExcluded := true
+        Loop, 5 {
+            name := A_Index = 1 ? "Countdown" : "ScrambleEdge" . (A_Index - 1)
+            overlay := ScramblePreviewWindow(name, win.hwnd, A_Index = 1 ? "111C25" : "41F0A0")
+            ScramblePreviewWindows.Push(overlay.hwnd)
+            ScramblePreviewExcluded := ScramblePreviewExcluded && overlay.excluded
+        }
+        CdHwndVar := ScramblePreviewWindows[1]
+        ScramblePreviewOwner := win.hwnd
+        Gui, Countdown:Margin, 0, 0
+        Gui, Countdown:Add, Text, x16 y10 h30 vCdText c41F0A0 BackgroundTrans,
+        Gui, Countdown:Add, Text, x16 y42 h24 vCdDetails cFFFFFF BackgroundTrans,
+        Gui, Countdown:Add, Text, x16 y70 h24 vCdReason cD3DDE3 BackgroundTrans,
+    }
+    model := ScramblePreviewModel(win)
+    remain := Max(0, ScrambleDelaySec - elapsed // 1000)
+    title := IsObject(model) ? "AUTO-PICK: CARD " . model.pick : "AUTO-PICK: READING CARDS"
+    title .= remain > 0 ? "  |  " . remain . "s" : "  |  Checking..."
+    detail := IsObject(model) ? model.detail : "Waiting for a readable decision"
+    reason := IsObject(model) ? model.reason . "  -  Pick another card any time" : "You can still choose a card yourself"
+    panelW := Min(win.w - 24, Max(480, Round(win.w * 0.46)))
+    ; Font size follows game resolution in physical pixels, independent
+    ; of the settings GUI's Windows DPI scaling.
+    fontPt := Max(12, Min(24, Round(win.h / 38))) * 96 / A_ScreenDPI
+    Gui, Countdown:Font, s%fontPt% Bold, Segoe UI
+    GuiControl, Countdown:Font, CdText
+    smallPt := fontPt * 0.74
+    Gui, Countdown:Font, s%smallPt% Norm, Segoe UI
+    GuiControl, Countdown:Font, CdDetails
+    GuiControl, Countdown:Font, CdReason
+    scale := Max(1, win.h / 720)
+    panelH := Round(104 * scale)
+    textW := panelW - 32
+    for i, control in ["CdText", "CdDetails", "CdReason"] {
+        ty := Round((i = 1 ? 10 : (i = 2 ? 42 : 70)) * scale)
+        th := Round(30 * scale)
+        GuiControl, Countdown:Move, %control%, x16 y%ty% w%textW% h%th%
+    }
+    GuiControl, Countdown:, CdText, %title%
+    GuiControl, Countdown:, CdDetails, %detail%
+    GuiControl, Countdown:, CdReason, %reason%
+    px := win.x + (win.w - panelW) // 2
+    py := win.y + win.h - panelH - Round(20 * scale)
+    if (IsObject(model)) {
+        r := model.rect
+        ; Prefer beneath all card text/buttons. If space is tight,
+        ; put the panel above the frame, clamped inside the game.
+        py := r.y + r.h + Round(12 * scale)
+        if (py + panelH > win.y + win.h - 8)
+            py := Max(win.y + 8, r.y - panelH - Round(12 * scale))
+        stroke := Max(3, Round(win.h / 240))
+        edges := [[r.x, r.y, r.w, stroke], [r.x, r.y + r.h - stroke, r.w, stroke]
+            , [r.x, r.y + stroke, stroke, r.h - stroke * 2], [r.x + r.w - stroke, r.y + stroke, stroke, r.h - stroke * 2]]
+        for i, e in edges {
+            ex := e[1], ey := e[2], ew := e[3], eh := e[4]
+            Gui, ScrambleEdge%i%:Show, x%ex% y%ey% w%ew% h%eh% NoActivate
+        }
+        ScrambleFrameVisible := true
+    } else {
+        Loop, 4
+            Gui, ScrambleEdge%A_Index%:Hide
+        ScrambleFrameVisible := false
+    }
+    Gui, Countdown:Show, x%px% y%py% w%panelW% h%panelH% NoActivate
+    CdVisible := true
 }
 
 ; One OCR line -> distance in inches, or -1.
@@ -3831,7 +4046,7 @@ Gui, Main:Add, DropDownList, x415 y512 w120 vScrambleDelayChoice gOnScrambleDela
 GuiControl, Main:ChooseString, ScrambleDelayChoice, %ScrambleDelaySec% seconds
 Gui, Main:Font, s10 cCCCCCC Normal, Segoe UI
 cdChecked := ScrambleCountdown ? 1 : 0
-Gui, Main:Add, Checkbox, x25 y548 w510 vScrambleCdCheck gOnScrambleCdToggle Checked%cdChecked%, Show on-screen countdown before auto-pick
+Gui, Main:Add, Checkbox, x25 y548 w510 vScrambleCdCheck gOnScrambleCdToggle Checked%cdChecked%, Show chosen card highlight and countdown
 Gui, Main:Add, Text, x25 y580 w510 0x10
 Gui, Main:Font, s9 c999999 Normal, Segoe UI
 Gui, Main:Add, Text, x25 y592 w510, Files are saved at:
@@ -4184,6 +4399,8 @@ Return
 OnScrambleToggle:
     Gui, Main:Submit, NoHide
     ScrambleAutoPick := ScramblePickCheck ? true : false
+    ScramblePreviewRead := "" ; preview only
+    ScrambleHidePreview() ; preview only
     ScrambleArmedTick := 0
     ScrambleCoolDown := false
     SaveSettings()
@@ -4196,10 +4413,8 @@ OnScrambleCdToggle:
     Gui, Main:Submit, NoHide
     ScrambleCountdown := ScrambleCdCheck ? true : false
     SaveSettings()
-    if (!ScrambleCountdown && CdVisible) {
-        Gui, Countdown:Destroy
-        CdVisible := false
-    }
+    if (!ScrambleCountdown)
+        ScrambleHidePreview()
 Return
 
 OnScrambleDelayChange:
@@ -4363,77 +4578,13 @@ ParkTick:
     }
 Return
 
-; Countdown overlay tick: light 500ms timer, no OCR.  Shows
-; "Auto-pick: Ns" over the GSPro window while the scramble
-; watcher is armed.  The overlay is click-through and excluded
-; from screen capture (SetWindowDisplayAffinity 0x11) so the
-; OCR can never read its own countdown; even on Windows builds
-; where the affinity call is unavailable, the text and its
-; position are chosen so no needle or card column matches it.
+; Countdown/selection feedback: no OCR, no key sends, no focus change.
 CdTick:
     try {
-    if (!ScrambleCountdown || !ScrambleAutoPick || ScrambleArmedTick = 0 || ScrambleCoolDown) {
-        if (CdVisible) {
-            Gui, Countdown:Destroy
-            CdVisible := false
-        }
-        Return
-    }
-    cdWr := GsproWinRect(GSProWinNeedle, GSProWinExclude)
-    if (!cdWr.found) {
-        if (CdVisible) {
-            Gui, Countdown:Destroy
-            CdVisible := false
-        }
-        Return
-    }
-    cdRemain := ScrambleDelaySec - ((A_TickCount - ScrambleArmedTick) // 1000)
-    if (cdRemain < 0)
-        cdRemain := 0
-    ; If the pick has not fired within 8s past zero (the watcher
-    ; keeps reading ~4-6s past zero before standing down), something
-    ; upstream stalled - hide rather than sit on "0s" forever.
-    if ((A_TickCount - ScrambleArmedTick) > (ScrambleDelaySec * 1000 + 8000)) {
-        if (CdVisible) {
-            Gui, Countdown:Destroy
-            CdVisible := false
-        }
-        Return
-    }
-    cdY := cdWr.y + Round(cdWr.h * 0.55)
-    if (!CdVisible) {
-        Gui, Countdown:Destroy
-        ; +Hwnd stores the handle DIRECTLY into CdHwndVar - no
-        ; reliance on the last-found window (an empty handle
-        ; made WinGetPos return blanks, blank math reached the
-        ; Show command, and AHK threw "Invalid option: x").
-        Gui, Countdown:New, +AlwaysOnTop -Caption +ToolWindow -DPIScale +E0x20 +HwndCdHwndVar
-        Gui, Countdown:Color, 111111
-        Gui, Countdown:Margin, 18, 12
-        Gui, Countdown:Font, s22 cFFD400 Bold, Segoe UI
-        Gui, Countdown:Add, Text, vCdText, Auto-pick: %cdRemain%s
-        ; AutoSize: the DPI scale decides the real pixel height
-        ; of the font, so let the window fit the text instead of
-        ; forcing a fixed height (fixed h clipped at 150% DPI).
-        Gui, Countdown:Show, Hide AutoSize
-        WinGetPos, , , CdWinW, CdWinH, ahk_id %CdHwndVar%
-        if (CdWinW = "" || CdWinW < 50)
-            CdWinW := 320
-        cdX := cdWr.x + (cdWr.w - CdWinW) // 2
-        if (cdX = "")
-            cdX := cdWr.x + 100   ; blank-proof only: negative is valid (left monitor)
-        Gui, Countdown:Show, x%cdX% y%cdY% NoActivate
-        DllCall("SetWindowDisplayAffinity", "Ptr", CdHwndVar, "UInt", 0x11)
-        CdVisible := true
-    } else {
-        GuiControl, Countdown:, CdText, Auto-pick: %cdRemain%s
-        cdX := cdWr.x + (cdWr.w - CdWinW) // 2
-        if (cdX = "")
-            cdX := cdWr.x + 100
-        Gui, Countdown:Show, x%cdX% y%cdY% NoActivate
-    }
+        ScrambleDrawPreview()
     } catch appErr {
-        LogAppError("Countdown", appErr)
+        ScrambleHidePreview()
+        LogAppError("ScramblePreview", appErr)
     }
 Return
 
@@ -4603,6 +4754,8 @@ ScrambleWork:
         ; a one-frame flicker can no longer reset the countdown,
         ; while a genuine manual pick still cancels cleanly.
         ScrambleMissTicks += 1
+        ScramblePreviewRead := "" ; preview only
+        ScrambleHidePreview() ; preview only
         if (ScrambleMissTicks < 2)
             Return
         ScrambleArmedTick := 0
@@ -4626,6 +4779,7 @@ ScrambleWork:
     scrWin := ScrambleDecide(scrScan, scrUses, "", true)
     ScrambleCountRead(useCount, scrWin)
     ScrambleLastUses := scrUses
+    ScrambleRememberPreview(scrScan, scrUses) ; preview only
     ScrambleLastHwnd := (scrScan.HasKey("win") && scrScan.win.hwnd) ? scrScan.win.hwnd : 0
     scrLeft := ScrambleDelaySec * 1000 - (A_TickCount - ScrambleArmedTick)
     if (scrLeft > 0) {
@@ -4636,6 +4790,7 @@ ScrambleWork:
     ; At or past zero, and this full read just saw the cards up.
     scrPick := ScrambleVoteLeader()
     if (scrPick > 0) {
+        ScrambleHidePreview() ; preview only
         ScrambleSendPick(scrPick, "at zero +" . Round(-scrLeft / 1000, 1) . "s")
         Return
     }
@@ -4683,8 +4838,10 @@ ScrambleZero:
     ScrambleBusy := true
     OcrLockTake()
     try {
-        if (ScrambleCardsStillUp())
+        if (ScrambleCardsStillUp()) { ; preview only
+            ScrambleHidePreview() ; preview only
             ScrambleSendPick(zPick, "at zero")
+        } ; preview only
     } catch appErr {
         LogAppError("ScrambleZero", appErr)
     }
@@ -4882,9 +5039,10 @@ ShowHelp:
     countdown ends.  Pick manually any time - if the cards close,
     the countdown just cancels.  If the cards cannot be
     read, it does nothing and lets you choose.
-    An on-screen countdown ("Auto-pick: 12s") shows above
-    the cards while the timer runs - turn it off with the
-    "Show on-screen countdown" checkbox if you prefer.
+    A green outline shows the chosen card, with its parsed
+    distance, lie, selection reason and countdown.
+    Turn this feedback off with the
+    "Show chosen card highlight and countdown" checkbox if you prefer.
     These settings apply to ALL profiles.
     Auto-Pick runs independently of Button Mapping ON/OFF.
 

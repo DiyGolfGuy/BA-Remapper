@@ -69,13 +69,15 @@ Select **Basic Secondary** from the profile dropdown and the yellow print on the
 The preset is locked so it always matches the print — it can't be edited, reset, or renamed. Its **Restore** button restores that preset only. To customize, use **Customize a Copy** to keep its working functions in an editable profile; **New Blank** starts with no secondaries.
 
 ### Auto-Pick Scramble
-Turn on the checkbox and BA Remapper watches for GSPro's scramble shot-select cards whenever the app is running. After your chosen delay (5 / 10 / 15 / 20 seconds, with an optional on-screen countdown), it picks the best ball by pressing its shot key (1–4):
+Turn on the checkbox and BA Remapper watches for GSPro's scramble shot-select cards whenever the app is running. After your chosen delay (5 / 10 / 15 / 20 seconds, with an optional chosen-card highlight and countdown), it picks the best ball by pressing its shot key (1–4):
 
 1. **Fewest strokes first** — a 2nd-shot ball always beats a closer 3rd-shot ball from a penalty drop
 2. **Green always wins** among those — a ball on the green beats any distance advantage elsewhere
 3. **Shortest distance** decides the rest
 
 The lie is not judged otherwise — rough, woods and concrete never stop a pick. If the group wants a longer ball from a better lie, they pick it themselves before the countdown ends.
+
+**Chosen-card preview (v5.1.2 development):** a bright green outline marks the card leading the same vote the picker uses. The panel shows its card number, parsed feet/inches or yards, lie, shot number, selection reason and remaining time. It is click-through and keeps GSPro focused; you can still pick another USE button yourself. The existing countdown preference now controls both the highlight and panel. If no readable choice is available it says Reading Cards without highlighting a card. The frame hides when the game loses focus, moves/resizes before its next read, or the card positions become stale. Nothing new is assigned to the printed box buttons.
 
 The cards are read over and over while the countdown runs (every 2 seconds, from the moment they appear), so the decision is made before zero. Each read votes for the card it would pick; at zero, after a quick look that the cards are still up, the card most reads agree on gets its key — one bad frame can't swing it, and a pick the players make in the last second is never overridden.
 
@@ -142,7 +144,7 @@ The main window, Builder and action editor can be resized and scrolled when they
 
 ## Version History
 
-**v5.1.2 — development, not released.** Feet-only OCR readings such as `100'` retain their actual value; letter-based green-distance recovery uses the same validation as numeric readings. If a full GSPro read misses the scramble cards, the watcher retries the central card strip on the same game display. Windows regression cases now require three/four-card selection and preserve green/fringe/yard behavior. See [DEVELOPMENT.md](DEVELOPMENT.md) for validation status. Public downloads remain at v5.1.1.
+**v5.1.2 — development, not released.** Adds a click-through highlight and explanation for the voted scramble card. Feet-only OCR readings such as `100'` retain their actual value; letter-based green-distance recovery uses the same validation as numeric readings. If a full GSPro read misses the scramble cards, the watcher retries the central card strip on the same game display. Windows regression cases now require three/four-card selection and preserve green/fringe/yard behavior. See [DEVELOPMENT.md](DEVELOPMENT.md) for validation status. Public downloads remain at v5.1.1.
 
 **v5.1.1** — Keeps the 64-bit build. Green distances: curly or prime feet/inch marks are read the same as plain ones (the 64-bit build was reading 14' 7" with a misread mark as 141 ft), and an inch mark read as `1'` (`291 71'` for 29' 7", found with the real Windows reader) is no longer taken as 29,171 ft; a green distance over 199 ft is treated as unreadable. The installer refuses 32-bit Windows. Windows CI now reads drawn scramble cards with the real Windows OCR in the 64-bit build.
 
