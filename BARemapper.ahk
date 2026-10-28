@@ -21,7 +21,7 @@ DllCall("SetProcessDPIAware")
 ;  BA CUSTOM PRODUCTS - CONTROL BOX REMAPPER v5.1.2
 ;  bacustomproducts@gmail.com   GitHub: DiyGolfGuy
 ;
-;  DEVELOPMENT v5.1.2 - NOT RELEASED
+;  CHANGES IN v5.1.2
 ;  - A feet-only read such as 100' stays 100 feet. The trailing
 ;    tick is treated as a misread inch mark only after TWO numbers,
 ;    preserving Windows OCR's known 291 71' -> 29' 7" recovery.
@@ -4960,7 +4960,7 @@ Pause::return
 ; ============================================================
 ShowQuickStart:
     Gui, Main:+OwnDialogs
-    MsgBox, 64, BA Remapper - Quick Start, 1. Select Basic Secondary for the yellow functions printed on your box.`n`n2. Turn Button Mapping ON.`n`n3. Tap a button for its white function. Hold Reset Aim (A) and press another button for its yellow function. FN + either club button gives Clear View (B).`n`n4. Want a different function? Choose Customize a Copy, open the Builder, click a button, choose its action, and Save.`n`n5. Optional: use Current Profile at Windows Startup and check Start with Windows.`n`nSmart Click used a wrong spot? Release FN, then use Reset Smart Click Spots. The next press reads the screen and learns again; your profiles stay.`n`nCtrl+F12 turns button mapping on/off. Scramble Auto-Pick has its own checkbox. Exit fully quits; closing the window keeps the app in the tray.
+    MsgBox, 64, BA Remapper - Quick Start, 1. Select Basic Secondary for the yellow functions printed on your box.`n`n2. Turn Button Mapping ON.`n`n3. Tap a button for its white function. Hold Reset Aim (A) and press another button for its yellow function. FN + either club button gives Clear View (B).`n`n4. Want a different function? Choose Customize a Copy, open the Builder, click a button, choose its action, and Save.`n`n5. Optional: use Current Profile at Windows Startup and check Start with Windows.`n`n6. For scramble play, check Auto-Pick Scramble Shot, choose a delay (start with 15 seconds), and check Show chosen card highlight and countdown. Return to GSPro: the green outline shows the planned pick. You can still use any GSPro USE button yourself.`n`nSmart Click used a wrong spot? Release FN, then use Reset Smart Click Spots. The next press reads the screen and learns again; your profiles stay.`n`nCtrl+F12 turns button mapping on/off. Scramble Auto-Pick has its own checkbox. Exit fully quits; closing the window keeps the app in the tray.
 Return
 
 ShowHelp:
@@ -5040,12 +5040,31 @@ ShowHelp:
     countdown ends.  Pick manually any time - if the cards close,
     the countdown just cancels.  If the cards cannot be
     read, it does nothing and lets you choose.
-    A green outline shows the chosen card, with its parsed
-    distance, lie, selection reason and countdown.
+    HOW TO SHOW THE CHOICE
+    Check "Auto-Pick Scramble Shot", choose a delay (start
+    with 15 seconds), and check "Show chosen card highlight
+    and countdown". Return to GSPro and keep it active.
+    A green outline shows the planned card. The panel below
+    shows card number, distance, lie, shot, reason and time.
+    The choice can update as additional reads vote.
+    ' or prime means feet; " or double-prime means inches.
+    14' 7" is fourteen feet, seven inches. Unmarked numbers
+    are feet on GREEN and yards elsewhere; FRINGE is not GREEN.
+    Click any GSPro USE button to choose differently before
+    zero. The outline/panel let your clicks pass through.
+    "Reading Cards" means no readable preview; "Checking"
+    means it is confirming or reading again at zero.
+    No readable decision? Pick manually.
+    Moving/resizing GSPro hides an old outline until a new
+    read. An inactive/minimized game also hides the preview.
     Turn this feedback off with the
     "Show chosen card highlight and countdown" checkbox if you prefer.
     These settings apply to ALL profiles.
     Auto-Pick runs independently of Button Mapping ON/OFF.
+    Turning off the highlight hides visuals; uncheck Auto-Pick
+    itself to stop automatic choices.
+    Full offline guide: Start menu -> BA Remapper How To
+    (portable users: HOW_TO_USE.txt beside the EXE).
 
     PROFILES
     Each profile is its own .ini file in the profiles folder.

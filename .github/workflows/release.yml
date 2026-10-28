@@ -12,7 +12,7 @@ on:
         default: ''
   push:
     branches: [main]
-    paths: [release-version.txt, .github/workflows/release.yml, scripts/package-release.ps1]
+    paths: [release-version.txt, .github/workflows/release.yml, scripts/package-release.ps1, scripts/release-request.ps1]
 permissions:
   contents: write
 concurrency:
@@ -26,6 +26,19 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      - name: Resolve explicit publication request
+        id: request
+        shell: pwsh
+        env:
+          MANUAL_PUBLISH: ${{ inputs.publish }}
+          CONFIRM_VERSION: ${{ inputs.confirm_version }}
+        run: |
+          . ./scripts/release-request.ps1
+          $version = (Get-Content release-version.txt -Raw).Trim()
+          $message = (git log -1 --format=%B) -join "`n"
+          $publish = Get-RemapperReleaseRequest -EventName $env:GITHUB_EVENT_NAME -Ref $env:GITHUB_REF -Version $version -ManualPublish ($env:MANUAL_PUBLISH -eq 'true') -ConfirmVersion $env:CONFIRM_VERSION -CommitMessage $message
+          "publish=$($publish.ToString().ToLowerInvariant())" >> $env:GITHUB_OUTPUT
+          "version=$version" >> $env:GITHUB_OUTPUT
       - name: Build, verify upgrade and package
         shell: pwsh
         run: ./scripts/package-release.ps1
@@ -37,11 +50,11 @@ jobs:
             verification/
             dist/
       - name: Publish complete release
-        if: github.event_name == 'workflow_dispatch' && inputs.publish
+        if: steps.request.outputs.publish == 'true'
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
-          CONFIRM_VERSION: ${{ inputs.confirm_version }}
+          CONFIRM_VERSION: ${{ steps.request.outputs.version }}
         run: |
           $version = (Get-Content release-version.txt -Raw).Trim()
           if ($env:GITHUB_REF -ne 'refs/heads/main') { throw 'Public releases must use main' }

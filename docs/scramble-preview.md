@@ -1,6 +1,20 @@
-# Scramble chosen-card preview — v5.1.2 development
+# Scramble highlight and countdown — v5.1.2
 
 The green frame identifies the card leading the same vote used by Auto-Pick. The panel shows card number, parsed distance, lie, shot number, selection reason and time remaining. It updates as reads vote. Players can still choose another USE button.
+
+## Turn it on
+
+1. Install/update BA Remapper, then open its main window.
+2. Check **Auto-Pick Scramble Shot (all profiles)** and choose **15 seconds** to start.
+3. Check **Show chosen card highlight and countdown**.
+4. Return to GSPro and keep it active. Play a scramble with two, three or four shot-selection cards.
+5. The green frame shows the planned choice. Click any GSPro **USE** button before zero to choose differently. Turning off the highlight hides the visuals; turn off **Auto-Pick Scramble Shot** to stop automatic choices.
+
+The panel shows the card's left-to-right number, parsed distance, lie, shot number, reason and remaining time. **Reading Cards** means no current readable preview; **Checking...** at zero means it is confirming or reading again. Pick manually if it cannot decide. Auto-Pick works independently of Button Mapping.
+
+**Rules:** fewest strokes first, then GREEN among those, then shortest distance. Other lies are not ranked for strategy. `14′ 7″` means 14 feet 7 inches; `87 yd` means 87 yards. An unmarked number is feet on GREEN and yards elsewhere. FRINGE remains off-green.
+
+No highlight? Check both scramble checkboxes and make GSPro active. Moving/resizing the game temporarily hides an old outline until its next read. [Full install, control-box, customization and troubleshooting guide](../HOW_TO_USE.txt).
 
 These images are **actual captures of BA Remapper running on Windows over drawn GSPro-style test cards**, not photographs or live GSPro gameplay. Original sim photographs were not present in tracked repository history. The fixture's name/distance/lie/USE proportions were already based on the field measurements recorded in the source/tests.
 
@@ -29,6 +43,6 @@ All four cards have the same shot number and are off the green; card 2 is closes
 
 [Windows validation run 40614795112](https://github.com/DiyGolfGuy/BA-Remapper/actions/runs/40614795112) passed on source `5a5d90d5684a2fcaf28c3abb13211597ee5d7cc7`: real en-US OCR with two/four-card previews visible, click-through, focus, vote changes, partial-read handling, cleanup, geometry at negative origins/2x size, all existing parser/hotkey/UI checks, Unicode x64 compilation, and an actual installer upgrade preserving settings/profiles. The two images above come from that run. Later changes to this checkpoint add documentation/images and strengthen test assertions; application source is unchanged.
 
-The app stays on `dev/v5.1.2` in draft PR #3. **Not merged or publicly released; the website update remains v5.1.1.** Live GSPro appearance, the physical box and a physical 1–4-screen setup still need owner acceptance.
+The owner authorized public release v5.1.2 after [final development run 40615333461](https://github.com/DiyGolfGuy/BA-Remapper/actions/runs/40615333461) passed all 127 preview assertions plus parser/hotkey/UI/build/upgrade checks. Live GSPro appearance, the physical box and a physical 1–4-screen setup were not tested by the AI. [Public release/download](https://github.com/DiyGolfGuy/BA-Remapper/releases/tag/v5.1.2).
 
 References consulted: [GSPro UI guide](https://gspro.gitbook.io/gspro-knowledge-base/in-game-information/in-game-user-interface), [GSPro changelog](https://gsprogolf.com/change-log.html), [AutoHotkey v1 Gui](https://github.com/AutoHotkey/AutoHotkeyDocs/blob/v1/docs/lib/Gui.htm), [Microsoft SetWindowDisplayAffinity](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-setwindowdisplayaffinity).

@@ -1,12 +1,16 @@
-# Unreleased BA Remapper development
+# BA Remapper release and development record
 
-Current owner instruction, 2026-10-27: upload the code to the development branch for builds/tests, keep building the next version while more ideas are gathered, and do not publish a release yet. This supersedes the earlier local-only hold.
+Current owner instruction, 2026-10-27: **publish v5.1.2 publicly** so Bruce can import it with his website Update button. The earlier hold is superseded for this version only. The owner withdrew the unrelated PIP request; it belongs to another chat.
 
-- Development branch: `dev/v5.1.2`, uploaded for a draft PR and Windows verification.
-- Candidate version: **5.1.2**, 64-bit Unicode. It can be revised as features are added.
-- Public base: `DiyGolfGuy/BA-Remapper`, main at `d53eef4fd50c03fa50df028624e2486844f04c45`, public app v5.1.1.
-- Public main, releases, and the website update remain unchanged; development source is uploaded only on the development branch.
-- No separate private Remapper GitHub repository was visible. After the distinction was explained, Bruce explicitly said: "Upload the code its fine. Nothing about this specific thing is really secret so Upload it to do what you need." The branch and draft PR are publicly readable.
+- Version: **5.1.2**, AutoHotkey v1.1 Unicode x64.
+- PR #3 on dev/v5.1.2 is being prepared for release, including a full offline how-to, installer Start menu shortcut, updated Quick Start/Help and illustrated scramble guide.
+- Prior final development source 540274186e45e44c0194ad33d183dc23df2cdc9c passed Windows run 40615333461: all 127 preview assertions, 38 parser cases, existing UI/key tests, x64 compilation, and installer upgrade preservation. Its downloaded packages passed checksum/ZIP integrity and x64/version checks.
+- This release preparation changes documentation/help and package contents; the runtime selection/click/key algorithms remain unchanged. Its final Windows/package checks and public publication are pending here.
+- The website source was inspected read-only: scripts/sync-releases.js imports non-draft/non-prerelease public GitHub releases, and software-sources.json selects ^BARemapper_Setup_v.*\.zip$. Preserve that exact versioned installer asset and SHA256SUMS.txt.
+- The connector can merge but does not expose manual workflow dispatch or release upload. Publication therefore adds a tested explicit commit-footer path alongside the existing manual path. An owner-approved main commit must contain exactly one standalone Publish-Remapper: 5.1.2 footer; mismatched versions and non-main refs are refused. Ordinary commits still build only.
+- Do not run the website Update action or send customer emails as part of this release task: Bruce said he will update the website. Publishing the public release makes it importable.
+
+Earlier candidate build details below are historical evidence; consult the latest handoff entry and PR check status for the release build.
 
 ## Implemented in the source
 
@@ -15,7 +19,7 @@ Current owner instruction, 2026-10-27: upload the code to the development branch
 3. `ScrambleRecoverCards` keeps a full read that already sees at least two USE buttons. Otherwise it retries the central 25–75% vertical strip of the current GSPro client rectangle and accepts only two to four USE buttons. The existing OCR lock, missing-card cancellation, voting, countdown, and sending logic are retained.
 4. `ScrambleCardBand` derives all coordinates from that window, including negative desktop origins; it does not assume monitor 1 or desktop (0, 0).
 5. Regression coverage includes 38 distance cases, strip geometry at a negative origin, required two/three/four-card OCR selection, zero/one-card non-trigger cases, and the prior hotkey/UI/reset/startup checks.
-6. App, installer and package version metadata are 5.1.2. The staged workflow defaults to building only; actual publication is manual and requires an exact version confirmation. Installer upgrade fixtures refuse an existing Documents configuration and a non-disposable runner.
+6. App, installer and package version metadata are 5.1.2. Ordinary workflow pushes build only; approved publication requires an exact version through manual confirmation or the guarded commit footer. Installer upgrade fixtures refuse an existing Documents configuration and a non-disposable runner.
 
 ## Scramble highlight implemented and Windows verified
 
@@ -84,4 +88,4 @@ The prior five-item suggestion list is not blanket authorization to ship every p
 
 Use the development branch and draft PR to continue; the earlier local-only checkpoint is historical. Read `AGENTS.md` and `AI_HANDOFF.md` before editing. Keep collecting the owner's ideas and update the dated log after meaningful work.
 
-Uploading fixes and tests to this development branch and draft PR is authorized. Do not merge to main, create/publish a release, or synchronize the website until Bruce explicitly changes the release hold. Repository write permissions control who can modify a GitHub repository; a branch name does not control who can read it.
+The owner has now authorized merging and publishing v5.1.2 after verification. Further feature development still needs its own release instruction. Bruce will use his website Update button after publication. Repository write permissions control who can modify a GitHub repository; a branch name does not control who can read it.
