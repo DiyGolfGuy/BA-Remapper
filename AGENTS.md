@@ -1,6 +1,6 @@
 # Working on BA Remapper
 
-**Release authorization — 2026-10-27:** Bruce explicitly asked to make v5.1.2 public so his BA website Update button can import it, with a clear how-to and verified behavior. This supersedes the v5.1.2 release hold. Finish the documented Windows checks, merge PR #3 and publish the complete v5.1.2 release. Do not treat this as permission to publish future work without another owner instruction. Read [DEVELOPMENT.md](DEVELOPMENT.md) for current progress. The later "PIP" request belonged to another chat and was withdrawn; keep this release focused on Remapper.
+**Released — 2026-10-27:** Owner-approved **v5.1.2 is public**, from main/source `202cb25219dfc1d4f7e79f26116155586f161506`, merged PR #3. Release workflow [40633100846](https://github.com/DiyGolfGuy/BA-Remapper/actions/runs/40633100846) and main verification [40633100997](https://github.com/DiyGolfGuy/BA-Remapper/actions/runs/40633100997) passed. Public installer/portable downloads and checksums were downloaded and verified. Bruce can import this release using his website Update button; the AI did not update the website. Future feature releases need another owner instruction. PIP belonged to another chat and was withdrawn.
 
 Read [AI_HANDOFF.md](AI_HANDOFF.md) before changing the app. It records the owner's decisions, implementation reasons, release state, and evidence from prior work. Check the current source and GitHub state when continuing; dated notes are historical context.
 

@@ -1,16 +1,19 @@
 # BA Remapper release and development record
 
-Current owner instruction, 2026-10-27: **publish v5.1.2 publicly** so Bruce can import it with his website Update button. The earlier hold is superseded for this version only. The owner withdrew the unrelated PIP request; it belongs to another chat.
+Current status, 2026-10-27: **v5.1.2 is publicly released**, as explicitly requested by Bruce. [Release/download](https://github.com/DiyGolfGuy/BA-Remapper/releases/tag/v5.1.2). This supersedes earlier hold/pending notes for v5.1.2 only.
 
-- Version: **5.1.2**, AutoHotkey v1.1 Unicode x64.
-- PR #3 on dev/v5.1.2 is being prepared for release, including a full offline how-to, installer Start menu shortcut, updated Quick Start/Help and illustrated scramble guide.
-- Prior final development source 540274186e45e44c0194ad33d183dc23df2cdc9c passed Windows run 40615333461: all 127 preview assertions, 38 parser cases, existing UI/key tests, x64 compilation, and installer upgrade preservation. Its downloaded packages passed checksum/ZIP integrity and x64/version checks.
-- This release preparation changes documentation/help and package contents; the runtime selection/click/key algorithms remain unchanged. Its final Windows/package checks and public publication are pending here.
-- The website source was inspected read-only: scripts/sync-releases.js imports non-draft/non-prerelease public GitHub releases, and software-sources.json selects ^BARemapper_Setup_v.*\.zip$. Preserve that exact versioned installer asset and SHA256SUMS.txt.
-- The connector can merge but does not expose manual workflow dispatch or release upload. Publication therefore adds a tested explicit commit-footer path alongside the existing manual path. An owner-approved main commit must contain exactly one standalone Publish-Remapper: 5.1.2 footer; mismatched versions and non-main refs are refused. Ordinary commits still build only.
-- Do not run the website Update action or send customer emails as part of this release task: Bruce said he will update the website. Publishing the public release makes it importable.
+- Released source/main merge: `202cb25219dfc1d4f7e79f26116155586f161506`, PR #3; approved development head `114ce080887da5c116f03980a55ef4fbcedd5d73`.
+- Final PR verification [40632888156](https://github.com/DiyGolfGuy/BA-Remapper/actions/runs/40632888156), main verification [40633100997](https://github.com/DiyGolfGuy/BA-Remapper/actions/runs/40633100997) and public release workflow [40633100846](https://github.com/DiyGolfGuy/BA-Remapper/actions/runs/40633100846) all passed.
+- Includes 14 publication-gate cases, 127 preview assertions, 38 distance cases, real Windows OCR on drawn cards, focus/click-through/capture-exclusion/fallback/lifecycle checks, existing hotkey/UI/profile/reset/startup checks, official Unicode x64 compilation, actual upgrade preservation and exact installed how-to verification.
+- Public release is neither draft nor prerelease, targets the released source, and contains all three expected assets. Downloaded both public ZIPs and SHA256SUMS.txt; ZIP integrity/checksums passed. Portable contains README, the matching HOW_TO_USE.txt (normal Windows CRLF endings), and the PE32+ x64 version 5.1.2 executable.
+- Public installer ZIP SHA-256: `6af11bbac01b252d78ead97533b1b22a1954e357fcf5ed0c5688da719e2f9d06`.
+- Public portable ZIP SHA-256: `5782b98755e9298229cf7f319ef5901da93a22cdea3019ef4f7acd4d932188a5`.
+- HOW_TO_USE.txt is bundled in installer/portable; installer adds BA Remapper How To to Start menu. Quick Start/Help and the illustrated scramble guide are updated. The unrelated PIP request was withdrawn and no PIP/video feature was added.
+- The website importer was inspected read-only and the public metadata matches it: non-draft/non-prerelease release with BARemapper_Setup_v5.1.2.zip. **The AI did not press website Update or send customer notices.** Bruce can import the release from his website admin.
+- Publication supports an owner-approved exact standalone Publish-Remapper: <version> main-commit footer or the existing manual exact-version confirmation. Ordinary pushes only build; wrong/stale versions and non-main refs are refused. Future releases require a new owner instruction.
+- Live GSPro, the physical control box and physical 1–4-monitor acceptance were not performed by the AI.
 
-Earlier candidate build details below are historical evidence; consult the latest handoff entry and PR check status for the release build.
+Earlier candidate details below are historical evidence and have been superseded by this public release. Continue future features on a development branch and keep future releases held until approved.
 
 ## Implemented in the source
 
