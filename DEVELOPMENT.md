@@ -1,6 +1,8 @@
 # BA Remapper release and development record
 
-Current status, 2026-10-27: **v5.1.2 is publicly released**, as explicitly requested by Bruce. [Release/download](https://github.com/DiyGolfGuy/BA-Remapper/releases/tag/v5.1.2). This supersedes earlier hold/pending notes for v5.1.2 only.
+Current status, 2026-10-28: **v5.1.3 is being published** with Bruce's approval (Claude Code, PR #4): the card-strip retry now reads 45%-92% of the game height (25%-75% cut through the USE buttons on real GSPro screens), the chosen-card frame fits the real card edges, and the preview windows are no longer owned by the GSPro window. Real GSPro 2/3/4-player screenshots (`tests/fixtures/gspro/`, names replaced) are read with the real Windows OCR on every build. Details: AI_HANDOFF.md entries 17-18. The v5.1.2 record below is history.
+
+Previous status, 2026-10-27: **v5.1.2 is publicly released**, as explicitly requested by Bruce. [Release/download](https://github.com/DiyGolfGuy/BA-Remapper/releases/tag/v5.1.2). This supersedes earlier hold/pending notes for v5.1.2 only.
 
 - Released source/main merge: `202cb25219dfc1d4f7e79f26116155586f161506`, PR #3; approved development head `114ce080887da5c116f03980a55ef4fbcedd5d73`.
 - Final PR verification [40632888156](https://github.com/DiyGolfGuy/BA-Remapper/actions/runs/40632888156), main verification [40633100997](https://github.com/DiyGolfGuy/BA-Remapper/actions/runs/40633100997) and public release workflow [40633100846](https://github.com/DiyGolfGuy/BA-Remapper/actions/runs/40633100846) all passed.
@@ -19,7 +21,7 @@ Earlier candidate details below are historical evidence and have been superseded
 
 1. The terminal-feet-mark recovery now requires two numeric groups before treating the trailing tick as an inch mark. `100'` and `111'` keep their feet meaning; `291 71'` still follows the known 29-foot 7-inch recovery path.
 2. Both letter-recovery returns pass through `ScrambleFtIn`, preserving the existing validation policy consistently.
-3. `ScrambleRecoverCards` keeps a full read that already sees at least two USE buttons. Otherwise it retries the central 25–75% vertical strip of the current GSPro client rectangle and accepts only two to four USE buttons. The existing OCR lock, missing-card cancellation, voting, countdown, and sending logic are retained.
+3. `ScrambleRecoverCards` keeps a full read that already sees at least two USE buttons. Otherwise it retries the card strip of the current GSPro client rectangle (25–75% of the height in v5.1.2; 45–92% from v5.1.3, where real GSPro draws the cards) and accepts only two to four USE buttons. The existing OCR lock, missing-card cancellation, voting, countdown, and sending logic are retained.
 4. `ScrambleCardBand` derives all coordinates from that window, including negative desktop origins; it does not assume monitor 1 or desktop (0, 0).
 5. Regression coverage includes 38 distance cases, strip geometry at a negative origin, required two/three/four-card OCR selection, zero/one-card non-trigger cases, and the prior hotkey/UI/reset/startup checks.
 6. App, installer and package version metadata are 5.1.2. Ordinary workflow pushes build only; approved publication requires an exact version through manual confirmation or the guarded commit footer. Installer upgrade fixtures refuse an existing Documents configuration and a non-disposable runner.
