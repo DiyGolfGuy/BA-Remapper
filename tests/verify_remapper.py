@@ -390,7 +390,7 @@ ScrambleSmoke:
         ; The recovery rectangle follows GSPro, including negative
         ; desktop origins, and never extends outside its client area.
         band := ScrambleCardBand({x: -1920, y: -400, w: 1920, h: 1080})
-        bandOk := (band.x = -1920 && band.y = -130 && band.w = 1920 && band.h = 540)
+        bandOk := (band.x = -1920 && band.y = 86 && band.w = 1920 && band.h = 508)
         ScrambleNote(bandOk ? "PASS" : "FAIL", "card strip preserves negative monitor coordinates")
         if (!bandOk)
             fails += 1
@@ -425,11 +425,11 @@ ScrambleSmoke:
                 if ((lc = "" || lc = 0) && !InStr(s.name, "three cards")) {
                     ; Nothing read at all: is the window painted, and does a
                     ; smaller or enlarged read of one card see anything?
-                    PixelGetColor, pc1, 240, 150, RGB
-                    PixelGetColor, pc2, 240, 325, RGB
+                    PixelGetColor, pc1, 240, 230, RGB
+                    PixelGetColor, pc2, 240, 405, RGB
                     PixelGetColor, pc3, 50, 50, RGB
-                    part := OcrRegion(135, 100, 210, 290)
-                    big := OcrRegionScaled(135, 100, 210, 290, 2)
+                    part := OcrRegion(135, 180, 210, 290)
+                    big := OcrRegionScaled(135, 180, 210, 290, 2)
                     full := ScanScreen()
                     ScrambleNote("INFO", "0 lines: pixels card=" . pc1 . " use=" . pc2 . " bg=" . pc3 . "; one-card read " . Cnt(part.lines) . " lines [" . StrReplace(part.text, "`n", " / ") . "]; 2x read " . Cnt(big.lines) . " lines; whole screen " . Cnt(full.lines) . " lines [" . SubStr(StrReplace(full.text, "`n", " / "), 1, 300) . "]")
                 }
@@ -578,7 +578,7 @@ ShowCards(cards, cw := 210, gap := 50, hud := false) {
         Gui, SmokeCard%i%:Add, Text, x0 y146 w%cw% Center BackgroundTrans, % c[2]
         Gui, SmokeCard%i%:Font, s13 cE8E8E8 Bold, Arial
         Gui, SmokeCard%i%:Add, Text, x0 y179 w%cw% Center BackgroundTrans, % c[3]
-        Gui, SmokeCard%i%:Show, x%cx% y100 w%cw% h290 NoActivate
+        Gui, SmokeCard%i%:Show, x%cx% y180 w%cw% h290 NoActivate
         Gui, SmokeUse%i%:New, -Caption +ParentSmokeCard%i% -DPIScale
         Gui, SmokeUse%i%:Color, 2F6FD0
         Gui, SmokeUse%i%:Margin, 0, 0
@@ -817,12 +817,15 @@ RealShotSmoke:
     SetTimer, ScrambleTick, Off
     SetTimer, CdTick, Off
     SetTimer, OcrWarmup, Off
+    fails := 0
     try {
         dir := A_Args[1]
         ; Bruce's own GSPro scramble screenshots (player names replaced),
         ; read at full resolution with the real Windows OCR through the
         ; same bitmap -> stream -> ocr_words path as a screen capture.
-        shots := [["gspro-2p.jpg", 2, 2], ["gspro-3p.jpg", 3, 3], ["gspro-4p.jpg", 4, 4]]
+        ; [file, cards, expected pick, card top, card bottom] - the card
+        ; edges were measured from the pixels (outer edge, incl. border).
+        shots := [["gspro-2p.jpg", 2, 2, 1349, 1656], ["gspro-3p.jpg", 3, 3, 1337, 1644], ["gspro-4p.jpg", 4, 4, 1344, 1651]]
         for i, s in shots {
             hbm := LoadPicture(dir . "\" . s[1])
             VarSetCapacity(bm, 32, 0)
@@ -834,13 +837,10 @@ RealShotSmoke:
             b := ScrambleCardBand(win)
             band := ShotOcr(hbm, b.x, b.y, b.w, b.h)
             bu := Cnt(FindAllLinesExact(band, "use"))
-            alt := ShotOcr(hbm, 0, Floor(h * 0.45), w, Ceil(h * 0.92) - Floor(h * 0.45))
-            au := Cnt(FindAllLinesExact(alt, "use"))
-            usey := ""
-            for k, u in FindAllLinesExact(full.lines.MaxIndex() ? full : alt, "use")
-                usey .= (usey = "" ? "" : ",") . u.y . "-" . (u.y + u.h)
-            r := s[1] . " (" . w . "x" . h . "): full read " . Cnt(full.lines) . " lines/" . fu . " USE | production strip y " . b.y . "-" . (b.y + b.h) . ": " . bu . " USE | strip 45-92%: " . au . " USE | USE rows " . usey
-            for k, pair in [["production (full, else strip)", fu >= 2 ? full : band], ["full read", full], ["strip 45-92%", alt]] {
+            r := s[1] . " (" . w . "x" . h . "): full read " . fu . " USE, card strip y " . b.y . "-" . (b.y + b.h) . " " . bu . " USE"
+            ok := (fu = s[2] && bu = s[2])
+            ; the pick from the full read and from the strip alone
+            for k, pair in [["full read", full], ["card strip", band]] {
                 sc := {found: true, win: win, lines: pair[2].lines, text: pair[2].text}
                 uses := FindAllLinesExact(sc, "use")
                 ScrambleMemo := {}
@@ -851,12 +851,26 @@ RealShotSmoke:
                         cards .= " [" . c . ": " . cd.lie . " " . cd.shot . " " . cd.distRaw . "]"
                 }
                 r .= "`n    " . pair[1] . ": pick " . pick . " (want " . s[3] . ")" . cards
+                ok := ok && pick = s[3]
+                if (k = 1) {
+                    ; the highlight frame for every card, from the sorted USE boxes
+                    for c, u in uses {
+                        f := ScramblePreviewRect(uses, c, win)
+                        cx := u.x + u.w / 2
+                        fit := IsObject(f) && f.y >= s[4] - 30 && f.y <= s[4] + 12 && f.y + f.h >= s[5] - 12 && f.y + f.h <= s[5] + 30
+                            && f.x >= cx - 150 && f.x <= cx - 118 && f.x + f.w >= cx + 118 && f.x + f.w <= cx + 150
+                        r .= "`n      frame " . c . ": x " . (IsObject(f) ? f.x . "-" . (f.x + f.w) . " y " . f.y . "-" . (f.y + f.h) : "none") . " vs card y " . s[4] . "-" . s[5] . " center " . Round(cx) . (fit ? " fits" : " DOES NOT FIT")
+                        ok := ok && fit
+                    }
+                }
             }
-            ScrambleNote((fu >= 2 || bu >= 2) ? "INFO" : "INFO", r)
+            ScrambleNote(ok ? "PASS" : "FAIL", r)
+            if (!ok)
+                fails += 1
             DllCall("DeleteObject", "Ptr", hbm)
         }
-        FileAppend, PASS: real screenshot reads recorded`n, % A_ScriptDir . "\result.txt"
-        ExitApp, 0
+        FileAppend, % (fails ? "FAIL: " . fails . " real screenshots misread" : "PASS: real GSPro screenshots read, picked and framed") . "`n", % A_ScriptDir . "\result.txt"
+        ExitApp, % fails ? 1 : 0
     } catch failure {
         FileAppend, % "FAIL: " . failure.Message . " (line " . failure.Line . ")`n", % A_ScriptDir . "\result.txt"
         ExitApp, 1
@@ -1017,9 +1031,10 @@ def runtime_checks(source, ahk):
             assert returncode == 0 and report.startswith("PASS:"), "PreviewSmoke: " + report + output
             print("PASS: voted-card preview, parsed units, physical geometry, focus, click-through, capture exclusion, real OCR and visual cleanup")
 
-            # Bruce's real GSPro scramble screenshots (names replaced): what the
-            # real Windows OCR finds in a full read, the production strip, and
-            # a lower/taller strip. Recorded for review; not a pass/fail gate yet.
+            # Bruce's real GSPro scramble screenshots (2/3/4 players, names
+            # replaced): the real Windows OCR must find every card in a full
+            # read and in the card strip alone, pick correctly from both, and
+            # the highlight frame must sit on the real card edges.
             (work / "result.txt").unlink(missing_ok=True)
             (work / "scramble-checks.txt").unlink(missing_ok=True)
             candidate = isolated.replace("SetTimer, UiSmoke, -50", "SetTimer, RealShotSmoke, -50", 1)
@@ -1035,6 +1050,7 @@ def runtime_checks(source, ahk):
             annotate("notice", "Real GSPro screenshots", notes)
             report = (work / "result.txt").read_text() if (work / "result.txt").exists() else "No result"
             assert returncode == 0 and report.startswith("PASS:"), "RealShotSmoke: " + report + output
+            print("PASS: real GSPro 2/3/4-player screenshots: every card read (full and strip), correct pick, frame on the card edges")
 
 
 

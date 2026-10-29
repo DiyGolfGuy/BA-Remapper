@@ -2,7 +2,7 @@
 ;@Ahk2Exe-SetName BA Remapper
 ;@Ahk2Exe-SetDescription BA Custom Products Control Box Remapper
 ;@Ahk2Exe-SetCompanyName BA Custom Products
-;@Ahk2Exe-SetVersion 5.1.2
+;@Ahk2Exe-SetVersion 5.1.3
 ;@Ahk2Exe-SetOrigFilename BARemapper.exe
 ;@Ahk2Exe-SetMainIcon BARemapper.ico
 #SingleInstance Off
@@ -18,8 +18,17 @@ CoordMode, Mouse, Screen
 DllCall("SetProcessDPIAware")
 
 ; ============================================================
-;  BA CUSTOM PRODUCTS - CONTROL BOX REMAPPER v5.1.2
+;  BA CUSTOM PRODUCTS - CONTROL BOX REMAPPER v5.1.3
 ;  bacustomproducts@gmail.com   GitHub: DiyGolfGuy
+;
+;  CHANGES IN v5.1.3  (checked on Bruce's real GSPro screenshots)
+;  - Card-strip retry reads 45%-92% of the game height.  25%-75%
+;    cut through the USE buttons on real GSPro screens (they sit at
+;    ~74.5%), so the safety net found 0 of 3 and 0 of 4 cards.
+;  - The chosen-card frame fits the real card edges (it ran ~90 px
+;    above and ~40 px below the card at 2100 px tall).
+;  - Preview windows are no longer owned by the GSPro window (a
+;    cross-program owner ties the two programs' input together).
 ;
 ;  CHANGES IN v5.1.2
 ;  - A feet-only read such as 100' stays 100 feet. The trailing
@@ -285,7 +294,7 @@ DllCall("SetProcessDPIAware")
 ; ============================================================
 ;  CONSTANTS / PATHS
 ; ============================================================
-AppVersion := "5.1.2"
+AppVersion := "5.1.3"
 MainWinTitle    := "BA Custom Control Box Remapper"
 BuilderWinTitle := "BA Custom Control Box - Button Builder"
 HelpWinTitle    := "BA Custom Control Box - Help"
@@ -2961,8 +2970,9 @@ FindAllLinesExact(scan, needle) {
 ; The Windows reader can miss every card when 3-4 columns are in
 ; a full-window image, yet read them in a smaller strip. Keep the
 ; normal full read when it sees cards; otherwise retry only the
-; middle of this GSPro client area. All coordinates remain physical
-; desktop pixels, including negative origins on another monitor.
+; card strip of this GSPro client area. All coordinates remain
+; physical desktop pixels, including negative origins on another
+; monitor.
 ScrambleRecoverCards(scan) {
     if (!IsObject(scan) || !scan.HasKey("win") || !scan.win.found)
         return scan
@@ -2981,9 +2991,14 @@ ScrambleRecoverCards(scan) {
     return scan
 }
 
+; Where GSPro draws the scramble cards: on Bruce's real 2/3/4-player
+; screens (3397-3438 x 2097-2137) the cards span 63%-78% of the game
+; height and the USE text sits at 73.5%-76.3%.  v5.1.2 read 25%-75%,
+; which cut through the USE row and found 1/2, 0/3 and 0/4 buttons
+; with the real Windows reader; 45%-92% found all of them.
 ScrambleCardBand(win) {
-    top := Floor(win.h * 0.25)
-    bottom := Ceil(win.h * 0.75)
+    top := Floor(win.h * 0.45)
+    bottom := Ceil(win.h * 0.92)
     return {x: win.x, y: win.y + top, w: win.w, h: bottom - top}
 }
 
@@ -3400,9 +3415,13 @@ ScrambleRememberPreview(scan, uses) {
     ScramblePreviewRead := {win: scan.win, uses: uses, cards: lr.cards, n: lr.n, at: A_TickCount}
 }
 
-; Frame the card's content, using GSPro's measured name/distance/
-; lie/USE proportions. Neighbor centers bound the width so a frame
-; cannot spill onto another card. This rectangle never drives a click.
+; Frame the chosen card, sized from its USE text (height h) and the
+; spacing of the cards.  Measured on Bruce's real GSPro screens: the
+; card runs from 10.1h above the top of the USE text to 3.2h below
+; it, and 0.48 x the card spacing either side of its center; the
+; frame sits just outside that (10.4h / 3.5h / 0.49).  Neighbor
+; centers bound the width so a frame cannot spill onto another card.
+; This rectangle never drives a click.
 ScramblePreviewRect(uses, pick, win) {
     n := uses.MaxIndex()
     if (n < 2 || n > 4 || pick < 1 || pick > n || !win.found)
@@ -3423,11 +3442,11 @@ ScramblePreviewRect(uses, pick, win) {
     }
     u := uses[pick]
     cx := u.x + u.w / 2
-    half := Min(gap * 0.44, u.h * 7)
+    half := Min(gap * 0.49, u.h * 6.2)
     x := Max(win.x + 2, Floor(cx - half))
-    y := Max(win.y + 2, Floor(u.y - u.h * 14))
+    y := Max(win.y + 2, Floor(u.y - u.h * 10.4))
     right := Min(win.x + win.w - 2, Ceil(cx + half))
-    bottom := Min(win.y + win.h - 2, Ceil(u.y + u.h * 5))
+    bottom := Min(win.y + win.h - 2, Ceil(u.y + u.h * 3.5))
     return {x: x, y: y, w: right - x, h: bottom - y}
 }
 
@@ -3484,8 +3503,13 @@ ScrambleHidePreview() {
 
 ; Both layered + transparent and NOACTIVATE: clicks/keys keep
 ; reaching GSPro, including the USE button under the open frame.
-ScramblePreviewWindow(name, owner, color) {
-    Gui, %name%:New, +AlwaysOnTop -Caption +ToolWindow -DPIScale +E0x08080020 +Owner%owner% +Hwndh
+; Not owned by the GSPro window: a window owned by another program
+; ties the two programs' input together (Windows attaches their input
+; queues), so a busy game could stall the remapper.  Always-on-top is
+; enough to sit over GSPro, as the 5.0.x countdown did; the draw code
+; hides everything whenever GSPro is not the active window.
+ScramblePreviewWindow(name, color) {
+    Gui, %name%:New, +AlwaysOnTop -Caption +ToolWindow -DPIScale +E0x08080020 +Hwndh
     Gui, %name%:Color, %color%
     DllCall("SetLayeredWindowAttributes", "Ptr", h, "UInt", 0, "UChar", 255, "UInt", 2)
     DllCall("SetWindowDisplayAffinity", "Ptr", h, "UInt", 0x11)
@@ -3525,7 +3549,7 @@ ScrambleDrawPreview() {
         ScramblePreviewExcluded := true
         Loop, 5 {
             name := A_Index = 1 ? "Countdown" : "ScrambleEdge" . (A_Index - 1)
-            overlay := ScramblePreviewWindow(name, win.hwnd, A_Index = 1 ? "111C25" : "41F0A0")
+            overlay := ScramblePreviewWindow(name, A_Index = 1 ? "111C25" : "41F0A0")
             ScramblePreviewWindows.Push(overlay.hwnd)
             ScramblePreviewExcluded := ScramblePreviewExcluded && overlay.excluded
         }

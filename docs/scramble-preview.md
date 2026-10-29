@@ -1,4 +1,4 @@
-# Scramble highlight and countdown — v5.1.2
+# Scramble highlight and countdown — v5.1.2, refined in v5.1.3
 
 The green frame identifies the card leading the same vote used by Auto-Pick. The panel shows card number, parsed distance, lie, shot number, selection reason and time remaining. It updates as reads vote. Players can still choose another USE button.
 
@@ -35,8 +35,8 @@ All four cards have the same shot number and are off the green; card 2 is closes
 - The existing **Show chosen card highlight and countdown** preference controls all preview visuals; its saved setting is preserved.
 - The preview follows the highest-card-count vote leader and existing latest-read tie breaker, rather than blindly displaying the newest read's winner. Unreadable, partial or stale geometry shows no chosen frame.
 - Frame positions come from the same physical desktop coordinates as the GSPro client and detected USE labels. Moving/resizing the game hides the old frame until the next valid read. Negative desktop origins are retained; no monitor-1 assumption.
-- The frame uses measured text proportions and neighbor spacing. It is not exact card-edge detection and never drives a click.
-- Overlay windows are layered, transparent, no-activate, and owned by the game. They keep focus and let clicks reach the underlying game, including along the outline itself.
+- The frame is sized from the chosen card's USE text and the card spacing, fitted in v5.1.3 to card edges measured on real GSPro 2/3/4-player screenshots; Windows CI checks it against those screens. It never drives a click.
+- Overlay windows are layered, transparent, no-activate and always on top (since v5.1.3 not owned by the game window: a cross-program owner ties the two programs' input together). They keep focus and let clicks reach the underlying game, including along the outline itself.
 - Windows capture exclusion is verified. If true exclusion is unavailable, the OCR lock hides overlays and flushes composition before reading. The light visual timer performs no OCR or key sending.
 - Focus loss, minimize, missing cards, disabled preferences, cooldown, reset, and stale/stalled state hide the relevant visuals. The two-miss cancellation rule and the actual pick remain unchanged.
 - No new default physical-button mapping, Pick Now, or Skip This Pick action was added in this focused feature. Those remain possible future controls.

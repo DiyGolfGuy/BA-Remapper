@@ -1,9 +1,9 @@
-BA REMAPPER 5.1.2 - HOW TO USE
+BA REMAPPER 5.1.3 - HOW TO USE
 BA Custom Products LLC | bacustomproducts.com
 
 1. INSTALL OR UPDATE
 
-Download BARemapper_Setup_v5.1.2.zip from the BA website or:
+Download BARemapper_Setup_v5.1.3.zip from the BA website or:
 https://github.com/DiyGolfGuy/BA-Remapper/releases/latest
 
 Extract the ZIP. If Remapper is running, right-click its green BA tray
