@@ -1,29 +1,25 @@
-# BA Remapper 5.1.2
+# BA Remapper 5.1.3
 
-See which scramble card Auto-Pick plans to use, with a green highlight and a readable countdown/explanation beneath the cards. Existing printed control-box functions, Smart Clicks, profiles, ranking and shot-key delivery are preserved. This remains the 64-bit Unicode Windows build.
+Checked against real GSPro scramble screens. 5.1.3 fixes the card-strip safety net so it reads where GSPro actually draws the cards, fits the chosen-card highlight to the real card edges, and keeps the highlight windows from tying into GSPro's input. Picks, voting, countdown and shot-key delivery are unchanged. This remains the 64-bit Unicode Windows build.
 
 ## What changed
 
-- **Scramble card highlight:** follows the same vote-leading choice the picker uses. Shows card number, parsed distance, lie, shot number, selection reason and time remaining. Clicks pass through and GSPro keeps focus.
-- **Feet stay feet:** `100'` keeps its 100-foot value. Curved/prime feet and inch marks and the existing close-up OCR recovery are preserved. Letter recovery applies consistent validation.
-- **Two, three or four cards:** when a full game-window read misses the cards, the picker retries the central card strip on that same display.
-- **How-to included:** the installer adds **BA Remapper How To** to the Start menu. Both installer and portable downloads include **HOW_TO_USE.txt**. Quick Start and Help explain the highlight, controls, units and manual choice.
+- **Card-strip safety net reads the right place.** When a full read of the game misses the cards, Auto-Pick reads the card strip again. On real GSPro 2-, 3- and 4-player screens the USE buttons sit at about 74–76% of the game height, and 5.1.2's strip (25%–75%) cut right through them: with the real Windows reader it found 1 of 2, 0 of 3 and 0 of 4 cards. The strip now covers 45%–92% and finds every card.
+- **Highlight fits the card.** The green frame was running about 90 px above and 40 px below the chosen card on a 2100 px-tall screen. It now sits on the card's edges, measured from real GSPro screens.
+- **Highlight windows stand on their own.** They are no longer "owned" by the GSPro window. When one program's window is owned by another program's, Windows ties the two programs' keyboard/mouse handling together, so a busy game could hold up the remapper. They stay on top, click-through and out of the way, and still hide whenever GSPro is not the active window.
 
-## How to use the scramble preview
+## How this was checked
 
-1. Install/update Remapper and open it.
-2. Check **Auto-Pick Scramble Shot (all profiles)**. Choose a delay; **15 seconds** is a useful starting point.
-3. Check **Show chosen card highlight and countdown**, then return to GSPro and keep it active.
-4. When the cards appear, the green outline shows the planned pick. You can still click any GSPro **USE** button before the automatic choice.
-
-The rules stay **fewest strokes → GREEN among those → shortest distance**. Other lies are not ranked for strategy. `14′ 7″` means 14 feet 7 inches; FRINGE is not GREEN. Reading Cards means no readable preview; Checking at zero means it is confirming/re-reading. Turn off the highlight to hide visuals; turn off Auto-Pick itself to stop automatic choices. Button Mapping and Auto-Pick remain independent.
-
-[Illustrated guide and screenshots](https://github.com/DiyGolfGuy/BA-Remapper/blob/main/docs/scramble-preview.md) · [Full how-to](https://github.com/DiyGolfGuy/BA-Remapper/blob/main/HOW_TO_USE.txt)
+- Real GSPro 2-, 3- and 4-player scramble screenshots (player names replaced) are read with the real Windows reader on every build. Every card is found in the full read and in the strip alone, the pick is correct (the shorter fairway ball; the only 1st-shot ball; the shortest of four) and the highlight frame lands on each card's real edges.
+- The existing drawn-card checks (green feet/inches, around the green, yards, 2/3/4 cards, preview focus/click-through/capture exclusion), hotkey checks, 64-bit build and installer upgrade still pass.
+- Not tested by the AI: a live GSPro round, the physical control box, a physical multi-monitor setup.
 
 ## Update/install
 
-Exit the running app from its tray menu. Download and extract **BARemapper_Setup_v5.1.2.zip**, then run Setup over the installed version. Profiles and settings are kept. The portable alternative is **BARemapper_v5.1.2_portable.zip**. **SHA256SUMS.txt** lists download checksums.
+Exit the running app from its tray menu. Download and extract **BARemapper_Setup_v5.1.3.zip**, then run Setup over the installed version. Profiles and settings are kept. The portable alternative is **BARemapper_v5.1.3_portable.zip**. **SHA256SUMS.txt** lists download checksums.
 
-## Verification
+[Illustrated guide](https://github.com/DiyGolfGuy/BA-Remapper/blob/main/docs/scramble-preview.md) · [Full how-to](https://github.com/DiyGolfGuy/BA-Remapper/blob/main/HOW_TO_USE.txt)
 
-Windows verification covers 127 preview assertions, actual Windows OCR on drawn two/three/four-card scenes, 38 distance cases, focus/click-through/capture-exclusion and cleanup, FN/Camera Clip key events, existing UI/profile/reset/startup checks, official Unicode x64 compilation and an actual installer upgrade preserving settings/profiles. The release build also checks the bundled guide and explicit publication controls. Screenshots are real Windows captures over test cards; a live GSPro round, physical control box and physical multi-monitor acceptance were not performed by the AI.
+---
+
+Built and released with [Claude Code](https://claude.com/claude-code) for BA Custom Products.

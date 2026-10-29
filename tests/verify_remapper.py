@@ -390,7 +390,7 @@ ScrambleSmoke:
         ; The recovery rectangle follows GSPro, including negative
         ; desktop origins, and never extends outside its client area.
         band := ScrambleCardBand({x: -1920, y: -400, w: 1920, h: 1080})
-        bandOk := (band.x = -1920 && band.y = -130 && band.w = 1920 && band.h = 540)
+        bandOk := (band.x = -1920 && band.y = 86 && band.w = 1920 && band.h = 508)
         ScrambleNote(bandOk ? "PASS" : "FAIL", "card strip preserves negative monitor coordinates")
         if (!bandOk)
             fails += 1
@@ -812,6 +812,100 @@ CapturePreview(win, name) {
 '''
 
 
+REALSHOT = r'''
+RealShotSmoke:
+    SetTimer, ScrambleTick, Off
+    SetTimer, CdTick, Off
+    SetTimer, OcrWarmup, Off
+    fails := 0
+    try {
+        dir := A_Args[1]
+        ; Bruce's own GSPro scramble screenshots (player names replaced),
+        ; read at full resolution with the real Windows OCR through the
+        ; same bitmap -> stream -> ocr_words path as a screen capture.
+        ; [file, cards, expected pick, card top, card bottom] - the card
+        ; edges were measured from the pixels (outer edge, incl. border).
+        shots := [["gspro-2p.jpg", 2, 2, 1349, 1656], ["gspro-3p.jpg", 3, 3, 1337, 1644], ["gspro-4p.jpg", 4, 4, 1344, 1651]]
+        for i, s in shots {
+            hbm := LoadPicture(dir . "\" . s[1])
+            VarSetCapacity(bm, 32, 0)
+            DllCall("GetObject", "Ptr", hbm, "Int", A_PtrSize = 8 ? 32 : 24, "Ptr", &bm)
+            w := NumGet(bm, 4, "Int"), h := NumGet(bm, 8, "Int")
+            win := {found: true, x: 0, y: 0, w: w, h: h, hwnd: 0, title: "GSPro"}
+            full := ShotOcr(hbm, 0, 0, w, h)
+            fu := Cnt(FindAllLinesExact(full, "use"))
+            b := ScrambleCardBand(win)
+            band := ShotOcr(hbm, b.x, b.y, b.w, b.h)
+            bu := Cnt(FindAllLinesExact(band, "use"))
+            r := s[1] . " (" . w . "x" . h . "): full read " . fu . " USE, card strip y " . b.y . "-" . (b.y + b.h) . " " . bu . " USE"
+            ok := (fu = s[2] && bu = s[2])
+            ; the pick from the full read and from the strip alone
+            for k, pair in [["full read", full], ["card strip", band]] {
+                sc := {found: true, win: win, lines: pair[2].lines, text: pair[2].text}
+                uses := FindAllLinesExact(sc, "use")
+                ScrambleMemo := {}
+                pick := (Cnt(uses) >= 2) ? ScrambleDecide(sc, uses, "", true) : 0
+                cards := ""
+                if (pick > 0 && IsObject(ScrambleLastRead)) {
+                    for c, cd in ScrambleLastRead.cards
+                        cards .= " [" . c . ": " . cd.lie . " " . cd.shot . " " . cd.distRaw . "]"
+                }
+                r .= "`n    " . pair[1] . ": pick " . pick . " (want " . s[3] . ")" . cards
+                ok := ok && pick = s[3]
+                if (k = 1) {
+                    ; the highlight frame for every card, from the sorted USE boxes
+                    for c, u in uses {
+                        f := ScramblePreviewRect(uses, c, win)
+                        cx := u.x + u.w / 2
+                        fit := IsObject(f) && f.y >= s[4] - 30 && f.y <= s[4] + 12 && f.y + f.h >= s[5] - 12 && f.y + f.h <= s[5] + 30
+                            && f.x >= cx - 150 && f.x <= cx - 118 && f.x + f.w >= cx + 118 && f.x + f.w <= cx + 150
+                        r .= "`n      frame " . c . ": x " . (IsObject(f) ? f.x . "-" . (f.x + f.w) . " y " . f.y . "-" . (f.y + f.h) : "none") . " vs card y " . s[4] . "-" . s[5] . " center " . Round(cx) . (fit ? " fits" : " DOES NOT FIT")
+                        ok := ok && fit
+                    }
+                }
+            }
+            ScrambleNote(ok ? "PASS" : "FAIL", r)
+            if (!ok)
+                fails += 1
+            DllCall("DeleteObject", "Ptr", hbm)
+        }
+        FileAppend, % (fails ? "FAIL: " . fails . " real screenshots misread" : "PASS: real GSPro screenshots read, picked and framed") . "`n", % A_ScriptDir . "\result.txt"
+        ExitApp, % fails ? 1 : 0
+    } catch failure {
+        FileAppend, % "FAIL: " . failure.Message . " (line " . failure.Line . ")`n", % A_ScriptDir . "\result.txt"
+        ExitApp, 1
+    }
+Return
+
+; OCR a rectangle of a loaded picture exactly as OcrRegion does a
+; screen rectangle: copy it to its own bitmap, stream, ocr_words.
+ShotOcr(hbm, x, y, w, h) {
+    scr := DllCall("GetDC", "Ptr", 0, "Ptr")
+    sdc := DllCall("CreateCompatibleDC", "Ptr", scr, "Ptr")
+    old1 := DllCall("SelectObject", "Ptr", sdc, "Ptr", hbm, "Ptr")
+    part := DllCall("CreateCompatibleBitmap", "Ptr", scr, "Int", w, "Int", h, "Ptr")
+    ddc := DllCall("CreateCompatibleDC", "Ptr", scr, "Ptr")
+    old2 := DllCall("SelectObject", "Ptr", ddc, "Ptr", part, "Ptr")
+    DllCall("BitBlt", "Ptr", ddc, "Int", 0, "Int", 0, "Int", w, "Int", h, "Ptr", sdc, "Int", x, "Int", y, "UInt", 0x00CC0020)
+    DllCall("SelectObject", "Ptr", ddc, "Ptr", old2, "Ptr")
+    DllCall("DeleteDC", "Ptr", ddc)
+    DllCall("SelectObject", "Ptr", sdc, "Ptr", old1, "Ptr")
+    DllCall("DeleteDC", "Ptr", sdc)
+    DllCall("ReleaseDC", "Ptr", 0, "Ptr", scr)
+    stream := HBitmapToRandomAccessStream(part)
+    DllCall("DeleteObject", "Ptr", part)
+    res := ocr_words(stream)
+    o := {lines: [], text: res.text}
+    for k, ln in res.lines {
+        ln.x += x
+        ln.y += y
+        o.lines.Push(ln)
+    }
+    return o
+}
+'''
+
+
 def ocr_available():
     """Ask Windows itself (outside AutoHotkey) whether an OCR engine exists."""
     probe = ("Add-Type -AssemblyName System.Runtime.WindowsRuntime; "
@@ -936,6 +1030,27 @@ def runtime_checks(source, ahk):
             report = (work / "result.txt").read_text() if (work / "result.txt").exists() else "No result"
             assert returncode == 0 and report.startswith("PASS:"), "PreviewSmoke: " + report + output
             print("PASS: voted-card preview, parsed units, physical geometry, focus, click-through, capture exclusion, real OCR and visual cleanup")
+
+            # Bruce's real GSPro scramble screenshots (2/3/4 players, names
+            # replaced): the real Windows OCR must find every card in a full
+            # read and in the card strip alone, pick correctly from both, and
+            # the highlight frame must sit on the real card edges.
+            (work / "result.txt").unlink(missing_ok=True)
+            (work / "scramble-checks.txt").unlink(missing_ok=True)
+            candidate = isolated.replace("SetTimer, UiSmoke, -50", "SetTimer, RealShotSmoke, -50", 1)
+            script = work / "RealShotSmoke.ahk"
+            script.write_text(candidate + "\n" + SMOKE + "\n" + SCRAMBLE + "\n" + REALSHOT, encoding="utf-8-sig")
+            try:
+                check = subprocess.run([str(ahk), "/ErrorStdOut", str(script), str(ROOT / "tests" / "fixtures" / "gspro")], capture_output=True, text=True, timeout=180)
+                returncode, output = check.returncode, check.stdout + check.stderr
+            except subprocess.TimeoutExpired:
+                returncode, output = -1, "timed out"
+            notes = (work / "scramble-checks.txt").read_text(encoding="utf-8-sig") if (work / "scramble-checks.txt").exists() else "No real-screenshot reads recorded"
+            print(notes)
+            annotate("notice", "Real GSPro screenshots", notes)
+            report = (work / "result.txt").read_text() if (work / "result.txt").exists() else "No result"
+            assert returncode == 0 and report.startswith("PASS:"), "RealShotSmoke: " + report + output
+            print("PASS: real GSPro 2/3/4-player screenshots: every card read (full and strip), correct pick, frame on the card edges")
 
 
 

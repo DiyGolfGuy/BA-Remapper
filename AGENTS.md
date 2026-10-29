@@ -1,6 +1,8 @@
 # Working on BA Remapper
 
-**Released — 2026-10-27:** Owner-approved **v5.1.2 is public**, from main/source `202cb25219dfc1d4f7e79f26116155586f161506`, merged PR #3. Release workflow [40633100846](https://github.com/DiyGolfGuy/BA-Remapper/actions/runs/40633100846) and main verification [40633100997](https://github.com/DiyGolfGuy/BA-Remapper/actions/runs/40633100997) passed. Public installer/portable downloads and checksums were downloaded and verified. Bruce can import this release using his website Update button; the AI did not update the website. Future feature releases need another owner instruction. PIP belonged to another chat and was withdrawn.
+**Released — 2026-10-28:** Owner-approved **v5.1.3** (Claude Code, PR #4) supersedes v5.1.2: card-strip retry reads 45%-92% of the game height, the chosen-card frame fits real card edges, preview windows are not owned by GSPro. Checked against Bruce's real GSPro 2/3/4-player screenshots in `tests/fixtures/gspro/` with the real Windows OCR on every build. See AI_HANDOFF.md entries 17-18 for what changed and why, and the release record. Future feature releases need another owner instruction. PIP belonged to another chat and was withdrawn.
+
+**Real screens beat drawn cards:** geometry (where cards sit, how big the frame is, which strip to read) must be checked against the real screenshots in `tests/fixtures/gspro/`. The drawn test cards are useful for OCR/parsing/UI behavior but are not laid out like GSPro.
 
 Read [AI_HANDOFF.md](AI_HANDOFF.md) before changing the app. It records the owner's decisions, implementation reasons, release state, and evidence from prior work. Check the current source and GitHub state when continuing; dated notes are historical context.
 

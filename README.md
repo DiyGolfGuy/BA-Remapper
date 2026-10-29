@@ -148,6 +148,8 @@ The main window, Builder and action editor can be resized and scrolled when they
 
 ## Version History
 
+**v5.1.3** Checked against real GSPro 2-, 3- and 4-player scramble screens with the real Windows reader. The card-strip safety net now reads 45%–92% of the game height (GSPro's USE buttons sit at about 74–76%, which the 25%–75% strip cut through, so it found 0 of 3 and 0 of 4 cards). The chosen-card frame now fits the real card edges. The preview windows are no longer owned by the GSPro window, so the two programs' input is never tied together. Windows CI now reads those real screens on every build.
+
 **v5.1.2** Adds a click-through highlight and explanation for the voted scramble card. Feet-only OCR readings such as `100'` retain their actual value; letter-based green-distance recovery uses the same validation as numeric readings. If a full GSPro read misses the scramble cards, the watcher retries the central card strip on the same game display. Windows regression cases now require three/four-card selection and preserve green/fringe/yard behavior. See [DEVELOPMENT.md](DEVELOPMENT.md) for validation status. [Download v5.1.2](https://github.com/DiyGolfGuy/BA-Remapper/releases/tag/v5.1.2).
 
 **v5.1.1** — Keeps the 64-bit build. Green distances: curly or prime feet/inch marks are read the same as plain ones (the 64-bit build was reading 14' 7" with a misread mark as 141 ft), and an inch mark read as `1'` (`291 71'` for 29' 7", found with the real Windows reader) is no longer taken as 29,171 ft; a green distance over 199 ft is treated as unreadable. The installer refuses 32-bit Windows. Windows CI now reads drawn scramble cards with the real Windows OCR in the 64-bit build.
