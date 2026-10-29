@@ -812,6 +812,86 @@ CapturePreview(win, name) {
 '''
 
 
+REALSHOT = r'''
+RealShotSmoke:
+    SetTimer, ScrambleTick, Off
+    SetTimer, CdTick, Off
+    SetTimer, OcrWarmup, Off
+    try {
+        dir := A_Args[1]
+        ; Bruce's own GSPro scramble screenshots (player names replaced),
+        ; read at full resolution with the real Windows OCR through the
+        ; same bitmap -> stream -> ocr_words path as a screen capture.
+        shots := [["gspro-2p.jpg", 2, 2], ["gspro-3p.jpg", 3, 3], ["gspro-4p.jpg", 4, 4]]
+        for i, s in shots {
+            hbm := LoadPicture(dir . "\" . s[1])
+            VarSetCapacity(bm, 32, 0)
+            DllCall("GetObject", "Ptr", hbm, "Int", A_PtrSize = 8 ? 32 : 24, "Ptr", &bm)
+            w := NumGet(bm, 4, "Int"), h := NumGet(bm, 8, "Int")
+            win := {found: true, x: 0, y: 0, w: w, h: h, hwnd: 0, title: "GSPro"}
+            full := ShotOcr(hbm, 0, 0, w, h)
+            fu := Cnt(FindAllLinesExact(full, "use"))
+            b := ScrambleCardBand(win)
+            band := ShotOcr(hbm, b.x, b.y, b.w, b.h)
+            bu := Cnt(FindAllLinesExact(band, "use"))
+            alt := ShotOcr(hbm, 0, Floor(h * 0.45), w, Ceil(h * 0.92) - Floor(h * 0.45))
+            au := Cnt(FindAllLinesExact(alt, "use"))
+            usey := ""
+            for k, u in FindAllLinesExact(full.lines.MaxIndex() ? full : alt, "use")
+                usey .= (usey = "" ? "" : ",") . u.y . "-" . (u.y + u.h)
+            r := s[1] . " (" . w . "x" . h . "): full read " . Cnt(full.lines) . " lines/" . fu . " USE | production strip y " . b.y . "-" . (b.y + b.h) . ": " . bu . " USE | strip 45-92%: " . au . " USE | USE rows " . usey
+            for k, pair in [["production (full, else strip)", fu >= 2 ? full : band], ["full read", full], ["strip 45-92%", alt]] {
+                sc := {found: true, win: win, lines: pair[2].lines, text: pair[2].text}
+                uses := FindAllLinesExact(sc, "use")
+                ScrambleMemo := {}
+                pick := (Cnt(uses) >= 2) ? ScrambleDecide(sc, uses, "", true) : 0
+                cards := ""
+                if (pick > 0 && IsObject(ScrambleLastRead)) {
+                    for c, cd in ScrambleLastRead.cards
+                        cards .= " [" . c . ": " . cd.lie . " " . cd.shot . " " . cd.distRaw . "]"
+                }
+                r .= "`n    " . pair[1] . ": pick " . pick . " (want " . s[3] . ")" . cards
+            }
+            ScrambleNote((fu >= 2 || bu >= 2) ? "INFO" : "INFO", r)
+            DllCall("DeleteObject", "Ptr", hbm)
+        }
+        FileAppend, PASS: real screenshot reads recorded`n, % A_ScriptDir . "\result.txt"
+        ExitApp, 0
+    } catch failure {
+        FileAppend, % "FAIL: " . failure.Message . " (line " . failure.Line . ")`n", % A_ScriptDir . "\result.txt"
+        ExitApp, 1
+    }
+Return
+
+; OCR a rectangle of a loaded picture exactly as OcrRegion does a
+; screen rectangle: copy it to its own bitmap, stream, ocr_words.
+ShotOcr(hbm, x, y, w, h) {
+    scr := DllCall("GetDC", "Ptr", 0, "Ptr")
+    sdc := DllCall("CreateCompatibleDC", "Ptr", scr, "Ptr")
+    old1 := DllCall("SelectObject", "Ptr", sdc, "Ptr", hbm, "Ptr")
+    part := DllCall("CreateCompatibleBitmap", "Ptr", scr, "Int", w, "Int", h, "Ptr")
+    ddc := DllCall("CreateCompatibleDC", "Ptr", scr, "Ptr")
+    old2 := DllCall("SelectObject", "Ptr", ddc, "Ptr", part, "Ptr")
+    DllCall("BitBlt", "Ptr", ddc, "Int", 0, "Int", 0, "Int", w, "Int", h, "Ptr", sdc, "Int", x, "Int", y, "UInt", 0x00CC0020)
+    DllCall("SelectObject", "Ptr", ddc, "Ptr", old2, "Ptr")
+    DllCall("DeleteDC", "Ptr", ddc)
+    DllCall("SelectObject", "Ptr", sdc, "Ptr", old1, "Ptr")
+    DllCall("DeleteDC", "Ptr", sdc)
+    DllCall("ReleaseDC", "Ptr", 0, "Ptr", scr)
+    stream := HBitmapToRandomAccessStream(part)
+    DllCall("DeleteObject", "Ptr", part)
+    res := ocr_words(stream)
+    o := {lines: [], text: res.text}
+    for k, ln in res.lines {
+        ln.x += x
+        ln.y += y
+        o.lines.Push(ln)
+    }
+    return o
+}
+'''
+
+
 def ocr_available():
     """Ask Windows itself (outside AutoHotkey) whether an OCR engine exists."""
     probe = ("Add-Type -AssemblyName System.Runtime.WindowsRuntime; "
@@ -936,6 +1016,25 @@ def runtime_checks(source, ahk):
             report = (work / "result.txt").read_text() if (work / "result.txt").exists() else "No result"
             assert returncode == 0 and report.startswith("PASS:"), "PreviewSmoke: " + report + output
             print("PASS: voted-card preview, parsed units, physical geometry, focus, click-through, capture exclusion, real OCR and visual cleanup")
+
+            # Bruce's real GSPro scramble screenshots (names replaced): what the
+            # real Windows OCR finds in a full read, the production strip, and
+            # a lower/taller strip. Recorded for review; not a pass/fail gate yet.
+            (work / "result.txt").unlink(missing_ok=True)
+            (work / "scramble-checks.txt").unlink(missing_ok=True)
+            candidate = isolated.replace("SetTimer, UiSmoke, -50", "SetTimer, RealShotSmoke, -50", 1)
+            script = work / "RealShotSmoke.ahk"
+            script.write_text(candidate + "\n" + SMOKE + "\n" + SCRAMBLE + "\n" + REALSHOT, encoding="utf-8-sig")
+            try:
+                check = subprocess.run([str(ahk), "/ErrorStdOut", str(script), str(ROOT / "tests" / "fixtures" / "gspro")], capture_output=True, text=True, timeout=180)
+                returncode, output = check.returncode, check.stdout + check.stderr
+            except subprocess.TimeoutExpired:
+                returncode, output = -1, "timed out"
+            notes = (work / "scramble-checks.txt").read_text(encoding="utf-8-sig") if (work / "scramble-checks.txt").exists() else "No real-screenshot reads recorded"
+            print(notes)
+            annotate("notice", "Real GSPro screenshots", notes)
+            report = (work / "result.txt").read_text() if (work / "result.txt").exists() else "No result"
+            assert returncode == 0 and report.startswith("PASS:"), "RealShotSmoke: " + report + output
 
 
 
