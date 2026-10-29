@@ -1,6 +1,6 @@
 # Working on BA Remapper
 
-**Released — 2026-10-28:** Owner-approved **v5.1.3** (Claude Code, PR #4) supersedes v5.1.2: card-strip retry reads 45%-92% of the game height, the chosen-card frame fits real card edges, preview windows are not owned by GSPro. Checked against Bruce's real GSPro 2/3/4-player screenshots in `tests/fixtures/gspro/` with the real Windows OCR on every build. See AI_HANDOFF.md entries 17-18 for what changed and why, and the release record. Future feature releases need another owner instruction. PIP belonged to another chat and was withdrawn.
+**Released — 2026-10-28:** Owner-approved **v5.1.3 is public** (Claude Code, PR #4, source `48db0b5da06f715d14acdc1c63b4c924ee0e7d07`, public downloads verified) and supersedes v5.1.2: card-strip retry reads 45%-92% of the game height, the chosen-card frame fits real card edges, preview windows are not owned by GSPro. Checked against Bruce's real GSPro 2/3/4-player screenshots in `tests/fixtures/gspro/` with the real Windows OCR on every build. See AI_HANDOFF.md entries 17-18 for what changed and why, and the release record. Future feature releases need another owner instruction. PIP belonged to another chat and was withdrawn.
 
 **Real screens beat drawn cards:** geometry (where cards sit, how big the frame is, which strip to read) must be checked against the real screenshots in `tests/fixtures/gspro/`. The drawn test cards are useful for OCR/parsing/UI behavior but are not laid out like GSPro.
 
