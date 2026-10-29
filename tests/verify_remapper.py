@@ -425,11 +425,11 @@ ScrambleSmoke:
                 if ((lc = "" || lc = 0) && !InStr(s.name, "three cards")) {
                     ; Nothing read at all: is the window painted, and does a
                     ; smaller or enlarged read of one card see anything?
-                    PixelGetColor, pc1, 240, 230, RGB
-                    PixelGetColor, pc2, 240, 405, RGB
+                    PixelGetColor, pc1, 240, 150, RGB
+                    PixelGetColor, pc2, 240, 325, RGB
                     PixelGetColor, pc3, 50, 50, RGB
-                    part := OcrRegion(135, 180, 210, 290)
-                    big := OcrRegionScaled(135, 180, 210, 290, 2)
+                    part := OcrRegion(135, 100, 210, 290)
+                    big := OcrRegionScaled(135, 100, 210, 290, 2)
                     full := ScanScreen()
                     ScrambleNote("INFO", "0 lines: pixels card=" . pc1 . " use=" . pc2 . " bg=" . pc3 . "; one-card read " . Cnt(part.lines) . " lines [" . StrReplace(part.text, "`n", " / ") . "]; 2x read " . Cnt(big.lines) . " lines; whole screen " . Cnt(full.lines) . " lines [" . SubStr(StrReplace(full.text, "`n", " / "), 1, 300) . "]")
                 }
@@ -578,7 +578,7 @@ ShowCards(cards, cw := 210, gap := 50, hud := false) {
         Gui, SmokeCard%i%:Add, Text, x0 y146 w%cw% Center BackgroundTrans, % c[2]
         Gui, SmokeCard%i%:Font, s13 cE8E8E8 Bold, Arial
         Gui, SmokeCard%i%:Add, Text, x0 y179 w%cw% Center BackgroundTrans, % c[3]
-        Gui, SmokeCard%i%:Show, x%cx% y180 w%cw% h290 NoActivate
+        Gui, SmokeCard%i%:Show, x%cx% y100 w%cw% h290 NoActivate
         Gui, SmokeUse%i%:New, -Caption +ParentSmokeCard%i% -DPIScale
         Gui, SmokeUse%i%:Color, 2F6FD0
         Gui, SmokeUse%i%:Margin, 0, 0
