@@ -211,7 +211,8 @@ The entries below summarize the actual back-and-forth on **2026-10-27**.
     **Kept as before on purpose:** opening the window by hand still leaves mapping ON (Bruce: "when I open the mapper up it needs to be on"); Ctrl+F12 / the button still turn it off to type. The "Mapping is ACTIVE" tray note now also shows on program launches.
     **Tests:** `UiSmoke` runs with `/show` (mapping ON + window visible, then turns mapping off for the existing UI checks). New `ProgramSmoke` runs with no argument from Python: parent read as python, mapping ON, hidden, startup profile loaded; the decision table; then mapping off by hand, a second instance from AutoHotkey (mapping back ON, window still hidden), a second instance with `/show` (window up), and the launch log naming both openers. `BootSmoke` (`/startup`) unchanged.
     **Windows result:** [run 41748330876](https://github.com/DiyGolfGuy/BA-Remapper/actions/runs/41748330876) passed on PR #5 head `5506335`: UiSmoke with `/show`, the new ProgramSmoke (every assertion above; the job fails unless its result is PASS), BootSmoke, FactorySmoke, scramble/preview/real-screenshot checks, x64 build and installer upgrade.
-    **Not verified by the AI:** a real BayLauncher bay, launching from the real desktop/Start menu (parent explorer.exe is assumed for those), a live GSPro round, the physical box. Release only on Bruce's word.
+    **Not verified by the AI:** a real BayLauncher bay, launching from the real desktop/Start menu (parent explorer.exe is assumed for those), a live GSPro round, the physical box.
+    **Owner approval (2026-11-03 18:41 CT):** "release it" - after being told what 5.1.4 does and what was and was not tested. The open question whether to keep the "Mapping is ACTIVE" tray note on program launches was not answered; it stays as built (shown).
 
 ## Continuing the conversation
 
