@@ -143,7 +143,10 @@ UiSmoke:
     SetTimer, CdTick, Off
     SetTimer, OcrWarmup, Off
     try {
-        Assert(!RemapActive, "Manual launch starts with mapping off")
+        Assert(LaunchHow = "show" && RemapActive, "Opened with /show turns mapping on")
+        Assert(DllCall("IsWindowVisible", "Ptr", MainHwnd), "Opened with /show shows the window")
+        ToggleRemap()   ; the UI checks below start from mapping off, as before
+        Assert(!RemapActive, "Mapping button turns mapping off")
         ScrambleAutoPick := true
         UpdateMainStatus()
         GuiControlGet, shown, Main:, ScrambleStatusText
@@ -310,6 +313,46 @@ CaptureWindow(hwnd, name) {
     DllCall("DeleteDC", "Ptr", memory)
     DllCall("ReleaseDC", "Ptr", 0, "Ptr", dc)
 }
+'''
+
+PROGRAM = r'''
+ProgramSmoke:
+    SetTimer, ScrambleTick, Off
+    SetTimer, CdTick, Off
+    try {
+        Assert(RegExMatch(LaunchParent, "i)^python"), "Parent program read from Windows: " . LaunchParent)
+        Assert(LaunchHow = "program" && !isStartupLaunch, "No argument from a program is a program launch")
+        Assert(RemapActive, "Opened by a program turns mapping on")
+        Assert(!DllCall("IsWindowVisible", "Ptr", MainHwnd), "Opened by a program stays in the tray")
+        Assert(ActiveProfile = "Basic Secondary", "Opened by a program loads the startup profile")
+        Assert(LaunchMode([], "explorer.exe") = "hand" && LaunchMode([], "EXPLORER.EXE") = "hand", "Desktop, Start menu or taskbar open shows the window")
+        Assert(LaunchMode([], "BayLauncher.exe") = "program" && LaunchMode([], "") = "program", "BayLauncher or an unknown opener stays in the tray")
+        Assert(LaunchMode(["/startup"], "explorer.exe") = "startup" && LaunchMode(["/show"], "BayLauncher.exe") = "show", "Arguments decide before the opener")
+        ToggleRemap()
+        Assert(!RemapActive, "Mapping turned off by hand")
+        Run, "%A_AhkPath%" /ErrorStdOut "%A_ScriptFullPath%", , , againPid
+        Process, WaitClose, %againPid%, 10
+        Assert(!ErrorLevel, "Second program launch exits")
+        Sleep, 1200
+        Assert(RemapActive, "A program opening it again turns mapping back on")
+        Assert(!DllCall("IsWindowVisible", "Ptr", MainHwnd), "A program opening it again does not pop the window up")
+        Run, "%A_AhkPath%" /ErrorStdOut "%A_ScriptFullPath%" /show, , , showPid
+        Process, WaitClose, %showPid%, 10
+        Assert(!ErrorLevel, "Second /show launch exits")
+        Sleep, 1200
+        Assert(DllCall("IsWindowVisible", "Ptr", MainHwnd), "Opening it again with /show brings the window up")
+        Assert(RemapActive, "Showing the window leaves mapping on")
+        FileRead, launches, % ConfigDir . "\launch_log.txt"
+        Assert(InStr(launches, "opened-by-program") && RegExMatch(launches, "i)from python") && RegExMatch(launches, "i)from AutoHotkey"), "Launch log names the opener")
+        ActiveProfile := "Regression Copy"
+        SaveSettings()
+        FileAppend, % "PASS: program launch, reopen signals and launch log`n", % A_ScriptDir . "\result.txt"
+        Gosub, DoFullExit
+    } catch failure {
+        FileAppend, % "FAIL: " . failure.Message . "`n", % A_ScriptDir . "\result.txt"
+        ExitApp, 1
+    }
+Return
 '''
 
 BOOT = r'''
@@ -940,7 +983,7 @@ def runtime_checks(source, ahk):
         isolated = isolated.replace(marker, "SetTimer, UiSmoke, -50\nReturn", 1)
         (work / "smoke.ahk").write_text(isolated + "\n" + SMOKE, encoding="utf-8-sig")
         (work / "sink.ahk").write_text(SINK, encoding="utf-8-sig")
-        result = subprocess.run([str(ahk), "/ErrorStdOut", str(work / "smoke.ahk")], capture_output=True, text=True, timeout=90)
+        result = subprocess.run([str(ahk), "/ErrorStdOut", str(work / "smoke.ahk"), "/show"], capture_output=True, text=True, timeout=90)
         artifacts = ROOT / "verification"
         artifacts.mkdir(exist_ok=True)
         for artifact in list(work.glob("*.bmp")) + list(work.glob("*.txt")):
@@ -962,13 +1005,13 @@ def runtime_checks(source, ahk):
         assert any(key == 0x11 for _, _, key in rows) and any(key == 0x4D for _, _, key in rows), "Ctrl+M was not received"
         print(f"PASS: four real B keypresses held {b_taps} ms; no A/I/K leak; arrow and Ctrl+M received")
         print("PASS: Exit completed without hanging")
-        for mode, extra, arguments in [("BootSmoke", BOOT, ["/startup"]), ("FactorySmoke", FACTORY, [])]:
+        for mode, extra, arguments in [("ProgramSmoke", PROGRAM, []), ("BootSmoke", BOOT, ["/startup"]), ("FactorySmoke", FACTORY, [])]:
             (work / "result.txt").unlink(missing_ok=True)
             candidate = isolated.replace("SetTimer, UiSmoke, -50", f"SetTimer, {mode}, -50", 1)
             script = work / (mode + ".ahk")
             script.write_text(candidate + "\n" + SMOKE + "\n" + extra, encoding="utf-8-sig")
             try:
-                check = subprocess.run([str(ahk), "/ErrorStdOut", str(script), *arguments], capture_output=True, text=True, timeout=15)
+                check = subprocess.run([str(ahk), "/ErrorStdOut", str(script), *arguments], capture_output=True, text=True, timeout=40 if mode == "ProgramSmoke" else 15)
             except subprocess.TimeoutExpired:
                 for artifact in list(work.glob("*.bmp")) + list(work.glob("*.txt")):
                     shutil.copy2(artifact, artifacts / artifact.name)
@@ -976,7 +1019,10 @@ def runtime_checks(source, ahk):
                 raise AssertionError(f"{mode} timed out: {report}")
             report = (work / "result.txt").read_text() if (work / "result.txt").exists() else "No result"
             assert check.returncode == 0, mode + ": " + report + check.stdout + check.stderr
-            if mode == "BootSmoke":
+            if mode == "ProgramSmoke":
+                assert report.startswith("PASS:"), "Program-launch checks failed: " + report
+                print("PASS: opened by a program = mapping on, tray only, startup profile; reopen by a program re-enables mapping without the window; /show brings it up; log names the opener")
+            elif mode == "BootSmoke":
                 assert (work / "result.txt").read_text().startswith("PASS:"), "Startup checks failed"
                 print("PASS: startup loads the chosen profile, enables mapping and stays hidden")
             else:

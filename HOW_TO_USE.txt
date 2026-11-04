@@ -1,9 +1,9 @@
-BA REMAPPER 5.1.3 - HOW TO USE
+BA REMAPPER 5.1.4 - HOW TO USE
 BA Custom Products LLC | bacustomproducts.com
 
 1. INSTALL OR UPDATE
 
-Download BARemapper_Setup_v5.1.3.zip from the BA website or:
+Download BARemapper_Setup_v5.1.4.zip from the BA website or:
 https://github.com/DiyGolfGuy/BA-Remapper/releases/latest
 
 Extract the ZIP. If Remapper is running, right-click its green BA tray
@@ -19,7 +19,8 @@ Auto-Pick use built-in Windows OCR. They do not upload screen images.
 
 2. USE THE PRINTED CONTROL-BOX FUNCTIONS
 
-Select Basic Secondary. Turn Button Mapping ON.
+Select Basic Secondary. Button Mapping turns ON by itself every time
+Remapper opens; the main window shows it.
 Tap a button for its white printed function.
 Hold Reset Aim (A), then press another button for its yellow function.
 Reset Aim is the default FN button. Keep it held for repeated actions.
@@ -106,6 +107,13 @@ Basic Secondary stays locked to the printed yellow functions.
 For Windows startup, choose Use Current Profile at Windows Startup and
 check Start with Windows. The startup profile is separate from the one
 you are currently editing. Windows startup loads it with mapping ON.
+
+Opened by another program (for example a BayLauncher game card): same as
+Windows startup - the startup profile, mapping ON, stays in the tray.
+Opened by you from the desktop, Start menu or taskbar: the window shows
+and mapping is ON. If a program opens Remapper again while it is
+running, mapping turns back ON and the window stays hidden.
+Double-click the green BA tray icon to open the window.
 
 6. IF SOMETHING LOOKS WRONG
 
