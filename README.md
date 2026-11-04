@@ -29,7 +29,7 @@ The installer puts BA Remapper in Program Files, adds it to the Start Menu and *
 ## Quick Start
 
 1. Choose **Basic Secondary** for the yellow functions printed on the box.
-2. Turn **Button Mapping ON**. Tap for a white function; hold Reset Aim (A) and tap another button for its yellow function. FN + either club button sends Camera Clip / Clear View (B).
+2. **Button Mapping** turns ON by itself every time BA Remapper opens (Ctrl+F12 or the button turns it off to type). Tap for a white function; hold Reset Aim (A) and tap another button for its yellow function. FN + either club button sends Camera Clip / Clear View (B).
 3. To change a function, choose **Customize a Copy**, give it a name, open the Builder, click a button, choose the action, and **Save**. The original preset and Windows Startup Profile stay unchanged. **New Blank** starts without secondary actions.
 4. Optional: choose **Use Current Profile at Windows Startup**, then check **Start with Windows**.
 
@@ -94,7 +94,7 @@ The Builder window mirrors the physical panel — same layout, with each button'
 Each profile is a plain .ini file in the profiles folder — copy them, back them up, share them. The **Windows Startup Profile** (tagged [BOOT]) is what loads at Windows startup, kept separate from whatever you're experimenting with, so the sim always boots into a known state.
 
 ### Start with Windows
-Check the box and BA Remapper launches hidden at every boot — straight to the tray, Windows Startup Profile loaded, mapping ON, nothing to touch. The tray balloon confirms it, and the green BA icon's tooltip shows the live state. The startup chain is self-healing: the app repairs its startup shortcut, re-enables itself if Windows' Startup-apps list has it disabled, clears the download flag that can silently block logon launches, and writes every launch to `launch_log.txt` so boot behavior is never a mystery.
+Check the box and BA Remapper launches hidden at every boot — straight to the tray, Windows Startup Profile loaded, mapping ON, nothing to touch. Another program opening it (for example a BayLauncher game card) gets the same: tray only, startup profile, mapping ON. Opened by hand from the desktop, Start menu or taskbar, the window shows, also with mapping ON. The tray balloon confirms it, and the green BA icon's tooltip shows the live state. The startup chain is self-healing: the app repairs its startup shortcut, re-enables itself if Windows' Startup-apps list has it disabled, clears the download flag that can silently block logon launches, and writes every launch to `launch_log.txt` so boot behavior is never a mystery.
 
 ---
 
@@ -106,7 +106,7 @@ Everything lives in `Documents\BA Custom Products\Remapper\` — visible, plain 
 |---|---|
 | `settings.ini` | App-wide preferences |
 | `profiles\*.ini` | One file per profile |
-| `launch_log.txt` | Every app launch: time, version, manual vs Windows-startup, exe path |
+| `launch_log.txt` | Every app launch: time, version, manual / WINDOWS-STARTUP / opened-by-program, exe path, and the program that opened it |
 | `ocr_last_scan.txt` | Written by the **OCR Test** button — everything the OCR currently reads, with coordinates |
 | `ocr_last_miss.txt` | Written when a Smart Click can't find its target — shows exactly what the screen said |
 | `scramble_last_decision.txt` | Written on every auto-pick or stand-down — each card's lie, shot number, and distance as parsed, the exact text read on each card, how many reads agreed on the pick, or the reason it stood down |
@@ -147,6 +147,8 @@ The main window, Builder and action editor can be resized and scrolled when they
 ---
 
 ## Version History
+
+**v5.1.4** — Mapping turns ON every time the app opens, whatever opens it. A bay where BayLauncher's golf card opens the Remapper used to get the full window with mapping OFF; now it stays in the tray with the startup profile and mapping ON, like Windows startup. Opened by hand, the window shows with mapping ON. A program reopening it while it runs turns mapping back ON without popping the window up. `launch_log.txt` names the program that opened it.
 
 **v5.1.3** Checked against real GSPro 2-, 3- and 4-player scramble screens with the real Windows reader. The card-strip safety net now reads 45%–92% of the game height (GSPro's USE buttons sit at about 74–76%, which the 25%–75% strip cut through, so it found 0 of 3 and 0 of 4 cards). The chosen-card frame now fits the real card edges. The preview windows are no longer owned by the GSPro window, so the two programs' input is never tied together. Windows CI now reads those real screens on every build.
 

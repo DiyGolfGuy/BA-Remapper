@@ -2,7 +2,7 @@
 ;@Ahk2Exe-SetName BA Remapper
 ;@Ahk2Exe-SetDescription BA Custom Products Control Box Remapper
 ;@Ahk2Exe-SetCompanyName BA Custom Products
-;@Ahk2Exe-SetVersion 5.1.3
+;@Ahk2Exe-SetVersion 5.1.4
 ;@Ahk2Exe-SetOrigFilename BARemapper.exe
 ;@Ahk2Exe-SetMainIcon BARemapper.ico
 #SingleInstance Off
@@ -18,8 +18,22 @@ CoordMode, Mouse, Screen
 DllCall("SetProcessDPIAware")
 
 ; ============================================================
-;  BA CUSTOM PRODUCTS - CONTROL BOX REMAPPER v5.1.3
+;  BA CUSTOM PRODUCTS - CONTROL BOX REMAPPER v5.1.4
 ;  bacustomproducts@gmail.com   GitHub: DiyGolfGuy
+;
+;  CHANGES IN v5.1.4  (Bruce: mapping must be ON whatever opens it)
+;  - Mapping turns ON every time the app opens.  Before, only the
+;    Windows startup shortcut (/startup) turned it on, so a bay
+;    where BayLauncher's golf card opens the Remapper came up with
+;    the full window and mapping OFF.
+;  - Opened by another program (BayLauncher, a script) = same as
+;    Windows startup: stays in the tray and loads the startup
+;    profile.  Opened by hand (desktop, Start menu, taskbar - the
+;    parent is explorer.exe) or with /show = window shows.
+;  - A second launch by a program while it is already running
+;    keeps the window hidden and turns mapping back ON; a second
+;    launch by hand still brings the window up.
+;  - launch_log.txt names the program that opened it.
 ;
 ;  CHANGES IN v5.1.3  (checked on Bruce's real GSPro screenshots)
 ;  - Card-strip retry reads 45%-92% of the game height.  25%-75%
@@ -294,7 +308,7 @@ DllCall("SetProcessDPIAware")
 ; ============================================================
 ;  CONSTANTS / PATHS
 ; ============================================================
-AppVersion := "5.1.3"
+AppVersion := "5.1.4"
 MainWinTitle    := "BA Custom Control Box Remapper"
 BuilderWinTitle := "BA Custom Control Box - Button Builder"
 HelpWinTitle    := "BA Custom Control Box - Help"
@@ -566,16 +580,17 @@ ScrambleFrameVisible := false
 
 ; ============================================================
 ;  STARTUP-LAUNCH DETECTION
-;  /startup arg means Windows booted us via the registry Run
-;  entry. Manual launch = no arg = treat as user open.
+;  /startup = the Windows Startup shortcut opened us.
+;  /show    = always show the window (installer's Launch box).
+;  No argument: explorer.exe as the parent means a person opened
+;  it (desktop, Start menu, taskbar); any other parent is a
+;  program such as BayLauncher.  Mapping turns ON in every case
+;  (v5.1.4); only Windows startup and programs stay in the tray.
 ; ============================================================
-isStartupLaunch := false
-for n, arg in A_Args {
-    if (arg = "/startup") {
-        isStartupLaunch := true
-        break
-    }
-}
+LaunchParent := LaunchParentName()
+LaunchHow := LaunchMode(A_Args, LaunchParent)
+isStartupLaunch := (LaunchHow = "startup")
+launchHidden := (LaunchHow = "startup" || LaunchHow = "program")
 
 ; ============================================================
 ;  FILESYSTEM SETUP - happens before anything else reads/writes
@@ -588,9 +603,10 @@ InitConfigPaths()
 llFile := ConfigDir . "\launch_log.txt"
 if (SafeFileSize(llFile) > 20000)
     SafeFileDelete(llFile)
-llMode := isStartupLaunch ? "WINDOWS-STARTUP" : "manual"
+llMode := isStartupLaunch ? "WINDOWS-STARTUP" : (LaunchHow = "program" ? "opened-by-program" : (LaunchHow = "show" ? "show" : "manual"))
+llFrom := (LaunchParent != "") ? LaunchParent : "unknown"
 llLine := A_YYYY . "-" . A_MM . "-" . A_DD . " " . A_Hour . ":" . A_Min . ":" . A_Sec
-llLine .= "  v" . AppVersion . "  " . llMode . "  " . A_ScriptFullPath . "`n"
+llLine .= "  v" . AppVersion . "  " . llMode . "  " . A_ScriptFullPath . "  from " . llFrom . "`n"
 FileAppend, %llLine%, %llFile%
 
 ; Strip our own Mark-of-the-Web.  Downloaded files carry a
@@ -685,22 +701,26 @@ MigrateLegacyFiles() {
 ;  another BARemapper instance is already running - no window
 ;  title matching involved, works compiled or uncompiled.
 ;
-;  When user double-clicks the .exe while already running:
+;  When the .exe is opened again while already running:
 ;    1. CreateMutex reports ERROR_ALREADY_EXISTS (183)
 ;    2. This (second) instance drops a trigger file AND tries
 ;       PostMessage for an instant response
 ;    3. Second instance exits
-;    4. Running instance picks up either signal -> shows GUI
+;    4. Running instance picks up either signal:
+;       "show" (opened by hand)    -> shows GUI
+;       "on"   (program / startup) -> mapping ON, stays hidden
 ;       (trigger file is polled every 500ms as the fallback)
 ; ============================================================
 MutexHandle := DllCall("CreateMutex", "Ptr", 0, "Int", 0, "Str", "BARemapper_BACustomProducts_SingleInstance", "Ptr")
 if (DllCall("GetLastError") = 183) {   ; ERROR_ALREADY_EXISTS
-    FileAppend, show, %TriggerFile%
+    signal := launchHidden ? "on" : "show"
+    signalW := launchHidden ? 1 : 0
+    FileAppend, %signal%, %TriggerFile%
     DetectHiddenWindows, On
     SetTitleMatchMode, 2
     existingHwnd := WinExist(MainWinTitle)
     if (existingHwnd)
-        PostMessage, %WM_SHOWAPP%, 0, 0, , ahk_id %existingHwnd%
+        PostMessage, %WM_SHOWAPP%, %signalW%, 0, , ahk_id %existingHwnd%
     DetectHiddenWindows, Off
     Sleep, 100
     ExitApp
@@ -719,6 +739,10 @@ OnMessage(0x115, "SettingsScroll")
 OnMessage(0x20A, "SettingsWheel")
 
 ShowMainFromMessage(wParam, lParam, msg, hwnd) {
+    if (wParam = 1) {   ; reopened by a program: mapping ON, no window
+        TurnMappingOn()
+        return
+    }
     Gui, Main:Show
     KeepWindowOnScreen(hwnd)
     WinActivate, BA Custom Control Box Remapper
@@ -3950,6 +3974,58 @@ ScrambleLogDecision(n, cards, minShot, winner, note) {
 ; ============================================================
 ;  TOGGLE
 ; ============================================================
+; Mapping ON without ever turning it off (startup, reopen signals).
+TurnMappingOn() {
+    global RemapActive
+    if (!RemapActive)
+        ToggleRemap()
+}
+
+; How this launch should behave:
+;   "startup" - Windows Startup shortcut (/startup)
+;   "show"    - /show (installer's Launch box)
+;   "hand"    - no argument, opened from explorer.exe by a person
+;   "program" - no argument, opened by any other program
+LaunchMode(args, parentName) {
+    for i, a in args {
+        if (a = "/startup")
+            return "startup"
+    }
+    for i, a in args {
+        if (a = "/show")
+            return "show"
+    }
+    return (parentName = "explorer.exe") ? "hand" : "program"
+}
+
+; File name of the process that started this one ("" if unknown).
+; PROCESSENTRY32W: parent PID at 32 and exe name at 44 on 64-bit,
+; 24 and 36 on 32-bit (th32DefaultHeapID is pointer-sized).
+LaunchParentName() {
+    snap := DllCall("CreateToolhelp32Snapshot", "UInt", 0x2, "UInt", 0, "Ptr")
+    if (snap = -1 || snap = 0)
+        return ""
+    size := (A_PtrSize = 8) ? 568 : 556
+    offParent := (A_PtrSize = 8) ? 32 : 24
+    offName := (A_PtrSize = 8) ? 44 : 36
+    VarSetCapacity(pe, size, 0)
+    NumPut(size, pe, 0, "UInt")
+    names := {}, parents := {}
+    ok := DllCall("Process32FirstW", "Ptr", snap, "Ptr", &pe)
+    while (ok) {
+        id := NumGet(pe, 8, "UInt")
+        parents[id] := NumGet(pe, offParent, "UInt")
+        names[id] := StrGet(&pe + offName, 260, "UTF-16")
+        ok := DllCall("Process32NextW", "Ptr", snap, "Ptr", &pe)
+    }
+    DllCall("CloseHandle", "Ptr", snap)
+    me := DllCall("GetCurrentProcessId", "UInt")
+    if (!parents.HasKey(me))
+        return ""
+    ppid := parents[me]
+    return names.HasKey(ppid) ? names[ppid] : ""
+}
+
 ToggleRemap() {
     global RemapActive, FnIsDown, FnUsedAsModifier, FnLastDownTime, ActiveProfile, AppVersion
     RemapActive := !RemapActive
@@ -4050,7 +4126,7 @@ Gui, Main:Add, Text, x205 y314 w330 h24 vBootProfileLabel, %StartupProfile%
 Gui, Main:Font, s9 c000000 Normal, Segoe UI
 Gui, Main:Add, Button, x205 y342 w330 h26 gOnSetBootProfile, Use Current Profile at Windows Startup
 Gui, Main:Font, s9 cAAAAAA Normal, Segoe UI
-Gui, Main:Add, Text, x25 y378 w510 h30, Start with Windows loads this profile and turns mapping ON. Switching profiles now does not change the startup profile.
+Gui, Main:Add, Text, x25 y378 w510 h30, Windows startup and programs that open it (like BayLauncher) load this profile. Mapping turns ON every time it opens.
 Gui, Main:Add, Text, x25 y416 w510 0x10
 
 Gui, Main:Font, s12 c000000 Bold, Segoe UI
@@ -4094,25 +4170,28 @@ Gui, Main:Add, Button, x285 y760 w150 h35 gDoFullExit, Exit
 RefreshProfileActions()
 UpdateMainStatus()
 LoadWindowPos(wx, wy)
-ShowSettingsWindow("Main", MainHwnd, 560, 812, isStartupLaunch, wx, wy)
+ShowSettingsWindow("Main", MainHwnd, 560, 812, launchHidden, wx, wy)
 
 ; ============================================================
 ;  STARTUP-LAUNCH FLOW
-;  Boot launch: switch to Boot Profile if different, turn on
-;  mapping, stay hidden in tray.
-;  Manual launch: window already visible above, mapping stays OFF.
+;  Windows startup or another program (BayLauncher): switch to
+;  the startup profile if different, stay hidden in the tray.
+;  Opened by hand or /show: window already visible above.
+;  Every launch turns mapping ON (v5.1.4).
 ; ============================================================
-if (isStartupLaunch) {
-    Sleep, 1500   ; USB enumeration delay
+if (launchHidden) {
+    if (isStartupLaunch)
+        Sleep, 1500   ; USB enumeration delay at boot
     if (StartupProfile != "" && StartupProfile != ActiveProfile) {
         ActiveProfile := StartupProfile
         LoadProfile(ActiveProfile)
         SaveSettings()
         RefreshMainGuiFromState()
     }
-    ToggleRemap()
-    TrayTip, BA Remapper, Mapping is ACTIVE  (profile: %ActiveProfile%)  -  double-click the tray icon to open, 10, 1
 }
+TurnMappingOn()
+if (launchHidden)
+    TrayTip, BA Remapper, Mapping is ACTIVE  (profile: %ActiveProfile%)  -  double-click the tray icon to open, 10, 1
 
 ; Trigger-file polling for reopen
 SetTimer, CheckTriggerFile, 500
@@ -4924,10 +5003,15 @@ Return
 ; ============================================================
 CheckTriggerFile:
     if FileExist(TriggerFile) {
+        FileRead, trigSignal, %TriggerFile%
         FileDelete, %TriggerFile%
-        Gui, Main:Show
-        KeepWindowOnScreen(MainHwnd)
-        WinActivate, BA Custom Control Box Remapper
+        if (InStr(trigSignal, "on"))     ; reopened by a program
+            TurnMappingOn()
+        if (InStr(trigSignal, "show") || !InStr(trigSignal, "on")) {
+            Gui, Main:Show
+            KeepWindowOnScreen(MainHwnd)
+            WinActivate, BA Custom Control Box Remapper
+        }
     }
 Return
 
@@ -4984,7 +5068,7 @@ Pause::return
 ; ============================================================
 ShowQuickStart:
     Gui, Main:+OwnDialogs
-    MsgBox, 64, BA Remapper - Quick Start, 1. Select Basic Secondary for the yellow functions printed on your box.`n`n2. Turn Button Mapping ON.`n`n3. Tap a button for its white function. Hold Reset Aim (A) and press another button for its yellow function. FN + either club button gives Clear View (B).`n`n4. Want a different function? Choose Customize a Copy, open the Builder, click a button, choose its action, and Save.`n`n5. Optional: use Current Profile at Windows Startup and check Start with Windows.`n`n6. For scramble play, check Auto-Pick Scramble Shot, choose a delay (start with 15 seconds), and check Show chosen card highlight and countdown. Return to GSPro: the green outline shows the planned pick. You can still use any GSPro USE button yourself.`n`nSmart Click used a wrong spot? Release FN, then use Reset Smart Click Spots. The next press reads the screen and learns again; your profiles stay.`n`nCtrl+F12 turns button mapping on/off. Scramble Auto-Pick has its own checkbox. Exit fully quits; closing the window keeps the app in the tray.
+    MsgBox, 64, BA Remapper - Quick Start, 1. Select Basic Secondary for the yellow functions printed on your box.`n`n2. Button Mapping turns ON by itself each time BA Remapper opens (the status above shows it).`n`n3. Tap a button for its white function. Hold Reset Aim (A) and press another button for its yellow function. FN + either club button gives Clear View (B).`n`n4. Want a different function? Choose Customize a Copy, open the Builder, click a button, choose its action, and Save.`n`n5. Optional: use Current Profile at Windows Startup and check Start with Windows.`n`n6. For scramble play, check Auto-Pick Scramble Shot, choose a delay (start with 15 seconds), and check Show chosen card highlight and countdown. Return to GSPro: the green outline shows the planned pick. You can still use any GSPro USE button yourself.`n`nSmart Click used a wrong spot? Release FN, then use Reset Smart Click Spots. The next press reads the screen and learns again; your profiles stay.`n`nCtrl+F12 turns button mapping on/off. Scramble Auto-Pick has its own checkbox. Exit fully quits; closing the window keeps the app in the tray.
 Return
 
 ShowHelp:
@@ -5104,6 +5188,11 @@ ShowHelp:
     turns mapping ON, and hides to the tray.  The shortcut
     re-points itself to the current .exe location on every
     launch, so moving the app never breaks boot.
+
+    OPENED BY ANOTHER PROGRAM (e.g. a BayLauncher game card)
+    Same as Windows startup: Boot Profile, mapping ON, tray
+    only.  Opened by you from the desktop or Start menu, the
+    window shows - also with mapping ON.
 
     RESET SMART CLICK SPOTS
     If a Smart Click used a wrong spot, release FN and choose

@@ -12,8 +12,8 @@
 
 !define APPNAME "BA Remapper"
 !define COMPANY "BA Custom Products"
-!define VERSION "5.1.3"
-!define VERSION4 "5.1.3.0"
+!define VERSION "5.1.4"
+!define VERSION4 "5.1.4.0"
 !define EXENAME "BARemapper.exe"
 !define MUTEX "BARemapper_BACustomProducts_SingleInstance"
 !define UNINSTKEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\BARemapper"
@@ -39,6 +39,7 @@ VIAddVersionKey "LegalCopyright" "(c) 2026 ${COMPANY}"
 !define MUI_ABORTWARNING
 !define MUI_FINISHPAGE_RUN "$INSTDIR\${EXENAME}"
 !define MUI_FINISHPAGE_RUN_TEXT "Launch ${APPNAME} now"
+!define MUI_FINISHPAGE_RUN_PARAMETERS "/show"
 
 !insertmacro MUI_PAGE_WELCOME
 !insertmacro MUI_PAGE_DIRECTORY
