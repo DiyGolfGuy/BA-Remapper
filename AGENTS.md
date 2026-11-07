@@ -2,7 +2,7 @@
 
 **Released — 2026-10-28:** Owner-approved **v5.1.3 is public** (Claude Code, PR #4, source `48db0b5da06f715d14acdc1c63b4c924ee0e7d07`, public downloads verified) and supersedes v5.1.2: card-strip retry reads 45%-92% of the game height, the chosen-card frame fits real card edges, preview windows are not owned by GSPro. Checked against Bruce's real GSPro 2/3/4-player screenshots in `tests/fixtures/gspro/` with the real Windows OCR on every build. See AI_HANDOFF.md entries 17-18 for what changed and why, and the release record. Future feature releases need another owner instruction. PIP belonged to another chat and was withdrawn.
 
-**In progress — 2026-11-07:** v5.1.5 (Claude Code, AI_HANDOFF.md entry 20): GSPro renamed the scramble card button USE -> Select; every card lookup accepts both words (`ScrambleButtons` / `ScrambleIsButtonWord`). Not released until Bruce says so.
+**Released — 2026-11-07:** Owner-approved v5.1.5 (Claude Code, PR #6, AI_HANDOFF.md entry 20) supersedes v5.1.4: GSPro renamed the scramble card button USE -> Select; every card lookup accepts both words (`ScrambleButtons` / `ScrambleIsButtonWord`). Future feature releases need another owner instruction.
 
 **Released — 2026-11-03:** Owner-approved v5.1.4 (Claude Code, PR #5, AI_HANDOFF.md entry 19) supersedes v5.1.3: mapping turns ON however the app is opened; a program opening it (BayLauncher's golf card) stays in the tray like Windows startup; opened by hand (parent explorer.exe) or `/show` shows the window. Future feature releases need another owner instruction.
 
