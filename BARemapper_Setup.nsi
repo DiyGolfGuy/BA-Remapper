@@ -12,8 +12,8 @@
 
 !define APPNAME "BA Remapper"
 !define COMPANY "BA Custom Products"
-!define VERSION "5.1.4"
-!define VERSION4 "5.1.4.0"
+!define VERSION "5.1.5"
+!define VERSION4 "5.1.5.0"
 !define EXENAME "BARemapper.exe"
 !define MUTEX "BARemapper_BACustomProducts_SingleInstance"
 !define UNINSTKEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\BARemapper"

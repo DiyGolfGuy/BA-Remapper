@@ -81,7 +81,7 @@ The lie is not judged otherwise — rough, woods and concrete never stop a pick.
 
 [See the Windows preview screenshots and behavior notes](docs/scramble-preview.md).
 
-**Chosen-card preview (v5.1.2):** a bright green outline marks the card leading the same vote the picker uses. The panel shows its card number, parsed feet/inches or yards, lie, shot number, selection reason and remaining time. It is click-through and keeps GSPro focused; you can still pick another USE button yourself. The existing countdown preference now controls both the highlight and panel. If no readable choice is available it says Reading Cards without highlighting a card. The frame hides when the game loses focus, moves/resizes before its next read, or the card positions become stale. Nothing new is assigned to the printed box buttons.
+**Chosen-card preview (v5.1.2):** a bright green outline marks the card leading the same vote the picker uses. The panel shows its card number, parsed feet/inches or yards, lie, shot number, selection reason and remaining time. It is click-through and keeps GSPro focused; you can still pick another card's Select (older GSPro: USE) button yourself. The existing countdown preference now controls both the highlight and panel. If no readable choice is available it says Reading Cards without highlighting a card. The frame hides when the game loses focus, moves/resizes before its next read, or the card positions become stale. Nothing new is assigned to the printed box buttons.
 
 The cards are read over and over while the countdown runs (every 2 seconds, from the moment they appear), so the decision is made before zero. Each read votes for the card it would pick; at zero, after a quick look that the cards are still up, the card most reads agree on gets its key — one bad frame can't swing it, and a pick the players make in the last second is never overridden.
 
@@ -147,6 +147,8 @@ The main window, Builder and action editor can be resized and scrolled when they
 ---
 
 ## Version History
+
+**v5.1.5** — GSPro's update renamed the scramble card button from **USE** to **Select**, and Auto-Pick only looked for USE, so it never saw the cards (no countdown, no frame, no pick). It now accepts either word, so old and new GSPro both work. Reading, voting, the countdown, the pick rule and the shot key are unchanged.
 
 **v5.1.4** — Mapping turns ON every time the app opens, whatever opens it. A bay where BayLauncher's golf card opens the Remapper used to get the full window with mapping OFF; now it stays in the tray with the startup profile and mapping ON, like Windows startup. Opened by hand, the window shows with mapping ON. A program reopening it while it runs turns mapping back ON without popping the window up. `launch_log.txt` names the program that opened it.
 
