@@ -47,7 +47,7 @@ def static_checks(source, baseline):
         "LearnSpots", "SpotFastResolve", "SpotSlot2Confirm", "SaveSpots",
         "LoadSpots", "DpiClickAt", "DpiRepeatClick", "GsproWinRect",
         "ClientRectByTitle", "ScrambleDecide", "ScrambleSendPick",
-        "ScrambleCardsStillUp", "ScrambleVoteLeader", "ScrambleCountRead",
+        "ScrambleVoteLeader", "ScrambleCountRead",
         "ScrambleVoteSummary", "ScrambleKeepRead",
         "SetAutoStart", "EnsureStartupApproved", "RefreshAutoStartPath",
         "ScanWinClient", "ScanScreen", "OcrRegion", "ocr_words",
@@ -66,7 +66,10 @@ def static_checks(source, baseline):
             # v5.1.2 adds just one recovery call; countdown, cancellation,
             # voting, cooldown, and sending logic must remain untouched.
             old = old.replace('    scrUses := FindAllLinesExact(scrScan, "use")',
-                              '    scrScan := ScrambleRecoverCards(scrScan)\n    scrUses := FindAllLinesExact(scrScan, "use")', 1)
+                              '    scrScan := ScrambleRecoverCards(scrScan)\n    scrUses := ScrambleButtons(scrScan)', 1)
+        # v5.1.5: GSPro renamed the card button USE -> Select; the one
+        # card-button lookup in each preserved block accepts both words.
+        old = old.replace('        dUses := FindAllLinesExact(dScan, "use")', '        dUses := ScrambleButtons(dScan)', 1)
         # The highlight only observes reads and hides before sending. Strip
         # the explicitly tagged visual hooks, then require the original
         # watcher/cancel/deadline/send code, including its branch structure.
@@ -74,6 +77,14 @@ def static_checks(source, baseline):
                                    '        if (ScrambleCardsStillUp())')
         preserved = "\n".join(line for line in preserved.split("\n") if not line.endswith('; preview only'))
         assert old in preserved, f"Unexpected change to preserved section: {start}"
+    # v5.1.5: the still-up check counts USE or Select words; nothing else changed.
+    expected_still_up = function(baseline, "ScrambleCardsStillUp").replace(
+        '    ; Count USE words, not lines: in a strip this small the reader\n    ; may join two buttons on one baseline into "USE USE".',
+        '    ; Count USE/Select words, not lines: in a strip this small the\n    ; reader may join two buttons on one baseline into "USE USE".', 1
+    ).replace('            if (A_LoopField = "use")', '            if (ScrambleIsButtonWord(A_LoopField))', 1)
+    assert function(source, "ScrambleCardsStillUp") == expected_still_up, "Unexpected change: ScrambleCardsStillUp"
+    assert 'return (w = "use" || w = "select")' in function(source, "ScrambleIsButtonWord"), "Card button words are exactly USE and Select"
+    assert not re.search(r'FindAllLinesExact\(\w+, "use"\)', source), "Every card-button lookup accepts USE and Select"
     for name in ["ScrambleResetReads", "OcrLockTake"]:
         current = function(source, name)
         current = current.replace('global OcrBusy, OcrBusySince, ScramblePreviewExcluded, CdVisible, ScrambleFrameVisible',
@@ -450,13 +461,20 @@ ScrambleSmoke:
             sc.Push({name: "four cards 212 / 87 / 143 / 98", want: 2, cards: [["AL", "212", "FAIRWAY   2ND"], ["ADY", "87", "FAIRWAY   2ND"], ["BOB", "143", "ROUGH   2ND"], ["JIM", "98", "ROUGH   2ND"]], cw: 200, gap: 30})
             sc.Push({name: "green feet only 100 vs 99", want: 2, cards: [["AL", "100'", "GREEN   3RD"], ["BOB", "99'", "GREEN   3RD"]]})
             sc.Push({name: "fewest strokes beats green preference", want: 2, cards: [["AL", "1' 0" . q, "GREEN   3RD"], ["BOB", "100", "FAIRWAY   2ND"]]})
+            ; GSPro's late-2026 update labels the card button "Select":
+            ; every scenario again with that word.
+            scCount := sc.MaxIndex()
+            Loop, %scCount% {
+                o := sc[A_Index]
+                sc.Push({name: o.name . " [Select button]", want: o.want, cards: o.cards, cw: o.HasKey("cw") ? o.cw : 210, gap: o.HasKey("gap") ? o.gap : 50, word: "Select"})
+            }
             for i, s in sc {
-                ShowCards(s.cards, s.HasKey("cw") ? s.cw : 210, s.HasKey("gap") ? s.gap : 50)
+                ShowCards(s.cards, s.HasKey("cw") ? s.cw : 210, s.HasKey("gap") ? s.gap : 50, false, s.HasKey("word") ? s.word : "USE")
                 ScrambleResetReads()
                 seen := ""
                 Loop, 3 {
                     scan := ScrambleRecoverCards(ScanWinClient(GSProWinNeedle, GSProWinExclude))
-                    uses := FindAllLinesExact(scan, "use")
+                    uses := ScrambleButtons(scan)
                     n := uses.MaxIndex()
                     lc := scan.lines.MaxIndex()
                     seen .= (seen = "" ? "" : ",") . (scan.found ? (lc = "" ? 0 : lc) . " lines/" . (n = "" ? 0 : n) . " USE in " . scan.win.title . " " . scan.win.w . "x" . scan.win.h . "@" . scan.win.x . "," . scan.win.y . (scan.win.hwnd = SmokeCardsHwnd ? "" : " (NOT the test window)") : "no GSPro window")
@@ -497,23 +515,24 @@ ScrambleSmoke:
             ; screen.  Recorded here so a change in that behavior shows up.
             c4 := [["CARTER", "212", "FAIRWAY   2ND"], ["AL", "87", "FAIRWAY   2ND"], ["BOB", "143", "ROUGH   2ND"], ["JIM", "98", "ROUGH   2ND"]]
             exps := [["2 cards + HUD", [c4[1], c4[2]], 210, 50, true], ["3 cards + HUD", [c4[1], c4[2], c4[3]], 210, 50, true], ["4 cards + HUD", c4, 200, 30, true]]
+            exps.Push(["3 cards + HUD, Select button", [c4[1], c4[2], c4[3]], 210, 50, true, "Select"], ["4 cards + HUD, Select button", c4, 200, 30, true, "Select"])
             for i, e in exps {
-                ShowCards(e[2], e[3], e[4], e[5])
+                ShowCards(e[2], e[3], e[4], e[5], e.HasKey(6) ? e[6] : "USE")
                 ww := 1000, wh := 540
                 scan := ScanWinClient(GSProWinNeedle, GSProWinExclude)
-                r := e[1] . ": full " . Cnt(FindAllLinesExact(scan, "use"))
+                r := e[1] . ": full " . Cnt(ScrambleButtons(scan))
                 recovered := ScrambleRecoverCards(scan)
-                actualN := Cnt(FindAllLinesExact(recovered, "use"))
+                actualN := Cnt(ScrambleButtons(recovered))
                 ScrambleResetReads()
-                actualPick := actualN >= 2 ? ScrambleDecide(recovered, FindAllLinesExact(recovered, "use"), "", true) : 0
+                actualPick := actualN >= 2 ? ScrambleDecide(recovered, ScrambleButtons(recovered), "", true) : 0
                 ok := (actualN = e[2].MaxIndex() && actualPick = 2)
                 ScrambleNote(ok ? "PASS" : "FAIL", e[1] . " recovery sees " . actualN . " cards and picks " . actualPick)
                 if (!ok)
                     fails += 1
                 big := OcrRegionScaled(0, 0, ww, wh, 2)
-                r .= " | 2x " . Cnt(FindAllLinesExact(big, "use"))
+                r .= " | 2x " . Cnt(ScrambleButtons(big))
                 band := OcrRegion(0, 150, ww, 250)
-                r .= " | band " . Cnt(FindAllLinesExact(band, "use"))
+                r .= " | band " . Cnt(ScrambleButtons(band))
                 r .= " | halves " . TileUses(0, 0, ww, wh, 2)
                 r .= " | thirds " . TileUses(0, 0, ww, wh, 3)
                 r .= " | quarters " . TileUses(0, 0, ww, wh, 4)
@@ -523,15 +542,27 @@ ScrambleSmoke:
             ; No cards and a single USE are not a scramble trigger.
             ShowCards([])
             empty := ScrambleRecoverCards(ScanWinClient(GSProWinNeedle, GSProWinExclude))
-            ok := (Cnt(FindAllLinesExact(empty, "use")) = 0)
+            ok := (Cnt(ScrambleButtons(empty)) = 0)
             ScrambleNote(ok ? "PASS" : "FAIL", "no cards remains unarmed")
             if (!ok)
                 fails += 1
             ShowCards([["AL", "212", "FAIRWAY   2ND"]])
             single := ScrambleRecoverCards(ScanWinClient(GSProWinNeedle, GSProWinExclude))
-            ok := (Cnt(FindAllLinesExact(single, "use")) < 2)
+            ok := (Cnt(ScrambleButtons(single)) < 2)
             ScrambleNote(ok ? "PASS" : "FAIL", "one card remains unarmed")
             if (!ok)
+                fails += 1
+            ShowCards([["AL", "212", "FAIRWAY   2ND"]], 210, 50, false, "Select")
+            single := ScrambleRecoverCards(ScanWinClient(GSProWinNeedle, GSProWinExclude))
+            ok := (Cnt(ScrambleButtons(single)) < 2)
+            ScrambleNote(ok ? "PASS" : "FAIL", "one Select card remains unarmed")
+            if (!ok)
+                fails += 1
+            ; Words that are not the card button never count.
+            wordsOk := ScrambleIsButtonWord("Select") && ScrambleIsButtonWord("SELECT .") && ScrambleIsButtonWord("USE")
+                && !ScrambleIsButtonWord("Selected") && !ScrambleIsButtonWord("Select Course") && !ScrambleIsButtonWord("HOUSE")
+            ScrambleNote(wordsOk ? "PASS" : "FAIL", "card button words: USE / Select only, letters-only match")
+            if (!wordsOk)
                 fails += 1
             Loop, 4 {
                 Gui, SmokeUse%A_Index%:Destroy
@@ -559,7 +590,7 @@ TileUses(x, y, w, h, n) {
         if (tx < x)
             tx := x
         o := OcrRegion(tx, y, tw + 140, h)
-        for k, u in FindAllLinesExact(o, "use")
+        for k, u in ScrambleButtons(o)
             seen[Round((u.x + u.w / 2) / 40)] := 1
     }
     c := 0
@@ -585,7 +616,7 @@ ScrambleNote(status, msg) {
 ; buttons are child windows with their own colors (plain GDI).
 ; No grid lines: this checks the 64-bit read path and the parsing,
 ; not the putting-green noise the field logs already cover.
-ShowCards(cards, cw := 210, gap := 50, hud := false) {
+ShowCards(cards, cw := 210, gap := 50, hud := false, word := "USE") {
     global SmokeCardsHwnd
     Loop, 4 {
         Gui, SmokeUse%A_Index%:Destroy
@@ -626,7 +657,7 @@ ShowCards(cards, cw := 210, gap := 50, hud := false) {
         Gui, SmokeUse%i%:Color, 2F6FD0
         Gui, SmokeUse%i%:Margin, 0, 0
         Gui, SmokeUse%i%:Font, s13 cFFFFFF Bold, Arial
-        Gui, SmokeUse%i%:Add, Text, x0 y10 w%uw% Center BackgroundTrans, USE
+        Gui, SmokeUse%i%:Add, Text, x0 y10 w%uw% Center BackgroundTrans, % word
         ux := (cw - uw) // 2
         Gui, SmokeUse%i%:Show, x%ux% y205 w%uw% h42 NoActivate
     }
@@ -686,7 +717,7 @@ PreviewSmoke:
             WinWaitActive, ahk_id %SmokeCardsHwnd%, , 3
             ScrambleResetReads()
             scan := ScrambleRecoverCards(ScanWinClient(GSProWinNeedle, GSProWinExclude))
-            uses := FindAllLinesExact(scan, "use")
+            uses := ScrambleButtons(scan)
             winner := ScrambleDecide(scan, uses, "", true)
             ScrambleCountRead(Cnt(uses), winner)
             ScrambleRememberPreview(scan, uses)
@@ -710,7 +741,7 @@ PreviewSmoke:
             ; The actual production reader must still see the cards, with
             ; all five overlays visible. No screenshot-only OCR substitute.
             again := ScrambleRecoverCards(ScanWinClient(GSProWinNeedle, GSProWinExclude))
-            againUses := FindAllLinesExact(again, "use")
+            againUses := ScrambleButtons(again)
             againWinner := ScrambleDecide(again, againUses, "", true)
             Assert(Cnt(againUses) = n && againWinner = winner, "Visible preview does not contaminate real OCR for " . n . " cards")
             Assert(ScrambleCardsStillUpForTest(uses), "USE-strip confirmation still succeeds under preview")
@@ -869,6 +900,9 @@ RealShotSmoke:
         ; [file, cards, expected pick, card top, card bottom] - the card
         ; edges were measured from the pixels (outer edge, incl. border).
         shots := [["gspro-2p.jpg", 2, 2, 1349, 1656], ["gspro-3p.jpg", 3, 3, 1337, 1644], ["gspro-4p.jpg", 4, 4, 1344, 1651]]
+        ; The same screens with the button word repainted "Select", as
+        ; GSPro shows it since its late-2026 update (see fixtures README).
+        shots.Push(["gspro-2p-select.jpg", 2, 2, 1349, 1656], ["gspro-3p-select.jpg", 3, 3, 1337, 1644], ["gspro-4p-select.jpg", 4, 4, 1344, 1651])
         for i, s in shots {
             hbm := LoadPicture(dir . "\" . s[1])
             VarSetCapacity(bm, 32, 0)
@@ -876,16 +910,16 @@ RealShotSmoke:
             w := NumGet(bm, 4, "Int"), h := NumGet(bm, 8, "Int")
             win := {found: true, x: 0, y: 0, w: w, h: h, hwnd: 0, title: "GSPro"}
             full := ShotOcr(hbm, 0, 0, w, h)
-            fu := Cnt(FindAllLinesExact(full, "use"))
+            fu := Cnt(ScrambleButtons(full))
             b := ScrambleCardBand(win)
             band := ShotOcr(hbm, b.x, b.y, b.w, b.h)
-            bu := Cnt(FindAllLinesExact(band, "use"))
+            bu := Cnt(ScrambleButtons(band))
             r := s[1] . " (" . w . "x" . h . "): full read " . fu . " USE, card strip y " . b.y . "-" . (b.y + b.h) . " " . bu . " USE"
             ok := (fu = s[2] && bu = s[2])
             ; the pick from the full read and from the strip alone
             for k, pair in [["full read", full], ["card strip", band]] {
                 sc := {found: true, win: win, lines: pair[2].lines, text: pair[2].text}
-                uses := FindAllLinesExact(sc, "use")
+                uses := ScrambleButtons(sc)
                 ScrambleMemo := {}
                 pick := (Cnt(uses) >= 2) ? ScrambleDecide(sc, uses, "", true) : 0
                 cards := ""
@@ -1040,7 +1074,7 @@ def runtime_checks(source, ahk):
         script = work / "ScrambleSmoke.ahk"
         script.write_text(candidate + "\n" + SMOKE + "\n" + SCRAMBLE, encoding="utf-8-sig")
         try:
-            check = subprocess.run([str(ahk), "/ErrorStdOut", str(script), "ocr" if has_ocr else "noocr"], capture_output=True, text=True, timeout=180)
+            check = subprocess.run([str(ahk), "/ErrorStdOut", str(script), "ocr" if has_ocr else "noocr"], capture_output=True, text=True, timeout=360)
             returncode = check.returncode
             output = check.stdout + check.stderr
         except subprocess.TimeoutExpired:
@@ -1087,7 +1121,7 @@ def runtime_checks(source, ahk):
             script = work / "RealShotSmoke.ahk"
             script.write_text(candidate + "\n" + SMOKE + "\n" + SCRAMBLE + "\n" + REALSHOT, encoding="utf-8-sig")
             try:
-                check = subprocess.run([str(ahk), "/ErrorStdOut", str(script), str(ROOT / "tests" / "fixtures" / "gspro")], capture_output=True, text=True, timeout=180)
+                check = subprocess.run([str(ahk), "/ErrorStdOut", str(script), str(ROOT / "tests" / "fixtures" / "gspro")], capture_output=True, text=True, timeout=360)
                 returncode, output = check.returncode, check.stdout + check.stderr
             except subprocess.TimeoutExpired:
                 returncode, output = -1, "timed out"

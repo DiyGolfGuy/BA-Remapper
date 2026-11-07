@@ -1,9 +1,9 @@
-BA REMAPPER 5.1.4 - HOW TO USE
+BA REMAPPER 5.1.5 - HOW TO USE
 BA Custom Products LLC | bacustomproducts.com
 
 1. INSTALL OR UPDATE
 
-Download BARemapper_Setup_v5.1.4.zip from the BA website or:
+Download BARemapper_Setup_v5.1.5.zip from the BA website or:
 https://github.com/DiyGolfGuy/BA-Remapper/releases/latest
 
 Extract the ZIP. If Remapper is running, right-click its green BA tray
@@ -75,12 +75,13 @@ mark " means inches. 14' 7" means fourteen feet, seven inches. One yard
 is three feet. An unmarked number is feet on GREEN and yards elsewhere.
 FRINGE is not GREEN; green status comes from the card's lie row.
 
-You can click any GSPro USE button before the automatic choice. The
-outline and panel let clicks through and do not take keyboard focus.
-When the card screen closes, Remapper stops that selection cycle. It
-also checks that the USE buttons are still present before sending the
-choice at zero. Do not wait for a Pick Now or Skip button: this version
-uses GSPro's existing USE buttons and the automatic countdown.
+You can click any GSPro Select button before the automatic choice
+(older GSPro labels it USE; both work). The outline and panel let
+clicks through and do not take keyboard focus. When the card screen
+closes, Remapper stops that selection cycle. It also checks that the
+card buttons are still present before sending the choice at zero. Do
+not wait for a Pick Now or Skip button: this version uses GSPro's own
+card buttons and the automatic countdown.
 
 Reading Cards means there is no current readable preview. Checking at
 zero means it is confirming/re-reading. If it cannot decide, choose a

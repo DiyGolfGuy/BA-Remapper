@@ -2,7 +2,7 @@
 ;@Ahk2Exe-SetName BA Remapper
 ;@Ahk2Exe-SetDescription BA Custom Products Control Box Remapper
 ;@Ahk2Exe-SetCompanyName BA Custom Products
-;@Ahk2Exe-SetVersion 5.1.4
+;@Ahk2Exe-SetVersion 5.1.5
 ;@Ahk2Exe-SetOrigFilename BARemapper.exe
 ;@Ahk2Exe-SetMainIcon BARemapper.ico
 #SingleInstance Off
@@ -18,8 +18,17 @@ CoordMode, Mouse, Screen
 DllCall("SetProcessDPIAware")
 
 ; ============================================================
-;  BA CUSTOM PRODUCTS - CONTROL BOX REMAPPER v5.1.4
+;  BA CUSTOM PRODUCTS - CONTROL BOX REMAPPER v5.1.5
 ;  bacustomproducts@gmail.com   GitHub: DiyGolfGuy
+;
+;  CHANGES IN v5.1.5  (Bruce, Nov 7 2026: "auto scramble does not
+;  seem to be working anymore")
+;  - GSPro's update renamed the scramble card button from "USE" to
+;    "Select" (Bruce's photo of the bay, same card layout).  Every
+;    place that found the cards by an exact "USE" now accepts
+;    either word (ScrambleButtons / ScrambleIsButtonWord), so the
+;    old and new GSPro both work.  Reading, voting, countdown,
+;    the pick rule and key delivery are unchanged.
 ;
 ;  CHANGES IN v5.1.4  (Bruce: mapping must be ON whatever opens it)
 ;  - Mapping turns ON every time the app opens.  Before, only the
@@ -308,7 +317,7 @@ DllCall("SetProcessDPIAware")
 ; ============================================================
 ;  CONSTANTS / PATHS
 ; ============================================================
-AppVersion := "5.1.4"
+AppVersion := "5.1.5"
 MainWinTitle    := "BA Custom Control Box Remapper"
 BuilderWinTitle := "BA Custom Control Box - Button Builder"
 HelpWinTitle    := "BA Custom Control Box - Help"
@@ -2725,7 +2734,7 @@ ScanWinClientAuto(include, exclude := "") {
         bh := Round(wr.h * 0.45)
         o := OcrRegionScaled(bx, by, bw, bh, 2)
         band := {lines: o.lines, text: o.text}
-        if (FindAllLinesExact(band, "use").MaxIndex() >= 2) {
+        if (ScrambleButtons(band).MaxIndex() >= 2) {
             r.lines := o.lines
             r.text  := o.text
             r.lc    := LowerStr(o.text)
@@ -2948,7 +2957,8 @@ OcrDumpMiss(context, scan, fname := "ocr_last_miss.txt") {
 ;
 ;  Global option (all profiles), armed only while mapping is
 ;  ON.  Every 2s it scans the GSPro window for the scramble
-;  shot-select cards (trigger: 2+ lines reading exactly "USE").
+;  shot-select cards (trigger: 2+ lines reading exactly "USE",
+;  or "Select" since GSPro's late-2026 update).
 ;  Once seen, a countdown starts (5/10/15/20s, user setting).
 ;  If the players pick manually, the cards vanish and the
 ;  countdown cancels silently.  The cards are read on EVERY
@@ -2957,7 +2967,7 @@ OcrDumpMiss(context, scan, fname := "ocr_last_miss.txt") {
 ;  agree on gets its key (after a quick look that the cards are
 ;  still up).  Each read parses the cards:
 ;
-;    - Column per USE button (left to right = shot key 1-4,
+;    - Column per USE/Select button (left to right = shot key 1-4,
 ;      matching GSPro's keyboard shortcuts)
 ;    - Lie line per column (FAIRWAY 2ND, GREEN 2ND, ...)
 ;    - Distance per column: the tallest digits-only line
@@ -2981,6 +2991,24 @@ OcrDumpMiss(context, scan, fname := "ocr_last_miss.txt") {
 ; Stripping non-letters before comparing makes the trigger
 ; immune to that noise, while real words (HOUSE, MOUSE) still
 ; cannot false-match.
+; GSPro's scramble card button: "USE" until its late-2026 update,
+; "Select" after it (same card layout).  Letters only, like
+; FindAllLinesExact, so grid-dot noise ("Select .") still matches.
+ScrambleIsButtonWord(text) {
+    w := RegExReplace(LowerStr(text), "[^a-z]", "")
+    return (w = "use" || w = "select")
+}
+
+; Every OCR line that is exactly a scramble card button word.
+ScrambleButtons(scan) {
+    out := []
+    for i, ln in scan.lines {
+        if (ScrambleIsButtonWord(ln.text))
+            out.Push({x: ln.x, y: ln.y, w: ln.w, h: ln.h, text: ln.text})
+    }
+    return out
+}
+
 FindAllLinesExact(scan, needle) {
     nl := RegExReplace(LowerStr(needle), "[^a-z]", "")
     out := []
@@ -3000,7 +3028,7 @@ FindAllLinesExact(scan, needle) {
 ScrambleRecoverCards(scan) {
     if (!IsObject(scan) || !scan.HasKey("win") || !scan.win.found)
         return scan
-    uses := FindAllLinesExact(scan, "use")
+    uses := ScrambleButtons(scan)
     if (uses.MaxIndex() >= 2)
         return scan
     band := ScrambleCardBand(scan.win)
@@ -3008,7 +3036,7 @@ ScrambleRecoverCards(scan) {
         return scan
     o := OcrRegion(band.x, band.y, band.w, band.h)
     recovered := {found: true, win: scan.win, lines: o.lines, text: o.text, lc: LowerStr(o.text)}
-    recoveredUses := FindAllLinesExact(recovered, "use")
+    recoveredUses := ScrambleButtons(recovered)
     n := recoveredUses.MaxIndex()
     if (n >= 2 && n <= 4)
         return recovered
@@ -3389,14 +3417,14 @@ ScrambleCardsStillUp() {
     pw := u[1].w
     ph := u[1].h
     o := OcrRegionScaled(x0 - pw, y0 - ph, (x1 - x0) + pw * 2, (y1 - y0) + ph * 2, 2)
-    ; Count USE words, not lines: in a strip this small the reader
-    ; may join two buttons on one baseline into "USE USE".
+    ; Count USE/Select words, not lines: in a strip this small the
+    ; reader may join two buttons on one baseline into "USE USE".
     k := 0
     for i, ln in o.lines {
         t := RegExReplace(LowerStr(ln.text), "[^a-z ]", "")
         Loop, Parse, t, %A_Space%
         {
-            if (A_LoopField = "use")
+            if (ScrambleIsButtonWord(A_LoopField))
                 k += 1
         }
     }
@@ -4727,7 +4755,7 @@ TrayOcrDump:
             dBody .= dLn.x . "," . dLn.y . "  " . dLn.w . "x" . dLn.h . "  |" . dLn.text . "|`n"
         ; Scramble cards on screen: show what the picker would
         ; choose from this exact frame (no key is sent).
-        dUses := FindAllLinesExact(dScan, "use")
+        dUses := ScrambleButtons(dScan)
         if (dUses.MaxIndex() >= 2) {
             dWin := ScrambleDecide(dScan, dUses, " (OCR Test, no key sent)")
             dBody .= "------------------------------------------`n"
@@ -4849,7 +4877,7 @@ ScrambleWork:
         ScrambleFbTick := 0
     }
     scrScan := ScrambleRecoverCards(scrScan)
-    scrUses := FindAllLinesExact(scrScan, "use")
+    scrUses := ScrambleButtons(scrScan)
     useCount := scrUses.MaxIndex()
     if (useCount = "" || useCount < 2) {
         ; Cards not seen THIS scan.  The animated green grid can
@@ -5068,7 +5096,7 @@ Pause::return
 ; ============================================================
 ShowQuickStart:
     Gui, Main:+OwnDialogs
-    MsgBox, 64, BA Remapper - Quick Start, 1. Select Basic Secondary for the yellow functions printed on your box.`n`n2. Button Mapping turns ON by itself each time BA Remapper opens (the status above shows it).`n`n3. Tap a button for its white function. Hold Reset Aim (A) and press another button for its yellow function. FN + either club button gives Clear View (B).`n`n4. Want a different function? Choose Customize a Copy, open the Builder, click a button, choose its action, and Save.`n`n5. Optional: use Current Profile at Windows Startup and check Start with Windows.`n`n6. For scramble play, check Auto-Pick Scramble Shot, choose a delay (start with 15 seconds), and check Show chosen card highlight and countdown. Return to GSPro: the green outline shows the planned pick. You can still use any GSPro USE button yourself.`n`nSmart Click used a wrong spot? Release FN, then use Reset Smart Click Spots. The next press reads the screen and learns again; your profiles stay.`n`nCtrl+F12 turns button mapping on/off. Scramble Auto-Pick has its own checkbox. Exit fully quits; closing the window keeps the app in the tray.
+    MsgBox, 64, BA Remapper - Quick Start, 1. Select Basic Secondary for the yellow functions printed on your box.`n`n2. Button Mapping turns ON by itself each time BA Remapper opens (the status above shows it).`n`n3. Tap a button for its white function. Hold Reset Aim (A) and press another button for its yellow function. FN + either club button gives Clear View (B).`n`n4. Want a different function? Choose Customize a Copy, open the Builder, click a button, choose its action, and Save.`n`n5. Optional: use Current Profile at Windows Startup and check Start with Windows.`n`n6. For scramble play, check Auto-Pick Scramble Shot, choose a delay (start with 15 seconds), and check Show chosen card highlight and countdown. Return to GSPro: the green outline shows the planned pick. You can still use any GSPro Select (older GSPro: USE) button yourself.`n`nSmart Click used a wrong spot? Release FN, then use Reset Smart Click Spots. The next press reads the screen and learns again; your profiles stay.`n`nCtrl+F12 turns button mapping on/off. Scramble Auto-Pick has its own checkbox. Exit fully quits; closing the window keeps the app in the tray.
 Return
 
 ShowHelp:
@@ -5158,8 +5186,8 @@ ShowHelp:
     ' or prime means feet; " or double-prime means inches.
     14' 7" is fourteen feet, seven inches. Unmarked numbers
     are feet on GREEN and yards elsewhere; FRINGE is not GREEN.
-    Click any GSPro USE button to choose differently before
-    zero. The outline/panel let your clicks pass through.
+    Click any GSPro Select (USE) button to choose differently
+    before zero. The outline/panel let clicks pass through.
     "Reading Cards" means no readable preview; "Checking"
     means it is confirming or reading again at zero.
     No readable decision? Pick manually.

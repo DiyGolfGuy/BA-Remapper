@@ -1,6 +1,6 @@
 # Scramble highlight and countdown — v5.1.2, refined in v5.1.3
 
-The green frame identifies the card leading the same vote used by Auto-Pick. The panel shows card number, parsed distance, lie, shot number, selection reason and time remaining. It updates as reads vote. Players can still choose another USE button.
+The green frame identifies the card leading the same vote used by Auto-Pick. The panel shows card number, parsed distance, lie, shot number, selection reason and time remaining. It updates as reads vote. Players can still choose another card's Select button (USE on GSPro before its late-2026 update).
 
 ## Turn it on
 
@@ -8,7 +8,7 @@ The green frame identifies the card leading the same vote used by Auto-Pick. The
 2. Check **Auto-Pick Scramble Shot (all profiles)** and choose **15 seconds** to start.
 3. Check **Show chosen card highlight and countdown**.
 4. Return to GSPro and keep it active. Play a scramble with two, three or four shot-selection cards.
-5. The green frame shows the planned choice. Click any GSPro **USE** button before zero to choose differently. Turning off the highlight hides the visuals; turn off **Auto-Pick Scramble Shot** to stop automatic choices.
+5. The green frame shows the planned choice. Click any GSPro **Select** (older GSPro: **USE**) button before zero to choose differently. Turning off the highlight hides the visuals; turn off **Auto-Pick Scramble Shot** to stop automatic choices.
 
 The panel shows the card's left-to-right number, parsed distance, lie, shot number, reason and remaining time. **Reading Cards** means no current readable preview; **Checking...** at zero means it is confirming or reading again. Pick manually if it cannot decide. Auto-Pick works independently of Button Mapping.
 
@@ -28,7 +28,7 @@ Both balls have the same shot number and are on the green, so the shorter distan
 
 ![Four-card preview: card 2 is selected at 87 yards](images/scramble-preview-4.png)
 
-All four cards have the same shot number and are off the green; card 2 is closest. The frame surrounds that card's contents and leaves its USE button readable. The explanation also supports Fewest strokes and Green preferred when those rules decide the pick.
+All four cards have the same shot number and are off the green; card 2 is closest. The frame surrounds that card's contents and leaves its Select/USE button readable. The explanation also supports Fewest strokes and Green preferred when those rules decide the pick.
 
 ## Behavior and evidence
 
