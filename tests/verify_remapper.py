@@ -1085,9 +1085,11 @@ def runtime_checks(source, ahk):
         print(notes)
         annotate("notice", "Scramble checks (" + ("real Windows OCR: " + ocr_note if has_ocr else "no OCR engine") + ")", notes)
         dumps = sorted((work / "data").glob("ocr_scenario_*.txt"))
-        if dumps:
-            annotate("notice", "OCR scenario reads", "\n".join(d.read_text(errors="replace") for d in dumps))
         report = (work / "result.txt").read_text() if (work / "result.txt").exists() else "No result"
+        # GitHub keeps only 10 notices per step: raw OCR dumps only when a read failed,
+        # so the real-screenshot summary below is never crowded out.
+        if dumps and not report.startswith("PASS:"):
+            annotate("notice", "OCR scenario reads", "\n".join(d.read_text(errors="replace") for d in dumps))
         assert returncode == 0 and report.startswith("PASS:"), "ScrambleSmoke: " + report + output
         print("PASS: " + ("green feet/inches, around-the-green and yards cards read with the real Windows OCR in this build" if has_ocr else "distance parsing in this build (real-OCR card reads skipped: no OCR engine)"))
 
