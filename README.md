@@ -54,6 +54,8 @@ Each button's secondary can be one of three types:
 ### Smart Clicks
 Five penalty/relief menu actions are built in: **Move Forward, Move Back, Next Option, Drop Ball / Rehit, OB Rehit**. Before any click, the app verifies the entire relief menu — the Options counter and the buttons, in order, evenly spaced, one column — and clicks the verified position inside it. It works with mulligans on or off (GSPro hides the Mulligan button when they're off). It never clicks a lone matched word, never clicks into an opening or closing animation, and if a button's own text misreads, the surrounding menu still proves where it is. Drop Ball / Rehit clicks the changing second slot whichever word it currently shows (Drop Ball, Rehit, or "Go to DZ" in a water drop zone); OB Rehit handles the "You have hit OB!" dialog (with or without its Mulligan button) and the relief menu's rehit option. The app starts reading the screen the moment you press FN, and keeps retrying while a menu is still fading in, so one press is all it takes. If the menu genuinely isn't on screen, the app tells you instead of guessing.
 
+**GSPro 4 relief list.** GSPro 4 shows water and out-of-bounds relief as a numbered list at the top left (RELIEF OPTIONS / YOUR OPTIONS): a number picks a choice, Enter takes it, and on Flag Line B / F move the drop further back / closer. The same box buttons work there, pressing GSPro's own keys: **OB Rehit** = Rehit's number + Enter (1 on out of bounds, 3 on water), **Drop Ball / Rehit** = Enter on the highlighted choice, **Next Option** = the next number, **Move Forward / Move Back** = Closer / Further Back with Flag Line picked. A small read of that corner decides which GSPro is on screen; without the list, every press works on the older menu exactly as before. Anything more (Preview Lie, rotating the map) is the mouse or keyboard.
+
 **Locked spots — fast after the first press.** The first Smart Click on a PC reads the screen twice, checks both reads agree, and locks in where every menu button sits (saved in `settings.ini`). From then on each press reads only that button's small area and clicks right away, with no click positions to program. The spots are tied to the GSPro window size: change the resolution and they are re-learned automatically on the next press. Tray menu → **Reset Smart Click spots** forces a fresh learn.
 
 ### Built-in preset: "Basic Secondary"
@@ -147,6 +149,8 @@ The main window, Builder and action editor can be resized and scrolled when they
 ---
 
 ## Version History
+
+**v5.1.6** — GSPro 4's new relief list (water: Lateral Drop / Flag Line / Rehit; out of bounds: Rehit, plus Mulligan when mulligans are on) works from the box: OB Rehit presses Rehit's number + Enter, Drop Ball / Rehit presses Enter, Next Option moves to the next choice, Move Forward / Move Back press F / B on Flag Line. The older relief menu works exactly as before.
 
 **v5.1.5** — GSPro's update renamed the scramble card button from **USE** to **Select**, and Auto-Pick only looked for USE, so it never saw the cards (no countdown, no frame, no pick). It now accepts either word, so old and new GSPro both work. Reading, voting, the countdown, the pick rule and the shot key are unchanged.
 

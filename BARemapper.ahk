@@ -2,7 +2,7 @@
 ;@Ahk2Exe-SetName BA Remapper
 ;@Ahk2Exe-SetDescription BA Custom Products Control Box Remapper
 ;@Ahk2Exe-SetCompanyName BA Custom Products
-;@Ahk2Exe-SetVersion 5.1.5
+;@Ahk2Exe-SetVersion 5.1.6
 ;@Ahk2Exe-SetOrigFilename BARemapper.exe
 ;@Ahk2Exe-SetMainIcon BARemapper.ico
 #SingleInstance Off
@@ -18,8 +18,22 @@ CoordMode, Mouse, Screen
 DllCall("SetProcessDPIAware")
 
 ; ============================================================
-;  BA CUSTOM PRODUCTS - CONTROL BOX REMAPPER v5.1.5
+;  BA CUSTOM PRODUCTS - CONTROL BOX REMAPPER v5.1.6
 ;  bacustomproducts@gmail.com   GitHub: DiyGolfGuy
+;
+;  CHANGES IN v5.1.6  (Bruce, Nov 16 2026: GSPro 4 relief screens)
+;  - GSPro 4 replaced the relief menu with a numbered list (a
+;    RELIEF OPTIONS / YOUR OPTIONS panel at the top left: number
+;    key picks a choice, Enter takes it, B / F move a Flag Line
+;    drop further back / closer).  The box keeps its printed
+;    meaning on both GSPro versions:
+;      OB Rehit (FN+Tee Left)      -> Rehit's number, then Enter
+;      Drop Ball / Rehit (FN+Right)-> Enter (the highlighted choice)
+;      Next Option (FN+Left)       -> the next choice's number
+;      Move Forward / Back (FN+Up/Down) -> F / B, Flag Line only
+;    A small read of the panel corner decides; without that panel
+;    every press goes to the older menu's Smart Click exactly as
+;    before (RunOcrAction unchanged).
 ;
 ;  CHANGES IN v5.1.5  (Bruce, Nov 7 2026: "auto scramble does not
 ;  seem to be working anymore")
@@ -317,7 +331,7 @@ DllCall("SetProcessDPIAware")
 ; ============================================================
 ;  CONSTANTS / PATHS
 ; ============================================================
-AppVersion := "5.1.5"
+AppVersion := "5.1.6"
 MainWinTitle    := "BA Custom Control Box Remapper"
 BuilderWinTitle := "BA Custom Control Box - Button Builder"
 HelpWinTitle    := "BA Custom Control Box - Help"
@@ -558,6 +572,11 @@ LastRef := {}                ; geometry of the last resolved target
 ScrambleMemo := {}           ; what earlier frames read on each card
 SpotWin := ""                ; GSPro client rect the locked spots belong to
 Spots := {}                  ; locked Smart Click spots (see LOCKED SPOTS)
+ReliefLast := ""             ; last read of the GSPro 4 relief panel (see GSPRO 4 RELIEF SCREEN)
+ReliefLastAct := ""          ; ... last box action sent to it, and when
+ReliefLastActTick := 0
+ReliefExpectSel := 0         ; choice Next Option just highlighted (GSPro redraws a frame later)
+ReliefExpectTick := 0
 OcrWarmedUp  := false
 
 ; ---- Auto-Pick Scramble state (settings loaded from ini) ----
@@ -1043,6 +1062,9 @@ ScanProfileList() {
 ;    FN + AIM DOWN       -> Move Back         (Smart Click)
 ;    FN + AIM LEFT       -> Next Option       (Smart Click)
 ;    FN + AIM RIGHT      -> Drop Ball / Rehit (Smart Click)
+;  On GSPro 4's numbered relief panel the same buttons press keys
+;  (see GSPRO 4 RELIEF SCREEN): Rehit's number + Enter, Enter,
+;  the next number, and F / B on Flag Line.
 ;
 ;  Recreated automatically if its file is missing, so deleting
 ;  profiles\Basic Secondary.ini restores factory defaults.
@@ -1332,7 +1354,7 @@ FireSecondary(btnId) {
     }
     else if (stype = "ocr") {
         OcrTrace("secondary fired: " . btnId . " -> " . SecValue[btnId])
-        RunOcrAction(SecValue[btnId])
+        SmartAction(SecValue[btnId])
     }
 }
 
@@ -1366,6 +1388,370 @@ SendSecondaryKey(keys) {
         SetKeyDelay, %oldDelay%, %oldDuration%
     }
     return true
+}
+
+; ============================================================
+;  GSPRO 4 RELIEF SCREEN  (v5.1.6)
+;
+;  GSPro 4 (Nov 2026) shows water / OB relief as a numbered list
+;  in a panel at the top left - "RELIEF OPTIONS" (water: 1 Lateral
+;  Drop, 2 Flag Line, 3 Rehit) or "YOUR OPTIONS" (OB: 1 Rehit, and
+;  2 Mulligan when mulligans are on).  A number key picks a choice
+;  (it turns blue), Enter takes it, and with Flag Line picked B / F
+;  move the drop further back / closer.  Bruce's ruling: the box
+;  keeps its printed meaning, nothing more advanced - the mouse
+;  and keyboard are there for that.
+;
+;  Every Smart Click press goes through SmartAction: a small read
+;  of the panel corner (left 30%, top 50% of the GSPro window, 2x
+;  below 1300px tall like the scramble read) decides which GSPro
+;  is on screen.  A choice is a CAPITALS title with its detail line
+;  ("... yd to pin", "From your last spot", "Replay the shot")
+;  right under it, numbered top to bottom.  The highlighted choice
+;  is read from the pixels (its card is blue).  No panel -> the
+;  older menu's RunOcrAction, unchanged.
+; ============================================================
+SmartAction(actionId) {
+    global ReliefLast, OcrBusy, PendingOcrAction, PendingOcrSince
+    global LastActionId, LastFireTick
+    ; The older menu is up and being used (a Smart Click landed on
+    ; it moments ago): stay on its fast repeat path, no extra read.
+    if (LastActionId != "" && (A_TickCount - LastFireTick) < 4000) {
+        RunOcrAction(actionId)
+        return
+    }
+    rel := ReliefLast
+    age := IsObject(rel) ? A_TickCount - rel.at : 99999
+    fresh := (age <= 1500)
+    ; A remembered panel may have been closed with the mouse: unless
+    ; the read is brand new, a highlighted choice must still be there.
+    if (fresh && rel.found && age > 400 && ReliefSelected(rel) = 0)
+        fresh := false
+    if (!fresh) {
+        OcrStaleCheck()
+        if (OcrBusy) {
+            PendingOcrAction := actionId
+            PendingOcrSince := A_TickCount
+            SetTimer, OcrDeferred, -60
+            OcrTrace("press " . actionId . " deferred (scan in flight)")
+            return
+        }
+        OcrLockTake()
+        try {
+            rel := ReliefProbe()
+        } catch appErr {
+            LogAppError("ReliefProbe", appErr)
+            rel := ""
+        }
+        OcrBusy := false
+    }
+    if (IsObject(rel) && rel.found) {
+        ReliefRun(actionId, rel)
+        return
+    }
+    RunOcrAction(actionId)
+}
+
+; FN-down prefetch: read the panel corner (lock must be free).
+; True when the GSPro 4 relief panel is up.
+ReliefPrefetch() {
+    global OcrBusy, FnIsDown
+    OcrStaleCheck()
+    if (OcrBusy)
+        return false
+    OcrLockTake()
+    rel := ""
+    try {
+        rel := ReliefProbe()
+    } catch appErr {
+        LogAppError("ReliefPrefetch", appErr)
+    }
+    OcrBusy := false
+    if (IsObject(rel) && rel.found) {
+        if (FnIsDown)
+            SetTimer, OcrPrefetch, -1500   ; keep it fresh while FN is held
+        return true
+    }
+    return false
+}
+
+; Read the GSPro window's panel corner (caller holds the OCR lock).
+ReliefProbe() {
+    global GSProWinNeedle, GSProWinExclude, ReliefLast
+    wr := ClientRectByTitle(GSProWinNeedle, GSProWinExclude)
+    if (!wr.found) {
+        ReliefLast := {found: false, opts: [], at: A_TickCount}
+        return ReliefLast
+    }
+    ReliefLast := ReliefRead(wr)
+    if (ReliefLast.found)
+        OcrTrace("  GSPro 4 relief panel: " . ReliefNote(ReliefLast))
+    return ReliefLast
+}
+
+; The panel corner of a GSPro client rect.  reader (tests): a Func
+; called (x, y, w, h, scale) returning {lines: [...]} in real pixels.
+ReliefRegion(win) {
+    return {x: win.x, y: win.y, w: Round(win.w * 0.30), h: Round(win.h * 0.50)}
+}
+
+ReliefRead(win, reader := "") {
+    r := ReliefRegion(win)
+    sc := (win.h < 1300) ? 2 : 1
+    if (IsObject(reader))
+        o := reader.Call(r.x, r.y, r.w, r.h, sc)
+    else if (sc > 1)
+        o := OcrRegionScaled(r.x, r.y, r.w, r.h, sc)
+    else
+        o := OcrRegion(r.x, r.y, r.w, r.h)
+    rel := ReliefParse(o.lines)
+    rel.win := win
+    rel.at := A_TickCount
+    return rel
+}
+
+; A choice's title: capitals only once the number badge ("1 ")
+; and the stroke badge ("+1", "NO STROKE") read on the same line
+; are removed.  "" when the line is not a title.
+ReliefTitleText(text) {
+    t := Trim(text)
+    t := RegExReplace(t, "^\d\s+", "")
+    t := RegExReplace(t, "\s*\+\s*\d\s*$", "")
+    t := RegExReplace(t, "i)\s*no\s*stroke\s*$", "")
+    t := Trim(t)
+    ; Capitals, no digits.  One small letter per five capitals is
+    ; allowed: the reader turns a capital I into l now and then.
+    if (RegExMatch(t, "\d"))
+        return ""
+    up := StrLen(RegExReplace(t, "[^A-Z]", ""))
+    low := StrLen(RegExReplace(t, "[^a-z]", ""))
+    if (up < 4 || low > Max(1, up // 5))
+        return ""
+    n := OcrNorm(t)
+    if (n = "nostroke" || n = "stroke" || LevDist(n, "reliefoptions") <= 2 || LevDist(n, "youroptions") <= 2)
+        return ""
+    return t
+}
+
+ReliefParse(lines) {
+    rel := {found: false, opts: [], header: false}
+    cands := []
+    for i, ln in lines {
+        n := OcrNorm(ln.text)
+        if (n = "")
+            continue
+        ; The older relief menu's own words: never this screen.
+        if (InStr(n, "moveforward") || InStr(n, "nextoption") || InStr(n, "moveback"))
+            return rel
+        if (LevDist(n, "reliefoptions") <= 2 || LevDist(n, "youroptions") <= 2)
+            rel.header := true
+        t := ReliefTitleText(ln.text)
+        if (t != "")
+            cands.Push({x: ln.x, y: ln.y, w: ln.w, h: ln.h, text: t})
+    }
+    ; A title counts only with its detail line right under it.
+    rows := []
+    for i, c in cands {
+        for j, ln in lines {
+            if (ln.y <= c.y + c.h * 0.6 || ln.y > c.y + c.h * 2.8)
+                continue
+            if (ln.x < c.x - c.h * 1.5 || ln.x > c.x + c.h * 14)
+                continue
+            if (RegExMatch(OcrNorm(ln.text), "ydtopin|topin|lastspot|replaytheshot|doesntcount")) {
+                rows.Push(c)
+                break
+            }
+        }
+    }
+    if (!rows.MaxIndex())
+        return rel
+    ; Top to bottom; a title read in two pieces on one row is joined.
+    sorted := []
+    for i, c in rows {
+        k := sorted.MaxIndex() ? sorted.MaxIndex() + 1 : 1
+        while (k > 1 && sorted[k - 1].y > c.y) {
+            sorted[k] := sorted[k - 1]
+            k -= 1
+        }
+        sorted[k] := c
+    }
+    opts := []
+    for i, c in sorted {
+        last := opts.MaxIndex() ? opts[opts.MaxIndex()] : ""
+        if (IsObject(last) && Abs(c.y - last.y) < last.h * 0.5) {
+            if (c.x < last.x) {
+                last.text := c.text . " " . last.text
+                last.w := last.x + last.w - c.x
+                last.x := c.x
+            } else {
+                last.text := last.text . " " . c.text
+                last.w := c.x + c.w - last.x
+            }
+            continue
+        }
+        opts.Push({x: c.x, y: c.y, w: c.w, h: c.h, text: c.text})
+    }
+    ; One column: the panel's titles share their left edge.
+    xs := []
+    for i, o in opts
+        xs.Push(o.x)
+    mx := ReliefMedian(xs)
+    for i, o in opts {
+        if (Abs(o.x - mx) <= o.h * 1.5)
+            rel.opts.Push(o)
+    }
+    rel.found := (rel.opts.MaxIndex() >= 1)
+    return rel
+}
+
+ReliefMedian(vals) {
+    a := []
+    for i, v in vals {
+        k := a.MaxIndex() ? a.MaxIndex() + 1 : 1
+        while (k > 1 && a[k - 1] > v) {
+            a[k] := a[k - 1]
+            k -= 1
+        }
+        a[k] := v
+    }
+    n := a.MaxIndex()
+    if (!n)
+        return 0
+    return (n & 1) ? a[(n + 1) // 2] : (a[n // 2] + a[n // 2 + 1]) / 2
+}
+
+; Which choice is highlighted: its card is blue (about R9 G52 B99
+; against R24 G33 B53).  Samples just left of the title and in the
+; gap under it.  0 when no single card is clearly blue.
+; pixFn (tests): a Func called (x, y) returning a 0x00BBGGRR colour.
+ReliefSelected(rel, pixFn := "") {
+    if (!IsObject(rel) || !rel.found)
+        return 0
+    if (!IsObject(pixFn))
+        pixFn := Func("ReliefScreenPixel")
+    best := 0
+    bestV := -999
+    secondV := -999
+    for i, o in rel.opts {
+        h := o.h
+        pts := [[o.x - h * 0.45, o.y + h * 0.3], [o.x - h * 0.45, o.y + h * 0.7]
+            , [o.x + h * 0.6, o.y + h * 1.25], [o.x + h * 1.6, o.y + h * 1.25], [o.x + h * 2.6, o.y + h * 1.25]]
+        vals := []
+        for k, p in pts {
+            c := pixFn.Call(Round(p[1]), Round(p[2]))
+            if (c = "" || c < 0 || c > 0xFFFFFF)
+                continue
+            vals.Push(((c >> 16) & 0xFF) - (c & 0xFF))
+        }
+        if (vals.MaxIndex() < 3)
+            continue
+        m := ReliefMedian(vals)
+        if (m > bestV) {
+            secondV := bestV
+            bestV := m
+            best := i
+        } else if (m > secondV) {
+            secondV := m
+        }
+    }
+    return (best && bestV >= 50 && bestV - secondV >= 25) ? best : 0
+}
+
+ReliefScreenPixel(x, y) {
+    hdc := DllCall("GetDC", "Ptr", 0, "Ptr")
+    c := DllCall("GetPixel", "Ptr", hdc, "Int", x, "Int", y, "UInt")
+    DllCall("ReleaseDC", "Ptr", 0, "Ptr", hdc)
+    return c
+}
+
+ReliefFind(rel, word) {
+    for i, o in rel.opts {
+        if (FuzzyIs(o.text, word))
+            return i
+    }
+    return 0
+}
+
+; The keys a box action sends on this screen.  sel: the highlighted
+; choice (0 = unknown).  {keys: [...], why: "..."} - why says what
+; is missing when there are no keys.
+ReliefPlan(actionId, rel, sel) {
+    n := rel.opts.MaxIndex()
+    keys := []
+    why := ""
+    if (actionId = "Rehit") {
+        k := ReliefFind(rel, "rehit")
+        if (k) {
+            keys.Push(k . "")
+            keys.Push("{Enter}")
+        } else {
+            why := "OB Rehit - no Rehit choice on this screen"
+        }
+    } else if (actionId = "DropRehit") {
+        keys.Push("{Enter}")
+    } else if (actionId = "NextOption") {
+        if (n >= 2)
+            keys.Push(((sel >= 1 && sel < n) ? sel + 1 : (sel = n ? 1 : 2)) . "")
+        else
+            why := "Next Option - only one choice on this screen"
+    } else if (actionId = "MoveForward" || actionId = "MoveBack") {
+        flag := ReliefFind(rel, "flag line")
+        if (flag && (sel = flag || sel = 0))
+            keys.Push(actionId = "MoveForward" ? "f" : "b")
+        else
+            why := (actionId = "MoveForward" ? "Move Forward" : "Move Back") . (flag ? " - pick Flag Line first (Next Option)" : " - no Flag Line on this screen")
+    }
+    return {keys: keys, why: why}
+}
+
+ReliefNote(rel) {
+    t := (rel.opts.MaxIndex() ? rel.opts.MaxIndex() : 0) . " choices"
+    for i, o in rel.opts
+        t .= (i = 1 ? ": " : ", ") . i . " " . o.text
+    return t . (rel.header ? "" : " (panel title not read)")
+}
+
+ReliefKeysText(keys) {
+    t := ""
+    for i, k in keys
+        t .= (i > 1 ? " " : "") . k
+    return t
+}
+
+ReliefRun(actionId, rel) {
+    global ReliefLast, ReliefLastAct, ReliefLastActTick, ReliefExpectSel, ReliefExpectTick
+    closes := (actionId = "Rehit" || actionId = "DropRehit")
+    ; Same timing rules as the older menu: OS auto-repeat is not a
+    ; new request, and a closing action never repeats into the fade.
+    if (actionId = ReliefLastAct && (A_TickCount - ReliefLastActTick) < (closes ? 900 : 120))
+        return
+    sel := ReliefSelected(rel)
+    if (ReliefExpectSel && (A_TickCount - ReliefExpectTick) < 700)
+        sel := ReliefExpectSel
+    plan := ReliefPlan(actionId, rel, sel)
+    OcrTrace("press " . actionId . " on the GSPro 4 relief panel (" . ReliefNote(rel) . "; highlighted " . sel . ") -> " . (plan.keys.MaxIndex() ? "keys " . ReliefKeysText(plan.keys) : plan.why))
+    if (!plan.keys.MaxIndex()) {
+        ShowGsproTip(plan.why, 1800)
+        return
+    }
+    ReliefLastAct := actionId
+    for i, k in plan.keys {
+        if (i > 1)
+            Sleep, 180   ; GSPro takes the pick before Enter
+        if (!SendSecondaryKey(k))
+            break
+    }
+    ReliefLastActTick := A_TickCount
+    if (closes) {
+        ReliefLast := ""
+        ReliefExpectSel := 0
+    } else {
+        if (actionId = "NextOption") {
+            ReliefExpectSel := plan.keys[1] + 0
+            ReliefExpectTick := A_TickCount
+        }
+        rel.at := A_TickCount   ; same screen: the read stays good
+    }
 }
 
 ; ============================================================
@@ -4642,6 +5028,10 @@ Return
 
 ; FN-hold prefetch: one background scan into the shared cache.
 OcrPrefetch:
+    ; GSPro 4's relief panel first: one small read of its corner,
+    ; so the arrow that follows knows which screen is up.
+    if (ReliefPrefetch())
+        Return
     ; Locked spots confirm with their own small read - a full
     ; prefetch would only hold the lock the press needs.
     if (SpotsValidNow())
@@ -4690,7 +5080,7 @@ OcrDeferred:
     }
     dfAct := PendingOcrAction
     PendingOcrAction := ""
-    RunOcrAction(dfAct)
+    SmartAction(dfAct)
 Return
 
 ; Parks the cursor at the corner once a click burst ends (kept
@@ -4809,6 +5199,8 @@ ResetSmartSpots:
     LastRef := {}
     Spots := {}
     SpotWin := ""
+    ReliefLast := ""
+    ReliefExpectSel := 0
     SaveSpots()
     TrayTip, BA Remapper, Smart Click spots cleared. The next Smart Click reads the screen and learns again. Profiles and settings are kept., 5, 1
 Return
@@ -5146,6 +5538,12 @@ ShowHelp:
       consecutive presses of the same Smart Click fire
       instantly (Next Option a few times in a row, or
       walking the ball with Move Forward / Move Back).
+    GSPro 4 relief list (RELIEF OPTIONS / YOUR OPTIONS at
+      the top left): the same buttons press GSPro's own
+      keys - OB Rehit = Rehit's number + Enter, Drop Ball /
+      Rehit = Enter, Next Option = the next number, Move
+      Forward / Back = F / B (Flag Line picked).  Anything
+      else: use the mouse or keyboard.
 
     BUILT-IN PRESET: "Basic Secondary"
     QUICK START: pick "Basic Secondary" in the profile dropdown and the
