@@ -276,6 +276,22 @@ UiSmoke:
         Assert(!FnIsDown, "FN released without stale state")
         Assert(SendSecondaryKey("{Right}"), "Arrow hotkey sent")
         Assert(SendSecondaryKey("^m"), "Compound Ctrl+M hotkey sent")
+        ; GSPro 4 relief panel (v5.1.6): with the panel read, the box's
+        ; Smart Click buttons press GSPro's own keys.  The choices sit
+        ; off screen, so no highlighted card is read (sel 0).
+        Critical, On
+        fakeOpts := [{x: -900, y: -900, w: 180, h: 32, text: "LATERAL DROP"}, {x: -900, y: -750, w: 120, h: 32, text: "FLAG LINE"}, {x: -900, y: -600, w: 70, h: 32, text: "REHIT"}]
+        ReliefLast := {found: true, header: true, opts: fakeOpts, at: A_TickCount}
+        HandleBoxKeyDown("a")
+        HandleBoxKeyDown("Left")   ; FN + Aim Left = Next Option -> "2"
+        HandleBoxKeyUp("a")
+        Assert(IsObject(ReliefLast) && ReliefExpectSel = 2, "Next Option on the GSPro 4 panel sent choice 2")
+        ReliefLast.at := A_TickCount
+        HandleBoxKeyDown("a")
+        HandleBoxKeyDown("c")      ; FN + Tee Left = OB Rehit -> "3", Enter
+        HandleBoxKeyUp("a")
+        Critical, Off
+        Assert(ReliefLast = "", "OB Rehit on the GSPro 4 panel sent Rehit's number and Enter")
         RemapActive := false
         Sleep, 300
         Process, Close, %sinkPid%
@@ -983,6 +999,158 @@ ShotOcr(hbm, x, y, w, h) {
 '''
 
 
+RELIEF = r'''
+ReliefShotSmoke:
+    SetTimer, ScrambleTick, Off
+    SetTimer, CdTick, Off
+    SetTimer, OcrWarmup, Off
+    fails := 0
+    try {
+        dir := A_Args[1]
+        ; Bruce's own GSPro 4 relief screenshots.  [file, choices top to
+        ; bottom, highlighted, OB Rehit keys, Next Option keys, Move
+        ; Forward keys, Move Back keys]; Drop Ball / Rehit is always Enter.
+        shots := [["relief-water-lateral.jpg", "LATERAL DROP|FLAG LINE|REHIT", 1, "3 {Enter}", "2", "", ""]
+            , ["relief-water-flagline.jpg", "LATERAL DROP|FLAG LINE|REHIT", 2, "3 {Enter}", "3", "f", "b"]
+            , ["relief-ob-rehit.jpg", "REHIT", 1, "1 {Enter}", "", "", ""]]
+        for i, s in shots {
+            src := LoadPicture(dir . "\" . s[1])
+            VarSetCapacity(bm, 32, 0)
+            DllCall("GetObject", "Ptr", src, "Int", A_PtrSize = 8 ? 32 : 24, "Ptr", &bm)
+            W := NumGet(bm, 4, "Int"), H := NumGet(bm, 8, "Int")
+            ; as captured, and shrunk to a 1920-wide window (a 1080p
+            ; projector: the 2x read path)
+            for k, tw in [W, 1920] {
+                th := Round(H * tw / W)
+                hbm := (tw = W) ? src : ShotScaled(src, W, H, tw, th)
+                win := {found: true, x: 0, y: 0, w: tw, h: th, hwnd: 0}
+                rel := ReliefRead(win, Func("ShotRead").Bind(hbm))
+                sel := ReliefSelected(rel, Func("ShotPixel").Bind(hbm))
+                names := ""
+                for j, o in rel.opts
+                    names .= (j > 1 ? "|" : "") . o.text
+                plans := []
+                for j, a in ["Rehit", "NextOption", "MoveForward", "MoveBack", "DropRehit"]
+                    plans.Push(ReliefKeysText(ReliefPlan(a, rel, sel).keys))
+                ok := rel.found && names = s[2] && sel = s[3] && plans[1] = s[4] && plans[2] = s[5] && plans[3] = s[6] && plans[4] = s[7] && plans[5] = "{Enter}"
+                ScrambleNote(ok ? "PASS" : "FAIL", s[1] . " at " . tw . "x" . th . ": " . (rel.found ? ReliefNote(rel) : "no panel") . "; highlighted " . sel . " (want " . s[3] . "); OB Rehit [" . plans[1] . "] Next Option [" . plans[2] . "] Move Forward [" . plans[3] . "] Move Back [" . plans[4] . "] Drop Ball/Rehit [" . plans[5] . "]")
+                if (!ok)
+                    fails += 1
+                if (hbm != src)
+                    DllCall("DeleteObject", "Ptr", hbm)
+            }
+            DllCall("DeleteObject", "Ptr", src)
+        }
+        ; Screens without the panel are never taken for it.
+        for i, f in ["gspro-2p.jpg", "gspro-4p-select.jpg"] {
+            src := LoadPicture(dir . "\" . f)
+            VarSetCapacity(bm, 32, 0)
+            DllCall("GetObject", "Ptr", src, "Int", A_PtrSize = 8 ? 32 : 24, "Ptr", &bm)
+            W := NumGet(bm, 4, "Int"), H := NumGet(bm, 8, "Int")
+            rel := ReliefRead({found: true, x: 0, y: 0, w: W, h: H, hwnd: 0}, Func("ShotRead").Bind(src))
+            ok := !rel.found
+            ScrambleNote(ok ? "PASS" : "FAIL", f . ": no relief panel (" . (rel.found ? ReliefNote(rel) : "none found") . ")")
+            if (!ok)
+                fails += 1
+            DllCall("DeleteObject", "Ptr", src)
+        }
+        ; The older relief menu's words veto the panel; titles need their
+        ; detail line; badges and a misread I are handled.
+        lines := [{x: 100, y: 100, w: 120, h: 30, text: "REHIT"}, {x: 100, y: 140, w: 200, h: 20, text: "From your last spot"}]
+        ok := ReliefParse(lines).found
+        lone := ReliefParse([{x: 100, y: 100, w: 120, h: 30, text: "REHIT"}]).found
+        lines.Push({x: 100, y: 200, w: 120, h: 20, text: "Move Forward"})
+        ok := ok && !lone && !ReliefParse(lines).found
+        ok := ok && ReliefTitleText("1 LATERAL DROP +1") = "LATERAL DROP" && ReliefTitleText("REHlT") = "REHlT" && ReliefTitleText("MULLIGAN NO STROKE") = "MULLIGAN"
+            && ReliefTitleText("Rough") = "" && ReliefTitleText("From your last spot") = "" && ReliefTitleText("RELIEF OPTIONS") = "" && ReliefTitleText("160 yd") = ""
+        ScrambleNote(ok ? "PASS" : "FAIL", "panel rules: old-menu words veto, title needs its detail line, badges stripped, I/l misread kept")
+        if (!ok)
+            fails += 1
+        ; Mulligans on: OB shows 1 Rehit, 2 Mulligan.
+        mul := {found: true, opts: [{text: "REHIT"}, {text: "MULLIGAN"}]}
+        ok := ReliefKeysText(ReliefPlan("Rehit", mul, 2).keys) = "1 {Enter}" && ReliefKeysText(ReliefPlan("NextOption", mul, 1).keys) = "2"
+            && ReliefKeysText(ReliefPlan("NextOption", mul, 2).keys) = "1" && ReliefKeysText(ReliefPlan("NextOption", mul, 0).keys) = "2"
+            && ReliefKeysText(ReliefPlan("MoveForward", mul, 1).keys) = "" && ReliefKeysText(ReliefPlan("DropRehit", mul, 2).keys) = "{Enter}"
+        ScrambleNote(ok ? "PASS" : "FAIL", "OB with Mulligan: Rehit = 1 Enter, Next Option cycles 1-2, no Flag Line keys")
+        if (!ok)
+            fails += 1
+        FileAppend, % (fails ? "FAIL: " . fails . " relief checks failed" : "PASS: GSPro 4 relief screens read and planned") . "`n", % A_ScriptDir . "\result.txt"
+        ExitApp, % fails ? 1 : 0
+    } catch failure {
+        FileAppend, % "FAIL: " . failure.Message . " (line " . failure.Line . ")`n", % A_ScriptDir . "\result.txt"
+        ExitApp, 1
+    }
+Return
+
+; A picture shrunk or grown to tw x th (HALFTONE, like a smaller window).
+ShotScaled(src, W, H, tw, th) {
+    scr := DllCall("GetDC", "Ptr", 0, "Ptr")
+    sdc := DllCall("CreateCompatibleDC", "Ptr", scr, "Ptr")
+    old1 := DllCall("SelectObject", "Ptr", sdc, "Ptr", src, "Ptr")
+    out := DllCall("CreateCompatibleBitmap", "Ptr", scr, "Int", tw, "Int", th, "Ptr")
+    ddc := DllCall("CreateCompatibleDC", "Ptr", scr, "Ptr")
+    old2 := DllCall("SelectObject", "Ptr", ddc, "Ptr", out, "Ptr")
+    DllCall("SetStretchBltMode", "Ptr", ddc, "Int", 4)
+    DllCall("SetBrushOrgEx", "Ptr", ddc, "Int", 0, "Int", 0, "Ptr", 0)
+    DllCall("StretchBlt", "Ptr", ddc, "Int", 0, "Int", 0, "Int", tw, "Int", th, "Ptr", sdc, "Int", 0, "Int", 0, "Int", W, "Int", H, "UInt", 0x00CC0020)
+    DllCall("SelectObject", "Ptr", ddc, "Ptr", old2, "Ptr")
+    DllCall("DeleteDC", "Ptr", ddc)
+    DllCall("SelectObject", "Ptr", sdc, "Ptr", old1, "Ptr")
+    DllCall("DeleteDC", "Ptr", sdc)
+    DllCall("ReleaseDC", "Ptr", 0, "Ptr", scr)
+    return out
+}
+
+; ReliefRead's reader on a picture: the same region, enlarged by
+; `scale` exactly like OcrRegionScaled, boxes mapped back.
+ShotRead(hbm, x, y, w, h, scale) {
+    if (scale <= 1)
+        return ShotOcr(hbm, x, y, w, h)
+    part := ShotScaledPart(hbm, x, y, w, h, scale)
+    stream := HBitmapToRandomAccessStream(part)
+    DllCall("DeleteObject", "Ptr", part)
+    res := ocr_words(stream)
+    o := {lines: [], text: res.text}
+    for k, ln in res.lines {
+        ln.x := Round(ln.x / scale) + x
+        ln.y := Round(ln.y / scale) + y
+        ln.w := Round(ln.w / scale)
+        ln.h := Round(ln.h / scale)
+        o.lines.Push(ln)
+    }
+    return o
+}
+
+ShotScaledPart(hbm, x, y, w, h, scale) {
+    scr := DllCall("GetDC", "Ptr", 0, "Ptr")
+    sdc := DllCall("CreateCompatibleDC", "Ptr", scr, "Ptr")
+    old1 := DllCall("SelectObject", "Ptr", sdc, "Ptr", hbm, "Ptr")
+    out := DllCall("CreateCompatibleBitmap", "Ptr", scr, "Int", w * scale, "Int", h * scale, "Ptr")
+    ddc := DllCall("CreateCompatibleDC", "Ptr", scr, "Ptr")
+    old2 := DllCall("SelectObject", "Ptr", ddc, "Ptr", out, "Ptr")
+    DllCall("SetStretchBltMode", "Ptr", ddc, "Int", 4)
+    DllCall("SetBrushOrgEx", "Ptr", ddc, "Int", 0, "Int", 0, "Ptr", 0)
+    DllCall("StretchBlt", "Ptr", ddc, "Int", 0, "Int", 0, "Int", w * scale, "Int", h * scale, "Ptr", sdc, "Int", x, "Int", y, "Int", w, "Int", h, "UInt", 0x00CC0020)
+    DllCall("SelectObject", "Ptr", ddc, "Ptr", old2, "Ptr")
+    DllCall("DeleteDC", "Ptr", ddc)
+    DllCall("SelectObject", "Ptr", sdc, "Ptr", old1, "Ptr")
+    DllCall("DeleteDC", "Ptr", sdc)
+    DllCall("ReleaseDC", "Ptr", 0, "Ptr", scr)
+    return out
+}
+
+; ReliefSelected's pixel source on a picture (0x00BBGGRR, like GetPixel on the screen).
+ShotPixel(hbm, x, y) {
+    dc := DllCall("CreateCompatibleDC", "Ptr", 0, "Ptr")
+    old := DllCall("SelectObject", "Ptr", dc, "Ptr", hbm, "Ptr")
+    c := DllCall("GetPixel", "Ptr", dc, "Int", x, "Int", y, "UInt")
+    DllCall("SelectObject", "Ptr", dc, "Ptr", old, "Ptr")
+    DllCall("DeleteDC", "Ptr", dc)
+    return c
+}
+'''
+
+
 def ocr_available():
     """Ask Windows itself (outside AutoHotkey) whether an OCR engine exists."""
     probe = ("Add-Type -AssemblyName System.Runtime.WindowsRuntime; "
@@ -1037,7 +1205,11 @@ def runtime_checks(source, ahk):
         assert not any(key in (0x41, 0x49, 0x4B) for _, _, key in rows), f"Unexpected FN/club key leak: {rows}"
         assert any(key == 0x27 for _, _, key in rows), "Arrow was not received"
         assert any(key == 0x11 for _, _, key in rows) and any(key == 0x4D for _, _, key in rows), "Ctrl+M was not received"
+        assert not any(key in (0x43, 0x25) for _, _, key in rows), f"FN + Tee Left / Aim Left leaked their own keys: {rows}"
+        relief_downs = [key for _, message, key in rows if message in (0x100, 0x104) and key in (0x32, 0x33, 0x0D)]
+        assert relief_downs[:3] == [0x32, 0x33, 0x0D], f"GSPro 4 panel keys (want 2, then 3, then Enter): {relief_downs}"
         print(f"PASS: four real B keypresses held {b_taps} ms; no A/I/K leak; arrow and Ctrl+M received")
+        print("PASS: GSPro 4 relief panel: FN + Aim Left sent 2 (Next Option), FN + Tee Left sent 3 then Enter (OB Rehit); no C / Left leak")
         print("PASS: Exit completed without hanging")
         for mode, extra, arguments in [("ProgramSmoke", PROGRAM, []), ("BootSmoke", BOOT, ["/startup"]), ("FactorySmoke", FACTORY, [])]:
             (work / "result.txt").unlink(missing_ok=True)
@@ -1133,6 +1305,27 @@ def runtime_checks(source, ahk):
             report = (work / "result.txt").read_text() if (work / "result.txt").exists() else "No result"
             assert returncode == 0 and report.startswith("PASS:"), "RealShotSmoke: " + report + output
             print("PASS: real GSPro 2/3/4-player screenshots: every card read (full and strip), correct pick, frame on the card edges")
+
+            # Bruce's GSPro 4 relief screenshots (water: Lateral Drop and
+            # Flag Line highlighted; OB: Rehit), as captured and at 1920
+            # wide: the panel, every choice, the highlighted one, and the
+            # keys each box button would press.
+            (work / "result.txt").unlink(missing_ok=True)
+            (work / "scramble-checks.txt").unlink(missing_ok=True)
+            candidate = isolated.replace("SetTimer, UiSmoke, -50", "SetTimer, ReliefShotSmoke, -50", 1)
+            script = work / "ReliefShotSmoke.ahk"
+            script.write_text(candidate + "\n" + SMOKE + "\n" + SCRAMBLE + "\n" + REALSHOT + "\n" + RELIEF, encoding="utf-8-sig")
+            try:
+                check = subprocess.run([str(ahk), "/ErrorStdOut", str(script), str(ROOT / "tests" / "fixtures" / "gspro")], capture_output=True, text=True, timeout=240)
+                returncode, output = check.returncode, check.stdout + check.stderr
+            except subprocess.TimeoutExpired:
+                returncode, output = -1, "timed out"
+            notes = (work / "scramble-checks.txt").read_text(encoding="utf-8-sig") if (work / "scramble-checks.txt").exists() else "No relief reads recorded"
+            print(notes)
+            annotate("notice", "GSPro 4 relief screenshots", notes)
+            report = (work / "result.txt").read_text() if (work / "result.txt").exists() else "No result"
+            assert returncode == 0 and report.startswith("PASS:"), "ReliefShotSmoke: " + report + output
+            print("PASS: GSPro 4 relief screenshots: panel, choices, highlighted choice and the keys for every box button")
 
 
 
