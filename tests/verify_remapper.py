@@ -186,7 +186,7 @@ UiSmoke:
         CaptureWindow(BuilderHwnd, "builder-preset")
         startupBefore := StartupProfile
         FileRead, presetBefore, % ProfilesDir . "\Basic Secondary.ini"
-        SetTimer, FillCopyName, -100
+        SetTimer, FillCopyName, 100
         Gosub, OnCopyProfile
         Assert(ActiveProfile = "Regression Copy", "Copy becomes current profile")
         Assert(StartupProfile = startupBefore, "Copy leaves startup profile unchanged")
@@ -219,7 +219,7 @@ UiSmoke:
         Assert(SecType["left"] = "key" && SecValue["left"] = "b", "Save applies chosen hotkey")
         IniRead, saved, % ProfilesDir . "\Regression Copy.ini", Profile, left_Value
         Assert(saved = "b", "Saved hotkey persists to disk")
-        SetTimer, CloseFnNotice, -100
+        SetTimer, CloseFnNotice, 100
         ConfigButton("resetaim", "RESET AIM", "A")
         Assert(ConfiguringProfile = "", "FN modifier has no unusable secondary editor")
 
@@ -518,12 +518,20 @@ UiSmoke:
     }
 Return
 
+; Repeats until the dialog is up: on a slow runner the InputBox can
+; take longer than one tick to appear (main run 44010896827 hung).
 FillCopyName:
+    if (!WinExist("Customize a Copy"))
+        Return
+    SetTimer, FillCopyName, Off
     ControlSetText, Edit1, Regression Copy, Customize a Copy
     ControlClick, Button1, Customize a Copy
 Return
 
 CloseFnNotice:
+    if (!WinExist("FN Button"))
+        Return
+    SetTimer, CloseFnNotice, Off
     ControlClick, Button1, FN Button
 Return
 

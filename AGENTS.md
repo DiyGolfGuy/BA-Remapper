@@ -2,7 +2,7 @@
 
 **Released — 2026-10-28:** Owner-approved **v5.1.3 is public** (Claude Code, PR #4, source `48db0b5da06f715d14acdc1c63b4c924ee0e7d07`, public downloads verified) and supersedes v5.1.2: card-strip retry reads 45%-92% of the game height, the chosen-card frame fits real card edges, preview windows are not owned by GSPro. Checked against Bruce's real GSPro 2/3/4-player screenshots in `tests/fixtures/gspro/` with the real Windows OCR on every build. See AI_HANDOFF.md entries 17-18 for what changed and why, and the release record. Future feature releases need another owner instruction. PIP belonged to another chat and was withdrawn.
 
-**In progress — 2026-11-16 (night):** v5.2.0 (Claude Code, AI_HANDOFF.md entry 22): custom layouts (custom keys, key sequences, custom taps, GSPro 4 relief-list actions, test mode, layout check, Export / Import with `KeyValid` checks) and the FN cheat sheet. Not released until Bruce says so.
+**Released — 2026-11-16 (night):** Owner-approved v5.2.0 (Claude Code, PR #8, AI_HANDOFF.md entry 22) supersedes v5.1.6: custom layouts (custom keys, key sequences, custom taps, GSPro 4 relief-list actions, test mode, layout check, Export / Import with `KeyValid` checks) and the FN cheat sheet with Size and Place. The FN / held-B key path is unchanged from v5.1.6. Future feature releases need another owner instruction.
 
 **Released — 2026-11-16:** Owner-approved v5.1.6 (Claude Code, PR #7, AI_HANDOFF.md entry 21) supersedes v5.1.5: GSPro 4's numbered relief list works from the box (`SmartAction` reads the panel corner first; `RunOcrAction` unchanged for the older menu). Future feature releases need another owner instruction.
 
