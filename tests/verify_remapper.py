@@ -54,6 +54,12 @@ def static_checks(source, baseline):
     ]
     for name in unchanged:
         assert function(source, name) == function(baseline, name), f"Unexpected core change: {name}"
+    # A label (or hotkey) above the end of the auto-execute section would
+    # be run, or end startup, before the window and timers exist.
+    auto_end = source.index("SetTimer, OcrWarmup, -3000\nReturn")
+    early = re.findall(r"(?m)^([A-Za-z_][A-Za-z0-9_]*:|[^;\s][^\n]*::)\s*$", source[:auto_end])
+    assert not early, f"Labels or hotkeys before the end of startup: {early}"
+    print("PASS: no labels or hotkeys interrupt the startup section")
     for start, end in [
         ("TrayOcrDump:", "; Forget this PC's locked Smart Click spots"),
         ("ScrambleWork:", "OnOpenFolder:"),

@@ -1117,17 +1117,6 @@ UpdateLayoutCheck() {
     GuiControl, Builder:, BuilderCheck, %text%
 }
 
-BuilderCheckDetails:
-    notes := ProfileCheck()
-    if (!notes.MaxIndex())
-        Return
-    t := ""
-    for i, n in notes
-        t .= "- " . n . "`n"
-    Gui, Builder:+OwnDialogs
-    MsgBox, 64, Layout Check - %ActiveProfile%, %t%
-Return
-
 ; ------------------------------------------------------------
 ;  FN cheat sheet: while FN is held over GSPro, a small copy of
 ;  the control box shows at the bottom left of the game - every
@@ -1169,23 +1158,6 @@ CheatStart() {
         SetTimer, CheatShow, -450
 }
 
-CheatShow:
-    if (FnIsDown) {
-        CheatDraw()
-        if (CheatVisible)
-            SetTimer, CheatTick, 250
-    }
-Return
-
-CheatTick:
-    if (!FnIsDown || !CheatVisible) {
-        CheatHide()
-        Return
-    }
-    if (!WinActive("ahk_id " . CheatShownFor))
-        CheatHide()
-Return
-
 CheatDraw() {
     global GSProWinNeedle, GSProWinExclude, ActiveProfile, CheatVisible, CheatExcluded, CheatShownFor, ReliefLast
     global CheatPanelW, CheatPanelH, CheatHwnd
@@ -1223,7 +1195,7 @@ CheatDraw() {
     ; One long word (MULLIGAN) gets a smaller size so it is never
     ; broken in the middle of the word.
     longPt := Max(6, Round(10.5 * sc)) * px2pt * 96 / 72
-    yelPt := Max(6, Round(16 * sc)) * px2pt * 96 / 72
+    yelPt := Max(6, Round(15 * sc)) * px2pt * 96 / 72
     headPt := Max(7, Round(18 * sc)) * px2pt * 96 / 72
     Gui, Cheat:Margin, 0, 0
     title := "HOLD FN + BUTTON  -  " . ActiveProfile . (relief ? "  -  GSPro 4 relief list" : "")
@@ -1248,9 +1220,13 @@ CheatDraw() {
         ny := by + Round(bs * (m.fn ? 0.08 : 0.2)), nh := bs - (ny - by)
         Gui, Cheat:Add, Text, x%bx% y%ny% w%bs% h%nh% Center BackgroundTrans c%nameColor%, % (m.fn ? "FN`n" : "") . m.name
         if (m.yellow != "") {
-            yw := Round(170 * sc), yx := bx + (bs - yw) // 2, yy := by + bs + Round(3 * sc)
+            ; One line (0x200 = SS_CENTERIMAGE, never wraps into the
+            ; button below), wide enough for custom names, kept inside
+            ; the panel.
+            yw := Round(220 * sc), yh := Round(24 * sc), yy := by + bs + Round(3 * sc)
+            yx := Max(Round(pad / 2), Min(bx + (bs - yw) // 2, pw - Round(pad / 2) - yw))
             Gui, Cheat:Font, s%yelPt% cFFD400 Bold, Segoe UI
-            Gui, Cheat:Add, Text, x%yx% y%yy% w%yw% Center BackgroundTrans, % m.yellow
+            Gui, Cheat:Add, Text, x%yx% y%yy% w%yw% h%yh% Center +0x200 BackgroundTrans, % m.yellow
         }
     }
     cx := win.x + pad
@@ -1377,46 +1353,6 @@ ImportProfileFile(inFile) {
     ProfileList.Push(name)
     return {name: name, notes: notes}
 }
-
-BuilderExport:
-    if (IsConfigDialogOpen())
-        Return
-    Gui, Builder:+OwnDialogs
-    expDefault := A_Desktop . "\" . ActiveProfile . ".baprofile"
-    FileSelectFile, expFile, S16, %expDefault%, Export "%ActiveProfile%", BA Remapper profile (*.baprofile)
-    if (ErrorLevel || expFile = "")
-        Return
-    if (!RegExMatch(expFile, "i)\.baprofile$"))
-        expFile .= ".baprofile"
-    if (ExportProfile(ActiveProfile, expFile))
-        GuiControl, Builder:, BuilderStatus, % "Exported """ . ActiveProfile . """ to " . expFile
-    else
-        MsgBox, 48, Export Failed, The profile could not be written to that file.
-Return
-
-BuilderImport:
-    if (IsConfigDialogOpen())
-        Return
-    Gui, Builder:+OwnDialogs
-    FileSelectFile, impFile, 3, %A_Desktop%, Import a BA Remapper profile, BA Remapper profile (*.baprofile; *.ini)
-    if (ErrorLevel || impFile = "")
-        Return
-    impRes := ImportProfileFile(impFile)
-    if (impRes.HasKey("error")) {
-        MsgBox, 48, Import Failed, % impRes.error
-        Return
-    }
-    SaveProfile(ActiveProfile)
-    ActiveProfile := impRes.name
-    LoadProfile(ActiveProfile)
-    SaveSettings()
-    RefreshProfileDropdown()
-    RefreshBuilderIfOpen()
-    impMsg := "Imported as """ . impRes.name . """ and switched to it."
-    for i, n in impRes.notes
-        impMsg .= (i = 1 ? "`n`nChecked and changed:`n" : "`n") . "- " . n
-    MsgBox, 64, Profile Imported, %impMsg%
-Return
 
 FnPhysicallyHeld() {
     global FnButtonId, BtnPrimary
@@ -1790,7 +1726,15 @@ SaveProfile(profileName) {
         IniWrite, %sv%, %pf%, Profile, %id%_Value
         IniWrite, %sx%, %pf%, Profile, %id%_X
         IniWrite, %sy%, %pf%, Profile, %id%_Y
-        IniWrite, %sp%, %pf%, Profile, %id%_Primary
+        ; A custom tap is written only when there is one, so profiles
+        ; without custom taps (and the presets) stay byte-identical.
+        if (sp != "") {
+            IniWrite, %sp%, %pf%, Profile, %id%_Primary
+        } else {
+            IniRead, had, %pf%, Profile, %id%_Primary, %A_Space%
+            if (had != "")
+                IniDelete, %pf%, Profile, %id%_Primary
+        }
     }
 }
 
@@ -6524,6 +6468,78 @@ Return
 ;  All changes auto-save the moment you make them.  No
 ;  "Save & Close" needed.  Just configure and close.
 ; ============================================================
+; ------------------------------------------------------------
+;  v5.2.0 subroutines (kept after the auto-execute section so
+;  startup never runs into them)
+; ------------------------------------------------------------
+BuilderCheckDetails:
+    notes := ProfileCheck()
+    if (!notes.MaxIndex())
+        Return
+    t := ""
+    for i, n in notes
+        t .= "- " . n . "`n"
+    Gui, Builder:+OwnDialogs
+    MsgBox, 64, Layout Check - %ActiveProfile%, %t%
+Return
+
+CheatShow:
+    if (FnIsDown) {
+        CheatDraw()
+        if (CheatVisible)
+            SetTimer, CheatTick, 250
+    }
+Return
+
+CheatTick:
+    if (!FnIsDown || !CheatVisible) {
+        CheatHide()
+        Return
+    }
+    if (!WinActive("ahk_id " . CheatShownFor))
+        CheatHide()
+Return
+
+BuilderExport:
+    if (IsConfigDialogOpen())
+        Return
+    Gui, Builder:+OwnDialogs
+    expDefault := A_Desktop . "\" . ActiveProfile . ".baprofile"
+    FileSelectFile, expFile, S16, %expDefault%, Export "%ActiveProfile%", BA Remapper profile (*.baprofile)
+    if (ErrorLevel || expFile = "")
+        Return
+    if (!RegExMatch(expFile, "i)\.baprofile$"))
+        expFile .= ".baprofile"
+    if (ExportProfile(ActiveProfile, expFile))
+        GuiControl, Builder:, BuilderStatus, % "Exported """ . ActiveProfile . """ to " . expFile
+    else
+        MsgBox, 48, Export Failed, The profile could not be written to that file.
+Return
+
+BuilderImport:
+    if (IsConfigDialogOpen())
+        Return
+    Gui, Builder:+OwnDialogs
+    FileSelectFile, impFile, 3, %A_Desktop%, Import a BA Remapper profile, BA Remapper profile (*.baprofile; *.ini)
+    if (ErrorLevel || impFile = "")
+        Return
+    impRes := ImportProfileFile(impFile)
+    if (impRes.HasKey("error")) {
+        MsgBox, 48, Import Failed, % impRes.error
+        Return
+    }
+    SaveProfile(ActiveProfile)
+    ActiveProfile := impRes.name
+    LoadProfile(ActiveProfile)
+    SaveSettings()
+    RefreshProfileDropdown()
+    RefreshBuilderIfOpen()
+    impMsg := "Imported as """ . impRes.name . """ and switched to it."
+    for i, n in impRes.notes
+        impMsg .= (i = 1 ? "`n`nChecked and changed:`n" : "`n") . "- " . n
+    MsgBox, 64, Profile Imported, %impMsg%
+Return
+
 ShowBuilder:
     if (IsConfigDialogOpen())
         Return
