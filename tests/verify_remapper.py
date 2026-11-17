@@ -443,15 +443,20 @@ CloseFnNotice:
     ControlClick, Button1, FN Button
 Return
 
-; Paint the cheat sheet into a bitmap (PrintWindow) and count its
-; grey button, yellow print and yellow FN-button pixels.
+; Capture the cheat sheet from the screen and count its grey button,
+; yellow print and yellow FN-button pixels.  Its capture exclusion is
+; lifted for the capture, the way CapturePreview does it.
 CheatPixels(hwnd) {
-    WinGetPos, , , w, h, ahk_id %hwnd%
+    WinGetPos, wx, wy, w, h, ahk_id %hwnd%
+    DllCall("SetWindowDisplayAffinity", "Ptr", hwnd, "UInt", 0)
+    DllCall("dwmapi\DwmFlush")
+    Sleep, 150
     scr := DllCall("GetDC", "Ptr", 0, "Ptr")
     mdc := DllCall("CreateCompatibleDC", "Ptr", scr, "Ptr")
     bmp := DllCall("CreateCompatibleBitmap", "Ptr", scr, "Int", w, "Int", h, "Ptr")
     old := DllCall("SelectObject", "Ptr", mdc, "Ptr", bmp, "Ptr")
-    DllCall("PrintWindow", "Ptr", hwnd, "Ptr", mdc, "UInt", 2)
+    DllCall("BitBlt", "Ptr", mdc, "Int", 0, "Int", 0, "Int", w, "Int", h, "Ptr", scr, "Int", wx, "Int", wy, "UInt", 0x40CC0020)
+    DllCall("SetWindowDisplayAffinity", "Ptr", hwnd, "UInt", 0x11)
     out := {yellow: 0, button: 0, fnyellow: 0}
     y := 0
     while (y < h) {
