@@ -1210,13 +1210,16 @@ CheatDraw() {
     CheatShownFor := win.hwnd
     ; Size follows the game in physical pixels (like the scramble
     ; panel), independent of Windows display scaling.
-    pw := Round(Min(Max(win.w * 0.34, 380), win.w - 40, (win.h - 40) * 900 / 640))
-    sc := pw / 900
+    ; 940 x 640 layout units: the Builder's 900-wide box plus 20 on
+    ; each side so the outer yellow print is never cut off.
+    pw := Round(Min(Max(win.w * 0.34, 380), win.w - 40, (win.h - 40) * 940 / 640))
+    sc := pw / 940
+    ox := 20
     pad := Round(16 * sc)
     head := Round(44 * sc)
     ph := head + Round(570 * sc) + pad
     px2pt := 72 / A_ScreenDPI
-    namePt := Max(6, Round(15 * sc)) * px2pt * 96 / 72
+    namePt := Max(6, Round(13 * sc)) * px2pt * 96 / 72
     yelPt := Max(6, Round(16 * sc)) * px2pt * 96 / 72
     headPt := Max(7, Round(18 * sc)) * px2pt * 96 / 72
     Gui, Cheat:Margin, 0, 0
@@ -1227,17 +1230,19 @@ CheatDraw() {
     ; Panel print
     Gui, Cheat:Font, s%namePt% cFFFFFF Bold, Segoe UI
     for i, t in [["BA CUSTOM PRODUCTS", 270, 162, 320], ["CLUB", 127, 262, 150], ["AIM", 610, 262, 150], ["TEE POS", 425, 430, 120]] {
-        lx := pad + Round(t[2] * sc), ly := head + Round(t[3] * sc), lw := Round(t[4] * sc)
+        lx := pad + Round((t[2] + ox) * sc), ly := head + Round(t[3] * sc), lw := Round(t[4] * sc)
         Gui, Cheat:Add, Text, x%lx% y%ly% w%lw% Center BackgroundTrans c8A8F96, % t[1]
     }
     bs := Round(85 * sc)
     for i, m in model {
-        bx := pad + Round(m.x * sc), by := head + Round(m.y * sc)
+        bx := pad + Round((m.x + ox) * sc), by := head + Round(m.y * sc)
         color := m.fn ? "FFD400" : "3A3F47"
-        Gui, Cheat:Add, Progress, x%bx% y%by% w%bs% h%bs% Background%color% Disabled
+        Gui, Cheat:Add, Progress, x%bx% y%by% w%bs% h%bs% Background%color% Disabled -Theme
         Gui, Cheat:Font, s%namePt% Bold, Segoe UI
         nameColor := m.fn ? "111111" : "FFFFFF"
-        Gui, Cheat:Add, Text, x%bx% y%by% w%bs% h%bs% Center 0x200 BackgroundTrans c%nameColor%, % (m.fn ? "FN`n" : "") . m.name
+        ; Printed name inside the button, wrapped to its width
+        ny := by + Round(bs * (m.fn ? 0.08 : 0.2)), nh := bs - (ny - by)
+        Gui, Cheat:Add, Text, x%bx% y%ny% w%bs% h%nh% Center BackgroundTrans c%nameColor%, % (m.fn ? "FN`n" : "") . m.name
         if (m.yellow != "") {
             yw := Round(170 * sc), yx := bx + (bs - yw) // 2, yy := by + bs + Round(3 * sc)
             Gui, Cheat:Font, s%yelPt% cFFD400 Bold, Segoe UI
@@ -6279,7 +6284,7 @@ Pause::return
 ; ============================================================
 ShowQuickStart:
     Gui, Main:+OwnDialogs
-    MsgBox, 64, BA Remapper - Quick Start, 1. Select Basic Secondary for the yellow functions printed on your box.`n`n2. Button Mapping turns ON by itself each time BA Remapper opens (the status above shows it).`n`n3. Tap a button for its white function. Hold Reset Aim (A) and press another button for its yellow function. FN + either club button gives Clear View (B).`n`n4. Want a different function? Choose Customize a Copy, open the Builder, click a button, choose its action, and Save.`n`n5. Optional: use Current Profile at Windows Startup and check Start with Windows.`n`n6. For scramble play, check Auto-Pick Scramble Shot, choose a delay (start with 15 seconds), and check Show chosen card highlight and countdown. Return to GSPro: the green outline shows the planned pick. You can still use any GSPro Select (older GSPro: USE) button yourself.`n`nSmart Click used a wrong spot? Release FN, then use Reset Smart Click Spots. The next press reads the screen and learns again; your profiles stay.`n`nCtrl+F12 turns button mapping on/off. Scramble Auto-Pick has its own checkbox. Exit fully quits; closing the window keeps the app in the tray.
+    MsgBox, 64, BA Remapper - Quick Start, 1. Select Basic Secondary for the yellow functions printed on your box.`n`n2. Button Mapping turns ON by itself each time BA Remapper opens (the status above shows it).`n`n3. Tap a button for its white function. Hold Reset Aim (A) and press another button for its yellow function. FN + either club button gives Clear View (B).`n`n4. Want a different function? Choose Customize a Copy, open the Builder, click a button, choose its tap and FN actions, and Save. Test mode in the Builder shows what each button does. Export / Import copies a layout to another PC.`n`n5. Optional: use Current Profile at Windows Startup and check Start with Windows.`n`n6. For scramble play, check Auto-Pick Scramble Shot, choose a delay (start with 15 seconds), and check Show chosen card highlight and countdown. Return to GSPro: the green outline shows the planned pick. You can still use any GSPro Select (older GSPro: USE) button yourself.`n`nSmart Click used a wrong spot? Release FN, then use Reset Smart Click Spots. The next press reads the screen and learns again; your profiles stay.`n`nCtrl+F12 turns button mapping on/off. Scramble Auto-Pick has its own checkbox. Exit fully quits; closing the window keeps the app in the tray.
 Return
 
 ShowHelp:
@@ -6335,6 +6340,28 @@ ShowHelp:
       Rehit = Enter, Next Option = the next number, Move
       Forward / Back = F / B (Flag Line picked).  Anything
       else: use the mouse or keyboard.
+
+    YOUR OWN LAYOUT (v5.2.0, Customize a Copy first)
+    Click a button in the Builder:
+      Tap alone: keep the box print, pick a key, or a
+        custom key / combo.  A * on the button = custom tap.
+      Hold FN: GSPro Hotkey (list or custom key / combo),
+        Smart Click, Key Sequence (up to 4 keys with a
+        pause), Taught Screen Click or None.
+      Smart Click also has GSPro 4 relief-list actions:
+        Choice 1 / 2 / 3 + Enter, Lateral Drop / Flag Line /
+        Mulligan + Enter, Rotate Left / Right, Zoom In / Out,
+        Recenter.
+    Test mode (Builder): press box buttons, the Builder
+      shows what each one does - nothing is sent.
+    Layout check (Builder, bottom line): anything worth a
+      look; click it for details.
+    Export / Import Profile (Builder): a .baprofile file to
+      copy a layout to another PC.  Imports are checked: a
+      profile can only press keys, anything else is off.
+    FN cheat sheet (main window checkbox): hold FN in GSPro
+      and a picture of the box with each button's yellow
+      function shows at the bottom left.
 
     BUILT-IN PRESET: "Basic Secondary"
     QUICK START: pick "Basic Secondary" in the profile dropdown and the
