@@ -1220,6 +1220,9 @@ CheatDraw() {
     ph := head + Round(570 * sc) + pad
     px2pt := 72 / A_ScreenDPI
     namePt := Max(6, Round(13 * sc)) * px2pt * 96 / 72
+    ; One long word (MULLIGAN) gets a smaller size so it is never
+    ; broken in the middle of the word.
+    longPt := Max(6, Round(10.5 * sc)) * px2pt * 96 / 72
     yelPt := Max(6, Round(16 * sc)) * px2pt * 96 / 72
     headPt := Max(7, Round(18 * sc)) * px2pt * 96 / 72
     Gui, Cheat:Margin, 0, 0
@@ -1238,7 +1241,8 @@ CheatDraw() {
         bx := pad + Round((m.x + ox) * sc), by := head + Round(m.y * sc)
         color := m.fn ? "FFD400" : "3A3F47"
         Gui, Cheat:Add, Progress, x%bx% y%by% w%bs% h%bs% Background%color% Disabled -Theme
-        Gui, Cheat:Font, s%namePt% Bold, Segoe UI
+        nPt := (!InStr(m.name, " ") && StrLen(m.name) > 7) ? longPt : namePt
+        Gui, Cheat:Font, s%nPt% Bold, Segoe UI
         nameColor := m.fn ? "111111" : "FFFFFF"
         ; Printed name inside the button, wrapped to its width
         ny := by + Round(bs * (m.fn ? 0.08 : 0.2)), nh := bs - (ny - by)
@@ -1755,12 +1759,12 @@ LoadProfile(profileName) {
             ; plain key / known action is turned off, never sent.
             if (!SecondaryValid(st, sv)) {
                 ProfileLoadNotes.Push(BtnNames[id] . ": saved FN function was not valid and is off")
-                continue
+            } else {
+                SecType[id]  := st
+                SecValue[id] := sv
+                SecX[id]     := sx + 0
+                SecY[id]     := sy + 0
             }
-            SecType[id]  := st
-            SecValue[id] := sv
-            SecX[id]     := sx + 0
-            SecY[id]     := sy + 0
         }
         if (sp != "" && sp != "ERROR") {
             if (KeyValid(sp))

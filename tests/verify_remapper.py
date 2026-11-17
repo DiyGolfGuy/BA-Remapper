@@ -1333,6 +1333,40 @@ def ocr_available():
     return text.startswith("OCR "), text
 
 
+def open_windows_text(pid):
+    """Titles and child text of the visible top-level windows of pid
+    (a hang is usually an error or message box waiting for a click)."""
+    import ctypes
+    from ctypes import wintypes
+    user32 = ctypes.windll.user32
+    found = []
+    proc = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+
+    def text_of(hwnd):
+        buf = ctypes.create_unicode_buffer(1024)
+        user32.GetWindowTextW(hwnd, buf, 1024)
+        return buf.value
+
+    def on_child(hwnd, _):
+        t = text_of(hwnd)
+        if t.strip():
+            found.append("    " + t.replace("\r", " ").replace("\n", " | ")[:600])
+        return True
+
+    def on_top(hwnd, _):
+        owner = wintypes.DWORD()
+        user32.GetWindowThreadProcessId(hwnd, ctypes.byref(owner))
+        if owner.value == pid and user32.IsWindowVisible(hwnd):
+            cls = ctypes.create_unicode_buffer(256)
+            user32.GetClassNameW(hwnd, cls, 256)
+            found.append(f"[{cls.value}] {text_of(hwnd)}")
+            user32.EnumChildWindows(hwnd, proc(on_child), 0)
+        return True
+
+    user32.EnumWindows(proc(on_top), 0)
+    return "\n".join(found) or "(no visible windows)"
+
+
 def runtime_checks(source, ahk):
     assert os.name == "nt", "AutoHotkey runtime checks require Windows"
     digest = hashlib.sha256(ahk.read_bytes()).hexdigest()
@@ -1353,7 +1387,16 @@ def runtime_checks(source, ahk):
         isolated = isolated.replace(marker, "SetTimer, UiSmoke, -50\nReturn", 1)
         (work / "smoke.ahk").write_text(isolated + "\n" + SMOKE, encoding="utf-8-sig")
         (work / "sink.ahk").write_text(SINK, encoding="utf-8-sig")
-        result = subprocess.run([str(ahk), "/ErrorStdOut", str(work / "smoke.ahk"), "/show"], capture_output=True, text=True, timeout=90)
+        smoke = subprocess.Popen([str(ahk), "/ErrorStdOut", str(work / "smoke.ahk"), "/show"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        try:
+            out, err = smoke.communicate(timeout=120)
+        except subprocess.TimeoutExpired:
+            windows = open_windows_text(smoke.pid)
+            smoke.kill()
+            smoke.communicate()
+            done = (work / "checks.txt").read_text().splitlines() if (work / "checks.txt").exists() else []
+            raise AssertionError("UiSmoke timed out. Last checks:\n" + "\n".join(done[-6:]) + "\nOpen windows:\n" + windows)
+        result = subprocess.CompletedProcess(smoke.args, smoke.returncode, out, err)
         artifacts = ROOT / "verification"
         artifacts.mkdir(exist_ok=True)
         for artifact in list(work.glob("*.bmp")) + list(work.glob("*.txt")):
