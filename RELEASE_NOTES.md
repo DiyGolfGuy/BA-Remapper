@@ -1,35 +1,45 @@
-# BA Remapper 5.1.6
+# BA Remapper 5.2.0
 
-GSPro 4 shows water-hazard and out-of-bounds relief as a numbered list at the top left of the screen. You press a number to pick a choice and Enter to take it, and on Flag Line, B / F move the drop further back or closer. The control box's yellow functions only knew the older relief menu, so they did nothing on this screen. 5.1.6 makes the same buttons work on both.
+Two things in this release: customers can build their own button layouts with many more choices, and players can see what each button does without looking it up.
 
-## What changed
+## FN cheat sheet
 
-On the GSPro 4 relief list, the box buttons press GSPro's own keys:
+Hold FN (Reset Aim on the standard layout) in GSPro and a picture of the control box appears at the bottom left of the game. Every button is where it sits on the box, the FN button is yellow, and each button's yellow function for the current profile is printed under it, like the yellow print on the box. On GSPro 4's relief list it shows what the buttons do there (Next choice, Closer, Further Back...). It disappears when FN is released, never takes clicks or focus, and stays out of screen captures and streams. A custom layout shows its own functions. **Show FN cheat sheet** on the main window turns it on or off.
 
-| FN + button (yellow print) | GSPro 4 relief list | Older GSPro relief menu |
-|---|---|---|
-| Tee Left: OB Rehit | Rehit's number, then Enter (1 on out of bounds, 3 on water) | Clicks Rehit (unchanged) |
-| Aim Right: Drop Ball / Rehit | Enter: takes the highlighted choice | Clicks Drop Ball / Rehit (unchanged) |
-| Aim Left: Next Option | Highlights the next choice (1, 2, 3, back to 1) | Clicks Next Option (unchanged) |
-| Aim Up: Move Forward | F: Closer, when Flag Line is picked | Clicks Move Forward (unchanged) |
-| Aim Down: Move Back | B: Further Back, when Flag Line is picked | Clicks Move Back (unchanged) |
+**Size and Place...** on the main window shows the sheet over GSPro, the way it will look when FN is held, with a green outline. Slide the size (20% to 80% of the GSPro screen width) and it changes live; drag the sheet anywhere on the GSPro screen; **Lock it in** saves the size and spot for good (kept through updates). **Back to bottom left** returns it to the starting corner, and **Cancel** keeps what was locked in before.
 
-- **It reads before it presses.** A quick read of the list's corner decides which GSPro is showing. Without the list on screen, every press goes to the older menu exactly as in 5.1.5. Nothing is pressed into the game unless the list is there.
-- **It reads which choice is highlighted** (the blue one), so Next Option moves on from wherever the player is, even after a mouse click.
-- **Basic options only.** Preview Lie, rotating or zooming the map, and clicking a spot on the course stay with the mouse and keyboard.
-- Scramble Auto-Pick, Button Mapping and the startup behaviour are unchanged.
+## Your own layout
+
+Choose **Customize a Copy**, open the **Button Builder** and click a button:
+
+- **Tap alone** (white print): keep the box print, choose a key from the list, or **Custom key or combo...** (click the box and press the key; Ctrl / Alt / Shift combos work). A `*` on the Builder button marks a custom tap. Basic Secondary stays locked to the box print.
+- **Hold FN** (yellow print):
+  - **GSPro Hotkey:** the list (now with E, M, X, minus, equals, F2–F12, Home, End, Page Up/Down, Insert, Delete) or **Custom key or combo...**
+  - **Smart Click:** the relief-menu actions as before, plus new **GSPro 4 relief-list** actions: Choice 1 / 2 / 3 + Enter, Lateral Drop / Flag Line / Mulligan + Enter (it finds the choice's number on screen), Rotate Left / Right (Q / E), Zoom In / Out, Recenter.
+  - **Key Sequence:** up to 4 keys in a row with a set pause (100–800 ms), for example "2 then Enter".
+  - Taught Screen Click or None, as before.
+- **Test mode:** tick it in the Builder and press the box buttons. The Builder shows what each one does, and nothing is sent to GSPro.
+- **Layout check:** the Builder's bottom line flags anything worth a look, such as a screen click with no position or two buttons that tap the same key. Click it for the full list.
+- **Export / Import Profile:** a `.baprofile` file to copy a layout to another bay or share it with a customer. Imported profiles are checked: a profile can only press keys (no Win-key combos, clicks or typed text), and anything else is turned off and listed. Screen-click spots from another PC are flagged to re-check.
+
+Also: typing a profile name or a custom key in the app's own boxes now gets the plain box keys instead of remapping them.
+
+Unchanged: Basic Secondary, the GSPro 4 relief list and older relief menu Smart Clicks, scramble Auto-Pick, startup behaviour.
 
 ## How this was checked
 
-- Your three GSPro 4 screenshots (water with Lateral Drop highlighted, water with Flag Line highlighted, out of bounds with Rehit) are read with the real Windows reader on every build, as captured and shrunk to a 1920-wide window. Each must find the list, all its choices in order and the highlighted one, and plan the right keys for every box button (water: OB Rehit = 3 Enter, Next Option = 2 or 3, Flag Line Closer/Further = F/B; out of bounds: OB Rehit = 1 Enter).
-- The scramble screenshots are never taken for the relief list, and the older menu's words always send a press to the older menu.
-- On a test window, FN + Aim Left and FN + Tee Left were sent through the real box-key path and the window received 2, then 3, then Enter, with no Tee Left or Aim Left key leaking.
-- The scramble, startup, hotkey, 64-bit build and installer checks still pass.
-- Not tested by the AI: GSPro 4 itself, out of bounds with Mulligan on (planned from your photo: Rehit 1, Mulligan 2), a live round, the physical box.
+- Windows CI sends real key presses through the box-key path to a test window: the key sequence (4 then F2) and a custom tap (X) arrive in order, the buttons' own printed keys never leak, and the GSPro 4 relief keys still arrive as before.
+- The cheat sheet is shown over a GSPro-titled window while FN is held: it sits at the bottom left, draws grey buttons, the yellow FN button and the yellow print, is the chosen size, is click-through and never takes focus, hides when FN is released, and stays off when switched off. FN + Club Down still sends a real held B (Clear View) to the game with the sheet showing, and the game keeps focus.
+- Size and Place: the sheet is shown over the game and takes the mouse; the size slider resizes it live; a real mouse drag moves it; nothing is saved until Lock it in, which saves the size and spot; holding FN afterwards shows it at exactly that size and spot; Cancel keeps the locked values; holding FN while placing leaves the sheet being placed alone. A saved top-right spot shows it top right.
+- Builder test mode reports FN + Club Up = Clear View, the custom tap and FN tapped alone, and sends nothing. Typing in the app's own text box gets the plain keys.
+- Export and import keep every kind of function; a hostile profile file (Win-key combo, a click, an unknown action, typed text, the preset's name) is renamed and every unsafe entry is turned off and listed.
+- Your GSPro 4 screenshots plan the right keys for every new relief action, and Recenter is found on each screenshot as captured and at 1920 wide.
+- All earlier checks (scramble, startup, relief list, 64-bit build, installer) still pass.
+- Not tested by the AI: a real bay, the physical box, a live round, how the cheat sheet looks on a projector.
 
 ## Update/install
 
-Exit the running app from its tray menu. Download and extract **BARemapper_Setup_v5.1.6.zip**, then run Setup over the installed version. Profiles and settings are kept. On a PC where BayLauncher opens the Remapper, untick "Start BA Remapper with Windows" in Setup. The portable alternative is **BARemapper_v5.1.6_portable.zip**. **SHA256SUMS.txt** lists download checksums.
+Exit the running app from its tray menu. Download and extract **BARemapper_Setup_v5.2.0.zip**, then run Setup over the installed version. Profiles and settings are kept. On a PC where BayLauncher opens the Remapper, untick "Start BA Remapper with Windows" in Setup. The portable alternative is **BARemapper_v5.2.0_portable.zip**. **SHA256SUMS.txt** lists download checksums.
 
 [Illustrated guide](https://github.com/DiyGolfGuy/BA-Remapper/blob/main/docs/scramble-preview.md) · [Full how-to](https://github.com/DiyGolfGuy/BA-Remapper/blob/main/HOW_TO_USE.txt)
 

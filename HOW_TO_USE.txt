@@ -1,9 +1,9 @@
-BA REMAPPER 5.1.6 - HOW TO USE
+BA REMAPPER 5.2.0 - HOW TO USE
 BA Custom Products LLC | bacustomproducts.com
 
 1. INSTALL OR UPDATE
 
-Download BARemapper_Setup_v5.1.6.zip from the BA website or:
+Download BARemapper_Setup_v5.2.0.zip from the BA website or:
 https://github.com/DiyGolfGuy/BA-Remapper/releases/latest
 
 Extract the ZIP. If Remapper is running, right-click its green BA tray
@@ -44,8 +44,43 @@ GSPro 4 shows water and OB relief as a numbered list at the top left
   Move Forward/Back: Closer / Further Back, when Flag Line is picked
 Preview Lie, rotating or moving the map: use the mouse or keyboard.
 
+FN CHEAT SHEET: hold FN in GSPro and a picture of the control box shows
+(bottom left to start), with each button's yellow function printed under
+it for the profile in use - a custom layout shows its own functions.
+Turn it on or off with Show FN cheat sheet on the main window.
+
+To size and place it, open GSPro, then click Size and Place... on the
+main window. The sheet appears over GSPro with a green outline:
+  Size slider:          bigger or smaller, live (20% to 80% of the
+                        GSPro screen width)
+  Drag the sheet:       put it anywhere on the GSPro screen
+  Lock it in:           saves the size and spot; FN shows it there
+                        from now on, also after updates
+  Back to bottom left:  moves it back to the starting corner
+  Cancel:               keeps what was locked in before
+
 Ctrl+F12 toggles Button Mapping. Turn mapping OFF to type normally.
 Closing the main window keeps the app running in the tray; Exit quits.
+
+YOUR OWN LAYOUT
+Choose Customize a Copy, then Open Button Builder and click a button:
+  Tap alone:  keep the box print, pick a key, or Custom key or combo...
+              (click the box and press the key, with Ctrl / Alt / Shift).
+              A * on a Builder button means a custom tap.
+  Hold FN:    GSPro Hotkey (list, or Custom key or combo...)
+              Smart Click (relief menu, and for GSPro 4's relief list:
+                Choice 1 / 2 / 3 + Enter, Lateral Drop / Flag Line /
+                Mulligan + Enter, Rotate Left / Right, Zoom In / Out,
+                Recenter)
+              Key Sequence: up to 4 keys in a row with a pause
+              Taught Screen Click, or None
+Test mode (Builder checkbox): press box buttons and the Builder shows
+what each one does; nothing is sent to GSPro.
+Layout check (Builder, bottom line): things worth a look, such as a
+screen click with no position or two buttons that tap the same key.
+Export Profile / Import Profile (Builder): a .baprofile file to copy a
+layout to another PC. Imported profiles are checked: they can only press
+keys, and anything else is turned off and listed.
 
 3. TURN ON SCRAMBLE AUTO-PICK AND THE CARD HIGHLIGHT
 

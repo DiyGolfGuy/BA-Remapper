@@ -54,6 +54,12 @@ def static_checks(source, baseline):
     ]
     for name in unchanged:
         assert function(source, name) == function(baseline, name), f"Unexpected core change: {name}"
+    # A label (or hotkey) above the end of the auto-execute section would
+    # be run, or end startup, before the window and timers exist.
+    auto_end = source.index("SetTimer, OcrWarmup, -3000\nReturn")
+    early = re.findall(r"(?m)^([A-Za-z_][A-Za-z0-9_]*:|[^;\s][^\n]*::)\s*$", source[:auto_end])
+    assert not early, f"Labels or hotkeys before the end of startup: {early}"
+    print("PASS: no labels or hotkeys interrupt the startup section")
     for start, end in [
         ("TrayOcrDump:", "; Forget this PC's locked Smart Click spots"),
         ("ScrambleWork:", "OnOpenFolder:"),
@@ -292,6 +298,211 @@ UiSmoke:
         HandleBoxKeyUp("a")
         Critical, Off
         Assert(ReliefLast = "", "OB Rehit on the GSPro 4 panel sent Rehit's number and Enter")
+        ; ---- v5.2.0 custom layouts ----
+        ; A profile can only ever press keys.
+        Assert(KeyValid("b") && KeyValid("^m") && KeyValid("{Enter}") && KeyValid("^+{F7}") && KeyValid("-") && KeyValid("=") && KeyValid("{Numpad1}"), "Plain keys and combos are valid")
+        Assert(!KeyValid("{Click 10 10}") && !KeyValid("#r") && !KeyValid("{Raw}x") && !KeyValid("abc") && !KeyValid("{LWin}") && !KeyValid("") && !KeyValid("^^^^a"), "Clicks, Win key, raw text and strings are refused")
+        Assert(HotkeyToSend("^+E") = "^+e" && HotkeyToSend("F7") = "{F7}" && HotkeyToSend("Numpad1") = "{Numpad1}" && HotkeyToSend("#r") = "" && HotkeyToSend("") = "", "Custom key box converts to keys")
+        Assert(SendToHotkey("^+{F7}") = "^+F7" && KeyDisplayName("^+e") = "Ctrl+Shift+E" && KeyDisplayName("{F7}") = "F7" && KeyShortName("b") = "B", "Custom keys show readable names")
+        sq := SeqParse("150:4|{F2}")
+        Assert(IsObject(sq) && sq.pause = 150 && sq.keys.MaxIndex() = 2 && !IsObject(SeqParse("150:a|b|c|d|e")) && !IsObject(SeqParse("5:a")) && !IsObject(SeqParse("150:{Click}")), "Key sequences: 1-4 checked keys, sane pause")
+        Assert(SecondaryValid("ocr", "ReliefChoice2") && !SecondaryValid("ocr", "RunAnything") && SecondaryValid("seq", "200:2|{Enter}") && !SecondaryValid("key", "{Click}"), "Saved FN functions are checked")
+        ; A key sequence and a custom tap key reach the key target.
+        SecType["heatmap"] := "seq", SecValue["heatmap"] := "150:4|{F2}"
+        ProfPrimary["teeright"] := "x"
+        WinActivate, GSPro BA Remapper regression target
+        WinWaitActive, GSPro BA Remapper regression target, , 2
+        HandleBoxKeyDown("a")
+        HandleBoxKeyDown("y")      ; FN + Heat Map = key sequence 4, F2
+        HandleBoxKeyUp("a")
+        HandleBoxKeyDown("v")      ; tap Tee Right = custom tap X
+        HandleBoxKeyUp("v")
+        Assert(BoxTapKey("teeright") = "x" && BoxTapKey("teeleft") = "c", "A custom tap key replaces only that button's tap")
+        ; FN cheat sheet: a copy of the box at the bottom left of GSPro while FN is held.
+        ShowFnCheat := true
+        CheatSizePct := 60
+        model := CheatModel()
+        byId := {}
+        for i, m in model
+            byId[m.id] := m
+        Assert(byId.clubup.yellow = "CLEAR VIEW" && byId.teeleft.yellow = "OB REHIT" && byId.up.yellow = "MOVE FORWARD" && byId.heatmap.yellow = "4>F2" && byId.resetaim.fn && byId.putt.yellow = "" && model.MaxIndex() = 14, "Cheat sheet prints every button with its yellow function")
+        WinActivate, GSPro BA Remapper regression target
+        WinWaitActive, GSPro BA Remapper regression target, , 2
+        HandleBoxKeyDown("a")
+        Sleep, 1100
+        cheatShown := CheatVisible && CheatHwnd && DllCall("IsWindowVisible", "Ptr", CheatHwnd)
+        Assert(cheatShown, "Holding FN over GSPro shows the control-box cheat sheet")
+        gw := ClientRectByTitle(GSProWinNeedle, GSProWinExclude)
+        WinGetPos, chx, chy, chw, chh, ahk_id %CheatHwnd%
+        Assert(chx >= gw.x && chx <= gw.x + 60 && chy + chh <= gw.y + gw.h + 1 && chy + chh >= gw.y + gw.h - 60 && chw >= 300, "Cheat sheet sits at the bottom left of GSPro: " . chx . "," . chy . " " . chw . "x" . chh . " in " . gw.x . "," . gw.y . " " . gw.w . "x" . gw.h)
+        Assert(Abs(chw - Round(Min(gw.w * 0.6, gw.w - 40, (gw.h - 40) * 940 / 640))) <= 2, "Cheat sheet is the chosen size (60% of GSPro): " . chw . " of " . gw.w)
+        px := CheatPixels(CheatHwnd)
+        Assert(px.yellow >= 40 && px.button >= 400 && px.fnyellow >= 60, "Cheat sheet draws grey buttons, a yellow FN button and yellow print (yellow " . px.yellow . ", button " . px.button . ", FN " . px.fnyellow . ")")
+        WinGet, cheatEx, ExStyle, ahk_id %CheatHwnd%
+        Assert((cheatEx & 0x08000020) = 0x08000020, "Cheat sheet is click-through and never takes focus")
+        ; The B fix (FN + Club Down = Clear View) with the sheet up:
+        ; B still reaches GSPro as a real held key, GSPro keeps focus.
+        HandleBoxKeyDown("k")
+        HandleBoxKeyUp("k")
+        Assert(WinActive("GSPro BA Remapper regression target") && CheatVisible, "FN + Club Down sends Clear View (B) to GSPro with the cheat sheet showing; GSPro keeps focus")
+        HandleBoxKeyDown("o")      ; FN + Flyover: nothing assigned, FN counts as used
+        HandleBoxKeyUp("a")
+        Sleep, 150
+        Assert(!CheatVisible && !(CheatHwnd && DllCall("IsWindow", "Ptr", CheatHwnd) && DllCall("IsWindowVisible", "Ptr", CheatHwnd)), "Releasing FN hides the cheat sheet")
+        ShowFnCheat := false
+        HandleBoxKeyDown("a")
+        Sleep, 700
+        Assert(!CheatVisible, "Cheat sheet stays off when switched off")
+        HandleBoxKeyDown("o")
+        HandleBoxKeyUp("a")
+        ShowFnCheat := true
+        Assert(!CheatSizeValid(19) && !CheatSizeValid(81) && !CheatSizeValid("abc") && CheatSizeValid(20) && CheatSizeValid(80) && CheatPosValid(0) && CheatPosValid(1000) && !CheatPosValid(1001) && !CheatPosValid("-5"), "Saved size 20-80 and spot 0-1000 are checked")
+        ; A saved spot in the top right puts the sheet there.
+        CheatPosX := 1000, CheatPosY := 0
+        WinActivate, GSPro BA Remapper regression target
+        WinWaitActive, GSPro BA Remapper regression target, , 2
+        HandleBoxKeyDown("a")
+        Sleep, 800
+        g0 := CheatGeom(gw)
+        WinGetPos, tx, ty, tw, th, ahk_id %CheatHwnd%
+        Assert(CheatVisible && Abs(tx + tw - (gw.x + gw.w - g0.pad)) <= 2 && Abs(ty - (gw.y + g0.pad)) <= 2, "A saved top-right spot shows the sheet top right: " . tx . "," . ty . " " . tw . " in " . gw.x . "," . gw.y . " " . gw.w)
+        HandleBoxKeyDown("o")
+        HandleBoxKeyUp("a")
+        Sleep, 100
+        CheatPosX := 0, CheatPosY := 1000
+        ; Size and Place: the sheet live over GSPro, a size slider,
+        ; drag with the mouse, Lock it in saves both.
+        Gosub, OnCheatAdjust
+        Sleep, 250
+        Assert(CheatAdjusting && CheatVisible && WinExist("ahk_id " . CheatAdjHwnd), "Size and Place shows the sheet and its controls")
+        WinGet, adjEx, ExStyle, ahk_id %CheatHwnd%
+        Assert(!(adjEx & 0x20) && (adjEx & 0x08000000), "The sheet being placed takes the mouse but never focus")
+        GuiControl, CheatAdj:, CheatAdjSize, 50
+        Gosub, CheatAdjSizeMove
+        Sleep, 300
+        WinGetPos, ax, ay, aw, ah, ahk_id %CheatHwnd%
+        Assert(Abs(aw - Round(Min(Max(gw.w * 0.5, 300), gw.w - 40, (gw.h - 40) * 940 / 640))) <= 2 && CheatSizePct = 50, "The size slider resizes the sheet live: " . aw)
+        ; FN held while placing neither replaces nor hides it.
+        HandleBoxKeyDown("a")
+        Sleep, 600
+        HandleBoxKeyDown("o")
+        HandleBoxKeyUp("a")
+        WinGet, adjEx2, ExStyle, ahk_id %CheatHwnd%
+        Assert(CheatAdjusting && CheatVisible && !(adjEx2 & 0x20), "FN during Size and Place leaves the sheet being placed")
+        CoordMode, Mouse, Screen
+        dsx := ax + aw // 2, dsy := ay + ah // 2
+        MouseMove, %dsx%, %dsy%, 0
+        Sleep, 80
+        Click, Down
+        Sleep, 80
+        Loop, 6 {
+            mvx := dsx + A_Index * 25, mvy := dsy - A_Index * 16
+            MouseMove, %mvx%, %mvy%, 0
+            Sleep, 50
+        }
+        Click, Up
+        Sleep, 150
+        WinGetPos, bx, by, , , ahk_id %CheatHwnd%
+        Assert(bx >= ax + 120 && by <= ay - 70, "Dragging with the mouse moves the sheet: " . ax . "," . ay . " -> " . bx . "," . by)
+        dragX := CheatPosX, dragY := CheatPosY
+        Assert(dragX > 0 && dragY < 1000, "The dragged spot is noted: " . dragX . " / " . dragY)
+        SaveSettings()   ; any other setting saved while placing
+        IniRead, duringLock, %ConfigFile%, App, FnCheatSize, 0
+        Assert(duringLock = CheatAdjOrig.size && duringLock != CheatSizePct, "Nothing is saved until Lock it in: " . duringLock)
+        Gosub, CheatAdjLock
+        IniRead, lockSize, %ConfigFile%, App, FnCheatSize, 0
+        IniRead, lockX, %ConfigFile%, App, FnCheatX, -1
+        IniRead, lockY, %ConfigFile%, App, FnCheatY, -1
+        Assert(!CheatAdjusting && !CheatVisible && !WinExist("ahk_id " . CheatAdjHwnd) && lockSize = 50 && lockX = dragX && lockY = dragY, "Lock it in saves the size and spot: " . lockSize . " " . lockX . " " . lockY)
+        WinActivate, GSPro BA Remapper regression target
+        WinWaitActive, GSPro BA Remapper regression target, , 2
+        HandleBoxKeyDown("a")
+        Sleep, 800
+        WinGetPos, lx, ly, lw, , ahk_id %CheatHwnd%
+        Assert(CheatVisible && Abs(lx - bx) <= 2 && Abs(ly - by) <= 2 && Abs(lw - aw) <= 2, "Holding FN shows the sheet at the locked size and spot: " . lx . "," . ly . " " . lw)
+        HandleBoxKeyDown("o")
+        HandleBoxKeyUp("a")
+        Sleep, 100
+        ; Cancel puts back what was locked in.
+        Gosub, OnCheatAdjust
+        Sleep, 150
+        GuiControl, CheatAdj:, CheatAdjSize, 25
+        Gosub, CheatAdjSizeMove
+        Gosub, CheatAdjReset
+        Gosub, CheatAdjCancel
+        Assert(CheatSizePct = 50 && CheatPosX = dragX && CheatPosY = dragY && !CheatAdjusting && !CheatVisible, "Cancel keeps the locked size and spot")
+        CheatSizePct := 35, CheatPosX := 0, CheatPosY := 1000
+        ; Builder test mode: box presses show what they do, nothing is sent.
+        Gosub, ShowBuilder
+        GuiControl, Builder:, BuilderTest, 1
+        BuilderTestMode := true
+        WinActivate, ahk_id %BuilderHwnd%
+        WinWaitActive, ahk_id %BuilderHwnd%, , 2
+        HandleBoxKeyDown("a")
+        HandleBoxKeyDown("i")
+        GuiControlGet, testStatus, Builder:, BuilderStatus
+        Assert(InStr(testStatus, "FN + Club Up") && InStr(testStatus, "Clear View") && InStr(testStatus, "nothing sent"), "Builder test mode shows FN + Club Up: " . testStatus)
+        HandleBoxKeyUp("i")
+        HandleBoxKeyUp("a")
+        HandleBoxKeyDown("v")
+        GuiControlGet, testStatus, Builder:, BuilderStatus
+        Assert(InStr(testStatus, "Tee Right") && InStr(testStatus, "custom tap"), "Builder test mode shows the custom tap: " . testStatus)
+        HandleBoxKeyUp("v")
+        HandleBoxKeyDown("a")
+        HandleBoxKeyUp("a")
+        GuiControlGet, testStatus, Builder:, BuilderStatus
+        Assert(InStr(testStatus, "Reset Aim tapped alone"), "Builder test mode shows FN tapped alone: " . testStatus)
+        BuilderTestMode := false
+        Gosub, BuilderClose
+        ; Typing in the app's own text box gets the plain box keys.
+        Gui, PassTest:New, +AlwaysOnTop +HwndPassHwnd, Pass-through test
+        Gui, PassTest:Add, Edit, w200 vPassEdit
+        Gui, PassTest:Show, w240 h80
+        WinActivate, ahk_id %PassHwnd%
+        WinWaitActive, ahk_id %PassHwnd%, , 2
+        ControlFocus, Edit1, ahk_id %PassHwnd%
+        HandleBoxKeyDown("y")
+        HandleBoxKeyUp("y")
+        HandleBoxKeyDown("k")
+        HandleBoxKeyUp("k")
+        Sleep, 150
+        GuiControlGet, passText, PassTest:, PassEdit
+        Gui, PassTest:Destroy
+        Assert(passText = "yk", "Typing in the app's own text box gets the plain box keys: " . passText)
+        ; Layout check
+        ResetProfile()
+        SecType["shotcam"] := "click", SecX["shotcam"] := 0, SecY["shotcam"] := 0
+        ProfPrimary["teeright"] := "c"
+        joined := ""
+        for i, n in ProfileCheck()
+            joined .= n . "|"
+        Assert(InStr(joined, "Shot Cam: Taught Screen Click has no position") && InStr(joined, "Tee Left and Tee Right both tap C"), "Layout check finds an empty screen click and a doubled tap: " . joined)
+        ; Export / Import: a round trip keeps everything; a hostile file only keeps plain keys.
+        ResetProfile()
+        FnButtonId := "shotcam"
+        SecType["clubup"] := "key", SecValue["clubup"] := "^+{F7}"
+        SecType["left"] := "ocr", SecValue["left"] := "ReliefChoice2"
+        SecType["heatmap"] := "seq", SecValue["heatmap"] := "300:2|{Enter}"
+        SecType["putt"] := "click", SecX["putt"] := 640, SecY["putt"] := 360
+        ProfPrimary["teeright"] := "x"
+        SaveProfile("Export Source")
+        ProfileList.Push("Export Source")
+        expFile := A_ScriptDir . "\layout-test.baprofile"
+        Assert(ExportProfile("Export Source", expFile), "Profile exported to a .baprofile file")
+        imp := ImportProfileFile(expFile)
+        Assert(imp.name = "Export Source (imported)", "Import picks a free name: " . imp.name)
+        LoadProfile(imp.name)
+        Assert(FnButtonId = "shotcam" && SecValue["clubup"] = "^+{F7}" && SecValue["left"] = "ReliefChoice2" && SecValue["heatmap"] = "300:2|{Enter}" && SecX["putt"] = 640 && ProfPrimary["teeright"] = "x" && imp.notes.MaxIndex() = 1, "Import keeps every function and notes the screen click from another PC")
+        hostile := A_ScriptDir . "\hostile.baprofile"
+        if (FileExist(hostile))
+            FileDelete, %hostile%
+        FileAppend, % "[BA Remapper]`nName=Basic Secondary`n[Profile]`nFnButtonId=mulligan`nheatmap_Type=key`nheatmap_Value={Click 100 100}`nputt_Type=seq`nputt_Value=100:{LWin}`nflyover_Type=ocr`nflyover_Value=RunAnything`nclubup_Type=key`nclubup_Value=#r`nteeleft_Primary={Raw}abc`nclubdown_Type=key`nclubdown_Value=b`n", %hostile%
+        imp2 := ImportProfileFile(hostile)
+        Assert(imp2.name = "Basic Secondary (imported)" && imp2.notes.MaxIndex() >= 6, "Hostile import renamed off the preset and every unsafe entry noted: " . imp2.name . " " . imp2.notes.MaxIndex())
+        LoadProfile(imp2.name)
+        okHostile := (FnButtonId = "resetaim") && !SecType.HasKey("heatmap") && !SecType.HasKey("putt") && !SecType.HasKey("flyover") && !SecType.HasKey("clubup") && !ProfPrimary.HasKey("teeleft") && SecValue["clubdown"] = "b"
+        Assert(okHostile, "Hostile import keeps only the plain key")
+        LoadProfile("Basic Secondary")
         RemapActive := false
         Sleep, 300
         Process, Close, %sinkPid%
@@ -315,6 +526,44 @@ Return
 CloseFnNotice:
     ControlClick, Button1, FN Button
 Return
+
+; Capture the cheat sheet from the screen and count its grey button,
+; yellow print and yellow FN-button pixels.  Its capture exclusion is
+; lifted for the capture, the way CapturePreview does it.
+CheatPixels(hwnd) {
+    WinGetPos, wx, wy, w, h, ahk_id %hwnd%
+    DllCall("SetWindowDisplayAffinity", "Ptr", hwnd, "UInt", 0)
+    DllCall("dwmapi\DwmFlush")
+    Sleep, 150
+    scr := DllCall("GetDC", "Ptr", 0, "Ptr")
+    mdc := DllCall("CreateCompatibleDC", "Ptr", scr, "Ptr")
+    bmp := DllCall("CreateCompatibleBitmap", "Ptr", scr, "Int", w, "Int", h, "Ptr")
+    old := DllCall("SelectObject", "Ptr", mdc, "Ptr", bmp, "Ptr")
+    DllCall("BitBlt", "Ptr", mdc, "Int", 0, "Int", 0, "Int", w, "Int", h, "Ptr", scr, "Int", wx, "Int", wy, "UInt", 0x40CC0020)
+    DllCall("SetWindowDisplayAffinity", "Ptr", hwnd, "UInt", 0x11)
+    out := {yellow: 0, button: 0, fnyellow: 0}
+    y := 0
+    while (y < h) {
+        x := 0
+        while (x < w) {
+            c := DllCall("GetPixel", "Ptr", mdc, "Int", x, "Int", y, "UInt")
+            r := c & 0xFF, g := (c >> 8) & 0xFF, b := (c >> 16) & 0xFF
+            if (r = 0xFF && g = 0xD4 && b = 0x00)
+                out.fnyellow += 1
+            else if (r > 190 && g > 160 && b < 110)
+                out.yellow += 1
+            if (Abs(r - 0x3A) < 6 && Abs(g - 0x3F) < 6 && Abs(b - 0x47) < 6)
+                out.button += 1
+            x += 3
+        }
+        y += 3
+    }
+    DllCall("SelectObject", "Ptr", mdc, "Ptr", old, "Ptr")
+    DllCall("DeleteObject", "Ptr", bmp)
+    DllCall("DeleteDC", "Ptr", mdc)
+    DllCall("ReleaseDC", "Ptr", 0, "Ptr", scr)
+    return out
+}
 
 Assert(ok, message) {
     if (!ok)
@@ -1010,9 +1259,14 @@ ReliefShotSmoke:
         ; Bruce's own GSPro 4 relief screenshots.  [file, choices top to
         ; bottom, highlighted, OB Rehit keys, Next Option keys, Move
         ; Forward keys, Move Back keys]; Drop Ball / Rehit is always Enter.
-        shots := [["relief-water-lateral.jpg", "LATERAL DROP|FLAG LINE|REHIT", 1, "3 {Enter}", "2", "", ""]
-            , ["relief-water-flagline.jpg", "LATERAL DROP|FLAG LINE|REHIT", 2, "3 {Enter}", "3", "f", "b"]
-            , ["relief-ob-rehit.jpg", "REHIT", 1, "1 {Enter}", "", "", ""]]
+        shots := [["relief-water-lateral.jpg", "LATERAL DROP|FLAG LINE|REHIT", 1, "3 {Enter}", "2", "", "", 1572, 2036]
+            , ["relief-water-flagline.jpg", "LATERAL DROP|FLAG LINE|REHIT", 2, "3 {Enter}", "3", "f", "b", 1569, 2034]
+            , ["relief-ob-rehit.jpg", "REHIT", 1, "1 {Enter}", "", "", "", 1569, 2039]]
+        ; v5.2.0 relief-list actions: [Choice 1, Choice 2, Choice 3, Lateral, Flag Line, Mulligan, Rotate L, Rotate R, Zoom In, Zoom Out, Recenter]
+        more := {}
+        more["relief-water-lateral.jpg"] := "1 {Enter}|2 {Enter}|3 {Enter}|1 {Enter}|2 {Enter}||q|e|@wheelup|@wheeldown|@recenter"
+        more["relief-water-flagline.jpg"] := "1 {Enter}|2 {Enter}|3 {Enter}|1 {Enter}|2 {Enter}||q|e|@wheelup|@wheeldown|@recenter"
+        more["relief-ob-rehit.jpg"] := "1 {Enter}||||||q|e|@wheelup|@wheeldown|@recenter"
         for i, s in shots {
             src := LoadPicture(dir . "\" . s[1])
             VarSetCapacity(bm, 32, 0)
@@ -1033,6 +1287,15 @@ ReliefShotSmoke:
                 for j, a in ["Rehit", "NextOption", "MoveForward", "MoveBack", "DropRehit"]
                     plans.Push(ReliefKeysText(ReliefPlan(a, rel, sel).keys))
                 ok := rel.found && names = s[2] && sel = s[3] && plans[1] = s[4] && plans[2] = s[5] && plans[3] = s[6] && plans[4] = s[7] && plans[5] = "{Enter}"
+                extra := ""
+                for j, a in ["ReliefChoice1", "ReliefChoice2", "ReliefChoice3", "ReliefLateral", "ReliefFlagLine", "ReliefMulligan", "ReliefRotateLeft", "ReliefRotateRight", "ReliefZoomIn", "ReliefZoomOut", "ReliefRecenter"]
+                    extra .= (j > 1 ? "|" : "") . ReliefKeysText(ReliefPlan(a, rel, sel).keys)
+                ok := ok && extra = more[s[1]]
+                rc := ReliefFindRecenter(win, Func("ShotRead").Bind(hbm))
+                f := tw / W
+                rcOk := IsObject(rc) && Abs(rc.x + rc.w / 2 - s[8] * f) <= 60 * f + 4 && Abs(rc.y + rc.h / 2 - s[9] * f) <= 25 * f + 4
+                ok := ok && rcOk
+                ScrambleNote(ok ? "PASS" : "FAIL", "  new actions [" . extra . "]; Recenter " . (IsObject(rc) ? "at " . Round(rc.x + rc.w / 2) . "," . Round(rc.y + rc.h / 2) . " (want " . Round(s[8] * f) . "," . Round(s[9] * f) . ")" : "not found"))
                 ScrambleNote(ok ? "PASS" : "FAIL", s[1] . " at " . tw . "x" . th . ": " . (rel.found ? ReliefNote(rel) : "no panel") . "; highlighted " . sel . " (want " . s[3] . "); OB Rehit [" . plans[1] . "] Next Option [" . plans[2] . "] Move Forward [" . plans[3] . "] Move Back [" . plans[4] . "] Drop Ball/Rehit [" . plans[5] . "]")
                 if (!ok)
                     fails += 1
@@ -1165,6 +1428,40 @@ def ocr_available():
     return text.startswith("OCR "), text
 
 
+def open_windows_text(pid):
+    """Titles and child text of the visible top-level windows of pid
+    (a hang is usually an error or message box waiting for a click)."""
+    import ctypes
+    from ctypes import wintypes
+    user32 = ctypes.windll.user32
+    found = []
+    proc = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+
+    def text_of(hwnd):
+        buf = ctypes.create_unicode_buffer(1024)
+        user32.GetWindowTextW(hwnd, buf, 1024)
+        return buf.value
+
+    def on_child(hwnd, _):
+        t = text_of(hwnd)
+        if t.strip():
+            found.append("    " + t.replace("\r", " ").replace("\n", " | ")[:600])
+        return True
+
+    def on_top(hwnd, _):
+        owner = wintypes.DWORD()
+        user32.GetWindowThreadProcessId(hwnd, ctypes.byref(owner))
+        if owner.value == pid and user32.IsWindowVisible(hwnd):
+            cls = ctypes.create_unicode_buffer(256)
+            user32.GetClassNameW(hwnd, cls, 256)
+            found.append(f"[{cls.value}] {text_of(hwnd)}")
+            user32.EnumChildWindows(hwnd, proc(on_child), 0)
+        return True
+
+    user32.EnumWindows(proc(on_top), 0)
+    return "\n".join(found) or "(no visible windows)"
+
+
 def runtime_checks(source, ahk):
     assert os.name == "nt", "AutoHotkey runtime checks require Windows"
     digest = hashlib.sha256(ahk.read_bytes()).hexdigest()
@@ -1185,7 +1482,16 @@ def runtime_checks(source, ahk):
         isolated = isolated.replace(marker, "SetTimer, UiSmoke, -50\nReturn", 1)
         (work / "smoke.ahk").write_text(isolated + "\n" + SMOKE, encoding="utf-8-sig")
         (work / "sink.ahk").write_text(SINK, encoding="utf-8-sig")
-        result = subprocess.run([str(ahk), "/ErrorStdOut", str(work / "smoke.ahk"), "/show"], capture_output=True, text=True, timeout=90)
+        smoke = subprocess.Popen([str(ahk), "/ErrorStdOut", str(work / "smoke.ahk"), "/show"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        try:
+            out, err = smoke.communicate(timeout=120)
+        except subprocess.TimeoutExpired:
+            windows = open_windows_text(smoke.pid)
+            smoke.kill()
+            smoke.communicate()
+            done = (work / "checks.txt").read_text().splitlines() if (work / "checks.txt").exists() else []
+            raise AssertionError("UiSmoke timed out. Last checks:\n" + "\n".join(done[-6:]) + "\nOpen windows:\n" + windows)
+        result = subprocess.CompletedProcess(smoke.args, smoke.returncode, out, err)
         artifacts = ROOT / "verification"
         artifacts.mkdir(exist_ok=True)
         for artifact in list(work.glob("*.bmp")) + list(work.glob("*.txt")):
@@ -1201,15 +1507,17 @@ def runtime_checks(source, ahk):
             elif key in downs:
                 durations.append((key, tick - downs.pop(key)))
         b_taps = [duration for key, duration in durations if key == 0x42]
-        assert len(b_taps) == 4 and all(duration >= 40 for duration in b_taps), f"B taps: {b_taps}, events: {rows}"
+        assert len(b_taps) == 5 and all(duration >= 40 for duration in b_taps), f"B taps: {b_taps}, events: {rows}"
         assert not any(key in (0x41, 0x49, 0x4B) for _, _, key in rows), f"Unexpected FN/club key leak: {rows}"
         assert any(key == 0x27 for _, _, key in rows), "Arrow was not received"
         assert any(key == 0x11 for _, _, key in rows) and any(key == 0x4D for _, _, key in rows), "Ctrl+M was not received"
         assert not any(key in (0x43, 0x25) for _, _, key in rows), f"FN + Tee Left / Aim Left leaked their own keys: {rows}"
-        relief_downs = [key for _, message, key in rows if message in (0x100, 0x104) and key in (0x32, 0x33, 0x0D)]
-        assert relief_downs[:3] == [0x32, 0x33, 0x0D], f"GSPro 4 panel keys (want 2, then 3, then Enter): {relief_downs}"
-        print(f"PASS: four real B keypresses held {b_taps} ms; no A/I/K leak; arrow and Ctrl+M received")
+        relief_downs = [key for _, message, key in rows if message in (0x100, 0x104) and key in (0x32, 0x33, 0x0D, 0x34, 0x71, 0x58)]
+        assert relief_downs[:6] == [0x32, 0x33, 0x0D, 0x34, 0x71, 0x58], f"Panel keys 2, 3, Enter; sequence 4, F2; custom tap X: {relief_downs}"
+        assert not any(key in (0x59, 0x56, 0x4F) for _, _, key in rows), f"Heat Map / Tee Right / Flyover leaked their printed keys: {rows}"
+        print(f"PASS: five real B keypresses held {b_taps} ms (the fifth with the cheat sheet showing); no A/I/K leak; arrow and Ctrl+M received")
         print("PASS: GSPro 4 relief panel: FN + Aim Left sent 2 (Next Option), FN + Tee Left sent 3 then Enter (OB Rehit); no C / Left leak")
+        print("PASS: custom layouts: key sequence 4 then F2 and custom tap X reached the key target; no Y / V / O leak")
         print("PASS: Exit completed without hanging")
         for mode, extra, arguments in [("ProgramSmoke", PROGRAM, []), ("BootSmoke", BOOT, ["/startup"]), ("FactorySmoke", FACTORY, [])]:
             (work / "result.txt").unlink(missing_ok=True)
