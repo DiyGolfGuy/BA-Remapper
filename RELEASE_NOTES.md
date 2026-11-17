@@ -4,7 +4,9 @@ Two things in this release: customers can build their own button layouts with ma
 
 ## FN cheat sheet
 
-Hold FN (Reset Aim on the standard layout) in GSPro and a picture of the control box appears at the bottom left of the game. Every button is where it sits on the box, the FN button is yellow, and each button's yellow function for the current profile is printed under it, like the yellow print on the box. On GSPro 4's relief list it shows what the buttons do there (Next choice, Closer, Further Back...). It disappears when FN is released, never takes clicks or focus, and stays out of screen captures and streams. **Show FN cheat sheet** on the main window turns it on or off.
+Hold FN (Reset Aim on the standard layout) in GSPro and a picture of the control box appears at the bottom left of the game. Every button is where it sits on the box, the FN button is yellow, and each button's yellow function for the current profile is printed under it, like the yellow print on the box. On GSPro 4's relief list it shows what the buttons do there (Next choice, Closer, Further Back...). It disappears when FN is released, never takes clicks or focus, and stays out of screen captures and streams. A custom layout shows its own functions. **Show FN cheat sheet** on the main window turns it on or off.
+
+**Size and Place...** on the main window shows the sheet over GSPro, the way it will look when FN is held, with a green outline. Slide the size (20% to 80% of the GSPro screen width) and it changes live; drag the sheet anywhere on the GSPro screen; **Lock it in** saves the size and spot for good (kept through updates). **Back to bottom left** returns it to the starting corner, and **Cancel** keeps what was locked in before.
 
 ## Your own layout
 
@@ -27,7 +29,8 @@ Unchanged: Basic Secondary, the GSPro 4 relief list and older relief menu Smart 
 ## How this was checked
 
 - Windows CI sends real key presses through the box-key path to a test window: the key sequence (4 then F2) and a custom tap (X) arrive in order, the buttons' own printed keys never leak, and the GSPro 4 relief keys still arrive as before.
-- The cheat sheet is shown over a GSPro-titled window while FN is held: it sits at the bottom left, draws grey buttons, the yellow FN button and the yellow print, is click-through and never takes focus, hides when FN is released, and stays off when switched off.
+- The cheat sheet is shown over a GSPro-titled window while FN is held: it sits at the bottom left, draws grey buttons, the yellow FN button and the yellow print, is the chosen size, is click-through and never takes focus, hides when FN is released, and stays off when switched off. FN + Club Down still sends a real held B (Clear View) to the game with the sheet showing, and the game keeps focus.
+- Size and Place: the sheet is shown over the game and takes the mouse; the size slider resizes it live; a real mouse drag moves it; nothing is saved until Lock it in, which saves the size and spot; holding FN afterwards shows it at exactly that size and spot; Cancel keeps the locked values; holding FN while placing leaves the sheet being placed alone. A saved top-right spot shows it top right.
 - Builder test mode reports FN + Club Up = Clear View, the custom tap and FN tapped alone, and sends nothing. Typing in the app's own text box gets the plain keys.
 - Export and import keep every kind of function; a hostile profile file (Win-key combo, a click, an unknown action, typed text, the preset's name) is renamed and every unsafe entry is turned off and listed.
 - Your GSPro 4 screenshots plan the right keys for every new relief action, and Recenter is found on each screenshot as captured and at 1920 wide.

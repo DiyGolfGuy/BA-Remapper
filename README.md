@@ -68,7 +68,7 @@ Five penalty/relief menu actions are built in: **Move Forward, Move Back, Next O
 - **Export / Import Profile:** a `.baprofile` file to copy a layout to another bay or share it. Imports are checked: a profile can only press keys — no Win-key combos, clicks or typed text — and anything else is turned off and listed.
 
 ### FN cheat sheet
-Hold FN in GSPro and a picture of the control box appears at the bottom left: every button where it sits on the box, the FN button in yellow, and each button's yellow function for the current profile printed under it. On the GSPro 4 relief list it shows what the buttons do there. **Show FN cheat sheet** on the main window turns it on or off.
+Hold FN in GSPro and a picture of the control box appears (bottom left to start): every button where it sits on the box, the FN button in yellow, and each button's yellow function for the profile in use printed under it, so a custom layout shows its own functions. On the GSPro 4 relief list it shows what the buttons do there. **Show FN cheat sheet** on the main window turns it on or off. **Size and Place...** shows it over GSPro with a size slider (20% to 80% of the screen width, live); drag it where you want it and **Lock it in** to keep that size and spot.
 
 ### Built-in preset: "Basic Secondary"
 Select **Basic Secondary** from the profile dropdown and the yellow print on the box just works — zero programming:
@@ -162,7 +162,7 @@ The main window, Builder and action editor can be resized and scrolled when they
 
 ## Version History
 
-**v5.2.0** — Custom layouts: custom keys and combos, key sequences, custom tap (white) keys, GSPro 4 relief-list actions (choice by number or name, rotate, zoom, recenter), Builder test mode, layout check, and Export / Import of profiles with safety checks. FN cheat sheet: a picture of the control box with each button's yellow function at the bottom left of GSPro while FN is held (on/off on the main window). Typing in the app's own text boxes now gets the plain box keys.
+**v5.2.0** — Custom layouts: custom keys and combos, key sequences, custom tap (white) keys, GSPro 4 relief-list actions (choice by number or name, rotate, zoom, recenter), Builder test mode, layout check, and Export / Import of profiles with safety checks. FN cheat sheet: a picture of the control box with each button's yellow function at the bottom left of GSPro while FN is held (on/off, live size and drag-to-place on the main window). Typing in the app's own text boxes now gets the plain box keys.
 
 **v5.1.6** — GSPro 4's new relief list (water: Lateral Drop / Flag Line / Rehit; out of bounds: Rehit, plus Mulligan when mulligans are on) works from the box: OB Rehit presses Rehit's number + Enter, Drop Ball / Rehit presses Enter, Next Option moves to the next choice, Move Forward / Move Back press F / B on Flag Line. The older relief menu works exactly as before.
 

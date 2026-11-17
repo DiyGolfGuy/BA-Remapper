@@ -41,7 +41,8 @@ DllCall("SetProcessDPIAware")
 ;    (profile names, the custom key box) instead of remapping.
 ;  Players:
 ;  - FN cheat sheet: hold FN and the yellow functions of the
-;    current profile show at the bottom left of GSPro.
+;    current profile show over GSPro (bottom left to start).  On/off
+;    and Size and Place (live, drag, Lock it in) on the main window.
 ;
 ;  CHANGES IN v5.1.6  (Bruce, Nov 16 2026: GSPro 4 relief screens)
 ;  - GSPro 4 replaced the relief menu with a numbered list (a
@@ -636,6 +637,13 @@ ReliefLast := ""             ; last read of the GSPro 4 relief panel (see GSPRO 
 ProfPrimary := {}            ; custom tap (white) keys of the active profile (v5.2.0)
 ProfileLoadNotes := []       ; saved entries LoadProfile turned off (layout check)
 ShowFnCheat := true          ; FN cheat sheet in GSPro (settings.ini [App] FnCheatSheet)
+CheatSizePct := 35           ; its width, % of the GSPro screen (settings.ini [App] FnCheatSize, 20-80)
+CheatPosX := 0               ; its spot: 0 = left ... 1000 = right of the free space (FnCheatX)
+CheatPosY := 1000            ; 0 = top ... 1000 = bottom (FnCheatY); default bottom left
+CheatAdjusting := false      ; Size and place mode (main window button) is open
+CheatAdjHwnd := 0
+CheatAdjOrig := ""
+CheatDrag := ""
 CheatVisible := false
 CheatExcluded := true
 CheatShownFor := 0
@@ -835,6 +843,7 @@ OnMessage(WM_SHOWAPP, "ShowMainFromMessage")
 OnMessage(0x114, "SettingsScroll")
 OnMessage(0x115, "SettingsScroll")
 OnMessage(0x20A, "SettingsWheel")
+OnMessage(0x201, "CheatAdjMouseDown")   ; drag the FN cheat sheet in Size and Place
 
 ShowMainFromMessage(wParam, lParam, msg, hwnd) {
     if (wParam = 1) {   ; reopened by a program: mapping ON, no window
@@ -1158,18 +1167,64 @@ CheatModel() {
     return model
 }
 
+; Saved size: whole percent of GSPro's width, 20 to 80.
+CheatSizeValid(v) {
+    return RegExMatch(v, "^\d{2}$") && v >= 20 && v <= 80
+}
+
+; Saved spot: 0 to 1000 across the free space (see CheatGeom).
+CheatPosValid(v) {
+    return RegExMatch(v, "^\d{1,4}$") && v >= 0 && v <= 1000
+}
+
 CheatStart() {
-    global ShowFnCheat
-    if (ShowFnCheat)
+    global ShowFnCheat, CheatAdjusting
+    if (ShowFnCheat && !CheatAdjusting)
         SetTimer, CheatShow, -450
 }
 
-CheatDraw() {
-    global GSProWinNeedle, GSProWinExclude, ActiveProfile, CheatVisible, CheatExcluded, CheatShownFor, ReliefLast
-    global CheatPanelW, CheatPanelH, CheatHwnd
+; The area the sheet is placed in: GSPro's game picture, or (only
+; for Size and place with GSPro closed) the primary screen.
+CheatArea(allowScreen := false) {
+    global GSProWinNeedle, GSProWinExclude
     win := ClientRectByTitle(GSProWinNeedle, GSProWinExclude)
-    if (!win.found || !WinActive("ahk_id " . win.hwnd)) {
-        CheatHide()
+    if (win.found || !allowScreen)
+        return win
+    SysGet, mon, Monitor
+    return {found: true, screen: true, hwnd: 0, x: monLeft, y: monTop, w: monRight - monLeft, h: monBottom - monTop}
+}
+
+; Size and spot inside an area.  The spot is stored as a share of
+; the free space (0 = left/top edge, 1000 = right/bottom edge), so
+; a sheet placed in a corner stays in that corner at any size and
+; on any screen resolution.
+CheatGeom(win) {
+    global CheatSizePct, CheatPosX, CheatPosY
+    ; 940 x 640 layout units: the Builder's 900-wide box plus 20 on
+    ; each side so the outer yellow print is never cut off.  Size in
+    ; physical pixels (like the scramble panel), at least 300 px and
+    ; never more than fits.
+    pw := Round(Min(Max(win.w * CheatSizePct / 100, 300), win.w - 40, (win.h - 40) * 940 / 640))
+    sc := pw / 940
+    pad := Round(16 * sc)
+    head := Round(44 * sc)
+    ph := head + Round(570 * sc) + pad
+    freeW := Max(0, win.w - pw - 2 * pad)
+    freeH := Max(0, win.h - ph - 2 * pad)
+    x := win.x + pad + Round(freeW * CheatPosX / 1000)
+    y := win.y + pad + Round(freeH * CheatPosY / 1000)
+    return {pw: pw, ph: ph, sc: sc, pad: pad, head: head, x: x, y: y, freeW: freeW, freeH: freeH}
+}
+
+; adjust = Size and place mode: drawn over GSPro even when it is
+; not the active window (or over the screen with GSPro closed), not
+; click-through so it can be dragged, with a green outline.
+CheatDraw(adjust := false) {
+    global ActiveProfile, CheatVisible, CheatExcluded, CheatShownFor, ReliefLast
+    global CheatPanelW, CheatPanelH, CheatHwnd, CheatAdjHwnd
+    win := CheatArea(adjust)
+    if (!win.found || (!adjust && !WinActive("ahk_id " . win.hwnd))) {
+        CheatHide(adjust)
         return
     }
     model := CheatModel()
@@ -1178,24 +1233,28 @@ CheatDraw() {
         if (!m.fn && m.yellow != "")
             any := true
     }
-    if (!any) {
+    if (!any && !adjust) {
         CheatHide()
         return
     }
     relief := IsObject(ReliefLast) && ReliefLast.found && (A_TickCount - ReliefLast.at) < 4000
-    overlay := ScramblePreviewWindow("Cheat", "1C1C1C")
+    if (adjust) {
+        ; Same window as the scramble overlay minus click-through
+        ; (WS_EX_TRANSPARENT), so it takes the mouse for dragging;
+        ; still never takes focus from GSPro.
+        Gui, Cheat:New, +AlwaysOnTop -Caption +ToolWindow -DPIScale +E0x08080000 +Hwndah
+        Gui, Cheat:Color, 1C1C1C
+        DllCall("SetLayeredWindowAttributes", "Ptr", ah, "UInt", 0, "UChar", 255, "UInt", 2)
+        DllCall("SetWindowDisplayAffinity", "Ptr", ah, "UInt", 0x11)
+        overlay := {hwnd: ah, excluded: true}
+    } else {
+        overlay := ScramblePreviewWindow("Cheat", "1C1C1C")
+    }
     CheatExcluded := overlay.excluded
     CheatShownFor := win.hwnd
-    ; Size follows the game in physical pixels (like the scramble
-    ; panel), independent of Windows display scaling.
-    ; 940 x 640 layout units: the Builder's 900-wide box plus 20 on
-    ; each side so the outer yellow print is never cut off.
-    pw := Round(Min(Max(win.w * 0.34, 380), win.w - 40, (win.h - 40) * 940 / 640))
-    sc := pw / 940
+    g := CheatGeom(win)
+    pw := g.pw, ph := g.ph, sc := g.sc, pad := g.pad, head := g.head
     ox := 20
-    pad := Round(16 * sc)
-    head := Round(44 * sc)
-    ph := head + Round(570 * sc) + pad
     px2pt := 72 / A_ScreenDPI
     namePt := Max(6, Round(13 * sc)) * px2pt * 96 / 72
     ; One long word (MULLIGAN) gets a smaller size so it is never
@@ -1205,6 +1264,8 @@ CheatDraw() {
     headPt := Max(7, Round(18 * sc)) * px2pt * 96 / 72
     Gui, Cheat:Margin, 0, 0
     title := "HOLD FN + BUTTON  -  " . ActiveProfile . (relief ? "  -  GSPro 4 relief list" : "")
+    if (adjust)
+        title := "DRAG TO PLACE  -  " . ActiveProfile
     Gui, Cheat:Font, s%headPt% cFFFFFF Bold, Segoe UI
     tw := pw - pad * 2
     Gui, Cheat:Add, Text, x%pad% y%pad% w%tw% BackgroundTrans, %title%
@@ -1235,16 +1296,33 @@ CheatDraw() {
             Gui, Cheat:Add, Text, x%yx% y%yy% w%yw% h%yh% Center +0x200 BackgroundTrans, % m.yellow
         }
     }
-    cx := win.x + pad
-    cy := win.y + win.h - ph - pad
+    if (adjust) {
+        ; green outline: this is the sheet being placed
+        bw := Max(3, Round(6 * sc))
+        Gui, Cheat:Add, Progress, x0 y0 w%pw% h%bw% Background2ECC71 Disabled -Theme
+        by2 := ph - bw
+        Gui, Cheat:Add, Progress, x0 y%by2% w%pw% h%bw% Background2ECC71 Disabled -Theme
+        Gui, Cheat:Add, Progress, x0 y0 w%bw% h%ph% Background2ECC71 Disabled -Theme
+        bx2 := pw - bw
+        Gui, Cheat:Add, Progress, x%bx2% y0 w%bw% h%ph% Background2ECC71 Disabled -Theme
+    }
+    cx := g.x, cy := g.y
     Gui, Cheat:Show, x%cx% y%cy% w%pw% h%ph% NoActivate
     CheatPanelW := pw, CheatPanelH := ph
     CheatHwnd := overlay.hwnd
     CheatVisible := true
+    ; Size and Place: its control box stays above the sheet, so the
+    ; sheet can be dragged anywhere without covering the buttons.
+    if (adjust && CheatAdjHwnd)
+        DllCall("SetWindowPos", "Ptr", CheatAdjHwnd, "Ptr", -1, "Int", 0, "Int", 0, "Int", 0, "Int", 0, "UInt", 0x13)
 }
 
-CheatHide() {
-    global CheatVisible
+; force: also hides the sheet being placed (Size and place mode);
+; FN release, mapping off and OCR reads leave that one alone.
+CheatHide(force := false) {
+    global CheatVisible, CheatAdjusting
+    if (CheatAdjusting && !force)
+        return
     SetTimer, CheatShow, Off
     SetTimer, CheatTick, Off
     if (CheatVisible)
@@ -1385,7 +1463,7 @@ FriendlyAction(k) {
 ; ============================================================
 LoadSettings() {
     global ConfigFile, ActiveProfile, StartupProfile, SwapIK
-    global ScrambleAutoPick, ScrambleDelaySec, ScrambleCountdown, ClickDelayMs, ShowFnCheat
+    global ScrambleAutoPick, ScrambleDelaySec, ScrambleCountdown, ClickDelayMs, ShowFnCheat, CheatSizePct, CheatPosX, CheatPosY
     IniRead, ActiveProfile,  %ConfigFile%, App, ActiveProfile,  Default
     IniRead, StartupProfile, %ConfigFile%, App, StartupProfile, %ActiveProfile%
     IniRead, swapVal,        %ConfigFile%, App, SwapIK,         0
@@ -1401,6 +1479,12 @@ LoadSettings() {
     ScrambleCountdown := (cdVal + 0) ? true : false
     IniRead, fcVal,          %ConfigFile%, App, FnCheatSheet, 1
     ShowFnCheat := (fcVal + 0) ? true : false
+    IniRead, fsVal,          %ConfigFile%, App, FnCheatSize, 35
+    CheatSizePct := CheatSizeValid(fsVal) ? fsVal + 0 : 35
+    IniRead, fxVal,          %ConfigFile%, App, FnCheatX, 0
+    IniRead, fyVal,          %ConfigFile%, App, FnCheatY, 1000
+    CheatPosX := CheatPosValid(fxVal) ? fxVal + 0 : 0
+    CheatPosY := CheatPosValid(fyVal) ? fyVal + 0 : 1000
     ; Power-user knob: Smart Click hover-before-click pacing.
     ; Edit settings.ini [App] ClickDelayMs (100-1000, default
     ; 300) to tune click feel at the sim without a new build.
@@ -1413,7 +1497,8 @@ LoadSettings() {
 
 SaveSettings() {
     global ConfigFile, ActiveProfile, StartupProfile, SwapIK
-    global ScrambleAutoPick, ScrambleDelaySec, ScrambleCountdown, ClickDelayMs, ShowFnCheat
+    global ScrambleAutoPick, ScrambleDelaySec, ScrambleCountdown, ClickDelayMs, ShowFnCheat, CheatSizePct, CheatPosX, CheatPosY
+    global CheatAdjusting, CheatAdjOrig
     IniWrite, %ActiveProfile%,  %ConfigFile%, App, ActiveProfile
     IniWrite, %StartupProfile%, %ConfigFile%, App, StartupProfile
     swapWrite := SwapIK ? 1 : 0
@@ -1426,6 +1511,12 @@ SaveSettings() {
     IniWrite, %ClickDelayMs%, %ConfigFile%, App, ClickDelayMs
     fcWrite := ShowFnCheat ? 1 : 0
     IniWrite, %fcWrite%, %ConfigFile%, App, FnCheatSheet
+    ; While Size and Place is open only Lock it in saves its values.
+    keep := (CheatAdjusting && IsObject(CheatAdjOrig)) ? CheatAdjOrig : {size: CheatSizePct, x: CheatPosX, y: CheatPosY}
+    fsWrite := keep.size, fxWrite := keep.x, fyWrite := keep.y
+    IniWrite, %fsWrite%, %ConfigFile%, App, FnCheatSize
+    IniWrite, %fxWrite%, %ConfigFile%, App, FnCheatX
+    IniWrite, %fyWrite%, %ConfigFile%, App, FnCheatY
 }
 
 LoadWindowPos(ByRef wx, ByRef wy) {
@@ -5306,30 +5397,33 @@ Gui, Main:Font, s10 cCCCCCC Normal, Segoe UI
 cdChecked := ScrambleCountdown ? 1 : 0
 Gui, Main:Add, Checkbox, x25 y548 w300 vScrambleCdCheck gOnScrambleCdToggle Checked%cdChecked%, Show chosen card highlight and countdown
 cheatChecked := ShowFnCheat ? 1 : 0
-Gui, Main:Add, Checkbox, x335 y548 w200 vFnCheatCheck gOnFnCheatToggle Checked%cheatChecked%, Show FN cheat sheet
-Gui, Main:Add, Text, x25 y580 w510 0x10
+Gui, Main:Add, Checkbox, x25 y580 w320 vFnCheatCheck gOnFnCheatToggle Checked%cheatChecked%, Show FN cheat sheet (hold FN in GSPro)
+Gui, Main:Font, s9 c000000 Normal, Segoe UI
+Gui, Main:Add, Button, x355 y575 w180 h28 gOnCheatAdjust, Size and Place...
+Gui, Main:Font, s10 cCCCCCC Normal, Segoe UI
+Gui, Main:Add, Text, x25 y612 w510 0x10
 Gui, Main:Font, s9 c999999 Normal, Segoe UI
-Gui, Main:Add, Text, x25 y592 w510, Files are saved at:
+Gui, Main:Add, Text, x25 y624 w510, Files are saved at:
 Gui, Main:Font, s9 cWhite Normal, Consolas
-Gui, Main:Add, Text, x25 y611 w510 h34, %ConfigDir%
+Gui, Main:Add, Text, x25 y643 w510 h34, %ConfigDir%
 Gui, Main:Font, s9 c000000 Normal, Segoe UI
-Gui, Main:Add, Button, x25 y654 w95 h29 gOnOpenFolder, Open Folder
-Gui, Main:Add, Button, x128 y654 w188 h29 gResetSmartSpots, Reset Smart Click Spots
-Gui, Main:Add, Button, x324 y654 w91 h29 gTrayOcrDump, OCR Test
-Gui, Main:Add, Button, x423 y654 w112 h29 gShowHelp, Help / Guide
+Gui, Main:Add, Button, x25 y686 w95 h29 gOnOpenFolder, Open Folder
+Gui, Main:Add, Button, x128 y686 w188 h29 gResetSmartSpots, Reset Smart Click Spots
+Gui, Main:Add, Button, x324 y686 w91 h29 gTrayOcrDump, OCR Test
+Gui, Main:Add, Button, x423 y686 w112 h29 gShowHelp, Help / Guide
 Gui, Main:Font, s9 cAAAAAA Normal, Segoe UI
-Gui, Main:Add, Text, x25 y692 w345 h30, Reset Smart Click Spots re-learns click positions only.
+Gui, Main:Add, Text, x25 y724 w345 h30, Reset Smart Click Spots re-learns click positions only.
 Gui, Main:Font, s9 c000000 Normal, Segoe UI
-Gui, Main:Add, Button, x385 y690 w150 h27 gShowFactoryReset, Factory Reset...
+Gui, Main:Add, Button, x385 y722 w150 h27 gShowFactoryReset, Factory Reset...
 Gui, Main:Font, s9 cAAAAAA Normal, Segoe UI
-Gui, Main:Add, Text, x20 y732 w520 Center, Ctrl+F12 toggles button mapping. Turn mapping OFF to type normally.
+Gui, Main:Add, Text, x20 y764 w520 Center, Ctrl+F12 toggles button mapping. Turn mapping OFF to type normally.
 Gui, Main:Font, s10 c000000 Normal, Segoe UI
-Gui, Main:Add, Button, x125 y760 w150 h35 gMinimizeMain, Minimize to Tray
-Gui, Main:Add, Button, x285 y760 w150 h35 gDoFullExit, Exit
+Gui, Main:Add, Button, x125 y792 w150 h35 gMinimizeMain, Minimize to Tray
+Gui, Main:Add, Button, x285 y792 w150 h35 gDoFullExit, Exit
 RefreshProfileActions()
 UpdateMainStatus()
 LoadWindowPos(wx, wy)
-ShowSettingsWindow("Main", MainHwnd, 560, 812, launchHidden, wx, wy)
+ShowSettingsWindow("Main", MainHwnd, 560, 844, launchHidden, wx, wy)
 
 ; ============================================================
 ;  STARTUP-LAUNCH FLOW
@@ -5691,6 +5785,148 @@ OnFnCheatToggle:
     if (!ShowFnCheat)
         CheatHide()
 Return
+
+; ------------------------------------------------------------
+;  Size and place the FN cheat sheet (main window button).  The
+;  sheet is drawn over GSPro, live: the slider sizes it, dragging
+;  places it, Lock it in saves both to settings.ini (kept through
+;  updates).  Cancel or closing the box puts back what was saved.
+; ------------------------------------------------------------
+OnCheatAdjust:
+    if (CheatAdjusting) {
+        WinActivate, ahk_id %CheatAdjHwnd%
+        Return
+    }
+    CheatHide()
+    CheatAdjOrig := {size: CheatSizePct, x: CheatPosX, y: CheatPosY}
+    CheatAdjusting := true
+    adjArea := CheatArea(true)
+    Gui, CheatAdj:New, +AlwaysOnTop +ToolWindow +HwndCheatAdjHwnd, FN Cheat Sheet - Size and Place
+    Gui, CheatAdj:Color, 1C1C1C
+    Gui, CheatAdj:Margin, 16, 12
+    Gui, CheatAdj:Font, s10 cWhite Bold, Segoe UI
+    Gui, CheatAdj:Add, Text, x16 y12 w420, Drag the cheat sheet to where you want it.
+    Gui, CheatAdj:Font, s9 cCCCCCC Normal, Segoe UI
+    adjNote := adjArea.screen ? "GSPro is not open: shown on the main screen. Open GSPro first to see it on the game." : "It is shown over GSPro, the size it will be when FN is held."
+    Gui, CheatAdj:Add, Text, x16 y36 w420 h34 vCheatAdjNote, %adjNote%
+    Gui, CheatAdj:Font, s10 cWhite Normal, Segoe UI
+    Gui, CheatAdj:Add, Text, x16 y80 w50, Size:
+    Gui, CheatAdj:Add, Slider, x66 y76 w300 h30 vCheatAdjSize gCheatAdjSizeMove AltSubmit Range20-80 TickInterval10 Line1 Page5 ToolTip, %CheatSizePct%
+    Gui, CheatAdj:Add, Text, x372 y80 w64 vCheatAdjSizeText, %CheatSizePct%`%
+    Gui, CheatAdj:Font, s10 c000000 Normal, Segoe UI
+    Gui, CheatAdj:Add, Button, x16 y120 w140 h32 Default gCheatAdjLock, Lock it in
+    Gui, CheatAdj:Add, Button, x164 y120 w160 h32 gCheatAdjReset, Back to bottom left
+    Gui, CheatAdj:Add, Button, x332 y120 w104 h32 gCheatAdjCancel, Cancel
+    adjX := adjArea.x + adjArea.w // 2 - 230
+    adjY := adjArea.y + Round(adjArea.h * 0.12)
+    Gui, CheatAdj:Show, x%adjX% y%adjY% w452 h166
+    CheatDraw(true)
+Return
+
+CheatAdjSizeMove:
+    Gui, CheatAdj:Submit, NoHide
+    if (CheatSizeValid(CheatAdjSize)) {
+        CheatSizePct := CheatAdjSize + 0
+        GuiControl, CheatAdj:, CheatAdjSizeText, %CheatSizePct%`%
+        ; redraw once the slider pauses, not on every pixel
+        SetTimer, CheatAdjRedraw, -60
+    }
+Return
+
+CheatAdjRedraw:
+    if (CheatAdjusting)
+        CheatDraw(true)
+Return
+
+CheatAdjReset:
+    CheatPosX := 0, CheatPosY := 1000
+    CheatDraw(true)
+Return
+
+CheatAdjLock:
+    CheatAdjEnd(true)
+Return
+
+CheatAdjCancel:
+CheatAdjGuiClose:
+CheatAdjGuiEscape:
+    CheatAdjEnd(false)
+Return
+
+CheatAdjEnd(keep) {
+    global CheatAdjusting, CheatAdjOrig, CheatSizePct, CheatPosX, CheatPosY, CheatDrag
+    SetTimer, CheatAdjRedraw, Off
+    SetTimer, CheatDragTick, Off
+    CheatDrag := ""
+    if (!keep && IsObject(CheatAdjOrig))
+        CheatSizePct := CheatAdjOrig.size, CheatPosX := CheatAdjOrig.x, CheatPosY := CheatAdjOrig.y
+    CheatAdjusting := false
+    CheatAdjOrig := ""
+    CheatHide(true)
+    Gui, CheatAdj:Destroy
+    if (keep) {
+        SaveSettings()
+        ShowGsproTip("FN cheat sheet: size and spot saved", 1800)
+    }
+}
+
+; Dragging the sheet being placed: the press is noted here and a
+; short timer moves the sheet while the button stays down, so no
+; other thread (box keys, timers) waits on the drag.
+CheatAdjMouseDown(wParam, lParam, msg, hwnd) {
+    global CheatAdjusting, CheatHwnd, CheatVisible, CheatDrag
+    if (!CheatAdjusting || !CheatVisible || !CheatHwnd)
+        return
+    if (DllCall("GetAncestor", "Ptr", hwnd, "UInt", 2, "Ptr") != CheatHwnd)
+        return
+    CoordMode, Mouse, Screen
+    MouseGetPos, mx, my
+    WinGetPos, wx, wy, , , ahk_id %CheatHwnd%
+    win := CheatArea(true)
+    if (!win.found)
+        return
+    g := CheatGeom(win)
+    ; the sheet stays inside the game picture
+    CheatDrag := {mx: mx, my: my, wx: wx, wy: wy
+        , minX: win.x + g.pad, maxX: win.x + win.w - g.pw - g.pad
+        , minY: win.y + g.pad, maxY: win.y + win.h - g.ph - g.pad}
+    SetTimer, CheatDragTick, 15
+    return 0
+}
+
+CheatDragTick:
+    CheatDragStep()
+Return
+
+CheatDragStep() {
+    global CheatDrag, CheatHwnd, CheatAdjusting
+    if (!IsObject(CheatDrag) || !CheatAdjusting) {
+        SetTimer, CheatDragTick, Off
+        return
+    }
+    CoordMode, Mouse, Screen
+    MouseGetPos, mx, my
+    d := CheatDrag
+    nx := Max(d.minX, Min(d.wx + mx - d.mx, d.maxX))
+    ny := Max(d.minY, Min(d.wy + my - d.my, d.maxY))
+    WinMove, ahk_id %CheatHwnd%, , %nx%, %ny%
+    if (!GetKeyState("LButton")) {
+        SetTimer, CheatDragTick, Off
+        CheatDrag := ""
+        CheatTakeSpot(nx, ny)
+    }
+}
+
+; Turn the sheet's screen spot into the saved share of free space.
+CheatTakeSpot(x, y) {
+    global CheatPosX, CheatPosY
+    win := CheatArea(true)
+    if (!win.found)
+        return
+    g := CheatGeom(win)
+    CheatPosX := g.freeW > 0 ? Max(0, Min(1000, Round((x - win.x - g.pad) * 1000 / g.freeW))) : 0
+    CheatPosY := g.freeH > 0 ? Max(0, Min(1000, Round((y - win.y - g.pad) * 1000 / g.freeH))) : 0
+}
 
 OnScrambleDelayChange:
     Gui, Main:Submit, NoHide
@@ -6322,7 +6558,9 @@ ShowHelp:
       profile can only press keys, anything else is off.
     FN cheat sheet (main window checkbox): hold FN in GSPro
       and a picture of the box with each button's yellow
-      function shows at the bottom left.
+      function for the current profile shows.  Size and
+      Place... (main window) shows it over GSPro: slide the
+      size, drag it where you want it, then Lock it in.
 
     BUILT-IN PRESET: "Basic Secondary"
     QUICK START: pick "Basic Secondary" in the profile dropdown and the

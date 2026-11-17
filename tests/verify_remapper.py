@@ -320,6 +320,7 @@ UiSmoke:
         Assert(BoxTapKey("teeright") = "x" && BoxTapKey("teeleft") = "c", "A custom tap key replaces only that button's tap")
         ; FN cheat sheet: a copy of the box at the bottom left of GSPro while FN is held.
         ShowFnCheat := true
+        CheatSizePct := 60
         model := CheatModel()
         byId := {}
         for i, m in model
@@ -334,10 +335,16 @@ UiSmoke:
         gw := ClientRectByTitle(GSProWinNeedle, GSProWinExclude)
         WinGetPos, chx, chy, chw, chh, ahk_id %CheatHwnd%
         Assert(chx >= gw.x && chx <= gw.x + 60 && chy + chh <= gw.y + gw.h + 1 && chy + chh >= gw.y + gw.h - 60 && chw >= 300, "Cheat sheet sits at the bottom left of GSPro: " . chx . "," . chy . " " . chw . "x" . chh . " in " . gw.x . "," . gw.y . " " . gw.w . "x" . gw.h)
+        Assert(Abs(chw - Round(Min(gw.w * 0.6, gw.w - 40, (gw.h - 40) * 940 / 640))) <= 2, "Cheat sheet is the chosen size (60% of GSPro): " . chw . " of " . gw.w)
         px := CheatPixels(CheatHwnd)
         Assert(px.yellow >= 40 && px.button >= 400 && px.fnyellow >= 60, "Cheat sheet draws grey buttons, a yellow FN button and yellow print (yellow " . px.yellow . ", button " . px.button . ", FN " . px.fnyellow . ")")
         WinGet, cheatEx, ExStyle, ahk_id %CheatHwnd%
         Assert((cheatEx & 0x08000020) = 0x08000020, "Cheat sheet is click-through and never takes focus")
+        ; The B fix (FN + Club Down = Clear View) with the sheet up:
+        ; B still reaches GSPro as a real held key, GSPro keeps focus.
+        HandleBoxKeyDown("k")
+        HandleBoxKeyUp("k")
+        Assert(WinActive("GSPro BA Remapper regression target") && CheatVisible, "FN + Club Down sends Clear View (B) to GSPro with the cheat sheet showing; GSPro keeps focus")
         HandleBoxKeyDown("o")      ; FN + Flyover: nothing assigned, FN counts as used
         HandleBoxKeyUp("a")
         Sleep, 150
@@ -349,6 +356,82 @@ UiSmoke:
         HandleBoxKeyDown("o")
         HandleBoxKeyUp("a")
         ShowFnCheat := true
+        Assert(!CheatSizeValid(19) && !CheatSizeValid(81) && !CheatSizeValid("abc") && CheatSizeValid(20) && CheatSizeValid(80) && CheatPosValid(0) && CheatPosValid(1000) && !CheatPosValid(1001) && !CheatPosValid("-5"), "Saved size 20-80 and spot 0-1000 are checked")
+        ; A saved spot in the top right puts the sheet there.
+        CheatPosX := 1000, CheatPosY := 0
+        WinActivate, GSPro BA Remapper regression target
+        WinWaitActive, GSPro BA Remapper regression target, , 2
+        HandleBoxKeyDown("a")
+        Sleep, 800
+        g0 := CheatGeom(gw)
+        WinGetPos, tx, ty, tw, th, ahk_id %CheatHwnd%
+        Assert(CheatVisible && Abs(tx + tw - (gw.x + gw.w - g0.pad)) <= 2 && Abs(ty - (gw.y + g0.pad)) <= 2, "A saved top-right spot shows the sheet top right: " . tx . "," . ty . " " . tw . " in " . gw.x . "," . gw.y . " " . gw.w)
+        HandleBoxKeyDown("o")
+        HandleBoxKeyUp("a")
+        Sleep, 100
+        CheatPosX := 0, CheatPosY := 1000
+        ; Size and Place: the sheet live over GSPro, a size slider,
+        ; drag with the mouse, Lock it in saves both.
+        Gosub, OnCheatAdjust
+        Sleep, 250
+        Assert(CheatAdjusting && CheatVisible && WinExist("ahk_id " . CheatAdjHwnd), "Size and Place shows the sheet and its controls")
+        WinGet, adjEx, ExStyle, ahk_id %CheatHwnd%
+        Assert(!(adjEx & 0x20) && (adjEx & 0x08000000), "The sheet being placed takes the mouse but never focus")
+        GuiControl, CheatAdj:, CheatAdjSize, 50
+        Gosub, CheatAdjSizeMove
+        Sleep, 300
+        WinGetPos, ax, ay, aw, ah, ahk_id %CheatHwnd%
+        Assert(Abs(aw - Round(Min(Max(gw.w * 0.5, 300), gw.w - 40, (gw.h - 40) * 940 / 640))) <= 2 && CheatSizePct = 50, "The size slider resizes the sheet live: " . aw)
+        ; FN held while placing neither replaces nor hides it.
+        HandleBoxKeyDown("a")
+        Sleep, 600
+        HandleBoxKeyDown("o")
+        HandleBoxKeyUp("a")
+        WinGet, adjEx2, ExStyle, ahk_id %CheatHwnd%
+        Assert(CheatAdjusting && CheatVisible && !(adjEx2 & 0x20), "FN during Size and Place leaves the sheet being placed")
+        CoordMode, Mouse, Screen
+        dsx := ax + aw // 2, dsy := ay + ah // 2
+        MouseMove, %dsx%, %dsy%, 0
+        Sleep, 80
+        Click, Down
+        Sleep, 80
+        Loop, 6 {
+            mvx := dsx + A_Index * 25, mvy := dsy - A_Index * 16
+            MouseMove, %mvx%, %mvy%, 0
+            Sleep, 50
+        }
+        Click, Up
+        Sleep, 150
+        WinGetPos, bx, by, , , ahk_id %CheatHwnd%
+        Assert(bx >= ax + 120 && by <= ay - 70, "Dragging with the mouse moves the sheet: " . ax . "," . ay . " -> " . bx . "," . by)
+        dragX := CheatPosX, dragY := CheatPosY
+        Assert(dragX > 0 && dragY < 1000, "The dragged spot is noted: " . dragX . " / " . dragY)
+        SaveSettings()   ; any other setting saved while placing
+        IniRead, duringLock, %ConfigFile%, App, FnCheatSize, 0
+        Assert(duringLock = CheatAdjOrig.size && duringLock != CheatSizePct, "Nothing is saved until Lock it in: " . duringLock)
+        Gosub, CheatAdjLock
+        IniRead, lockSize, %ConfigFile%, App, FnCheatSize, 0
+        IniRead, lockX, %ConfigFile%, App, FnCheatX, -1
+        IniRead, lockY, %ConfigFile%, App, FnCheatY, -1
+        Assert(!CheatAdjusting && !CheatVisible && !WinExist("ahk_id " . CheatAdjHwnd) && lockSize = 50 && lockX = dragX && lockY = dragY, "Lock it in saves the size and spot: " . lockSize . " " . lockX . " " . lockY)
+        WinActivate, GSPro BA Remapper regression target
+        WinWaitActive, GSPro BA Remapper regression target, , 2
+        HandleBoxKeyDown("a")
+        Sleep, 800
+        WinGetPos, lx, ly, lw, , ahk_id %CheatHwnd%
+        Assert(CheatVisible && Abs(lx - bx) <= 2 && Abs(ly - by) <= 2 && Abs(lw - aw) <= 2, "Holding FN shows the sheet at the locked size and spot: " . lx . "," . ly . " " . lw)
+        HandleBoxKeyDown("o")
+        HandleBoxKeyUp("a")
+        Sleep, 100
+        ; Cancel puts back what was locked in.
+        Gosub, OnCheatAdjust
+        Sleep, 150
+        GuiControl, CheatAdj:, CheatAdjSize, 25
+        Gosub, CheatAdjSizeMove
+        Gosub, CheatAdjReset
+        Gosub, CheatAdjCancel
+        Assert(CheatSizePct = 50 && CheatPosX = dragX && CheatPosY = dragY && !CheatAdjusting && !CheatVisible, "Cancel keeps the locked size and spot")
+        CheatSizePct := 35, CheatPosX := 0, CheatPosY := 1000
         ; Builder test mode: box presses show what they do, nothing is sent.
         Gosub, ShowBuilder
         GuiControl, Builder:, BuilderTest, 1
@@ -1424,7 +1507,7 @@ def runtime_checks(source, ahk):
             elif key in downs:
                 durations.append((key, tick - downs.pop(key)))
         b_taps = [duration for key, duration in durations if key == 0x42]
-        assert len(b_taps) == 4 and all(duration >= 40 for duration in b_taps), f"B taps: {b_taps}, events: {rows}"
+        assert len(b_taps) == 5 and all(duration >= 40 for duration in b_taps), f"B taps: {b_taps}, events: {rows}"
         assert not any(key in (0x41, 0x49, 0x4B) for _, _, key in rows), f"Unexpected FN/club key leak: {rows}"
         assert any(key == 0x27 for _, _, key in rows), "Arrow was not received"
         assert any(key == 0x11 for _, _, key in rows) and any(key == 0x4D for _, _, key in rows), "Ctrl+M was not received"
@@ -1432,7 +1515,7 @@ def runtime_checks(source, ahk):
         relief_downs = [key for _, message, key in rows if message in (0x100, 0x104) and key in (0x32, 0x33, 0x0D, 0x34, 0x71, 0x58)]
         assert relief_downs[:6] == [0x32, 0x33, 0x0D, 0x34, 0x71, 0x58], f"Panel keys 2, 3, Enter; sequence 4, F2; custom tap X: {relief_downs}"
         assert not any(key in (0x59, 0x56, 0x4F) for _, _, key in rows), f"Heat Map / Tee Right / Flyover leaked their printed keys: {rows}"
-        print(f"PASS: four real B keypresses held {b_taps} ms; no A/I/K leak; arrow and Ctrl+M received")
+        print(f"PASS: five real B keypresses held {b_taps} ms (the fifth with the cheat sheet showing); no A/I/K leak; arrow and Ctrl+M received")
         print("PASS: GSPro 4 relief panel: FN + Aim Left sent 2 (Next Option), FN + Tee Left sent 3 then Enter (OB Rehit); no C / Left leak")
         print("PASS: custom layouts: key sequence 4 then F2 and custom tap X reached the key target; no Y / V / O leak")
         print("PASS: Exit completed without hanging")

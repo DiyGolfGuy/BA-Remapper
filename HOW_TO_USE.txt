@@ -45,9 +45,19 @@ GSPro 4 shows water and OB relief as a numbered list at the top left
 Preview Lie, rotating or moving the map: use the mouse or keyboard.
 
 FN CHEAT SHEET: hold FN in GSPro and a picture of the control box shows
-at the bottom left, with each button's yellow function printed under it
-for the current profile. Turn it on or off with Show FN cheat sheet on
-the main window.
+(bottom left to start), with each button's yellow function printed under
+it for the profile in use - a custom layout shows its own functions.
+Turn it on or off with Show FN cheat sheet on the main window.
+
+To size and place it, open GSPro, then click Size and Place... on the
+main window. The sheet appears over GSPro with a green outline:
+  Size slider:          bigger or smaller, live (20% to 80% of the
+                        GSPro screen width)
+  Drag the sheet:       put it anywhere on the GSPro screen
+  Lock it in:           saves the size and spot; FN shows it there
+                        from now on, also after updates
+  Back to bottom left:  moves it back to the starting corner
+  Cancel:               keeps what was locked in before
 
 Ctrl+F12 toggles Button Mapping. Turn mapping OFF to type normally.
 Closing the main window keeps the app running in the tray; Exit quits.
