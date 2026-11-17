@@ -2,7 +2,7 @@
 ;@Ahk2Exe-SetName BA Remapper
 ;@Ahk2Exe-SetDescription BA Custom Products Control Box Remapper
 ;@Ahk2Exe-SetCompanyName BA Custom Products
-;@Ahk2Exe-SetVersion 5.1.6
+;@Ahk2Exe-SetVersion 5.2.0
 ;@Ahk2Exe-SetOrigFilename BARemapper.exe
 ;@Ahk2Exe-SetMainIcon BARemapper.ico
 #SingleInstance Off
@@ -18,8 +18,30 @@ CoordMode, Mouse, Screen
 DllCall("SetProcessDPIAware")
 
 ; ============================================================
-;  BA CUSTOM PRODUCTS - CONTROL BOX REMAPPER v5.1.6
+;  BA CUSTOM PRODUCTS - CONTROL BOX REMAPPER v5.2.0
 ;  bacustomproducts@gmail.com   GitHub: DiyGolfGuy
+;
+;  CHANGES IN v5.2.0  (Bruce, Nov 16 2026: "lets do all of it")
+;  Custom layouts:
+;  - GSPro Hotkey: "Custom key or combo..." captures any key with
+;    Ctrl / Alt / Shift; more keys in the list (E, M, X, -, =,
+;    F2-F12, Home, End, ...).  Saved keys are checked (KeyValid):
+;    a profile can only press keys - no Win key, no clicks, no text.
+;  - Key Sequence: up to 4 keys in a row with a set pause.
+;  - Tap (white) function can be changed per custom profile; Basic
+;    Secondary stays locked to the box print.
+;  - Smart Click actions for GSPro 4's relief list: Choice 1 / 2 /
+;    3 + Enter, Lateral Drop / Flag Line / Mulligan + Enter, and the
+;    map's Rotate (Q / E), Zoom (wheel) and Recenter.
+;  - Export / Import a profile (.baprofile); imports are checked
+;    the same way and anything unsafe is turned off.
+;  - Builder test mode (press box buttons, see what they do,
+;    nothing is sent) and a layout check.
+;  - Typing in the app's own text boxes passes box keys through
+;    (profile names, the custom key box) instead of remapping.
+;  Players:
+;  - FN cheat sheet: hold FN and the yellow functions of the
+;    current profile show at the bottom left of GSPro.
 ;
 ;  CHANGES IN v5.1.6  (Bruce, Nov 16 2026: GSPro 4 relief screens)
 ;  - GSPro 4 replaced the relief menu with a numbered list (a
@@ -331,7 +353,7 @@ DllCall("SetProcessDPIAware")
 ; ============================================================
 ;  CONSTANTS / PATHS
 ; ============================================================
-AppVersion := "5.1.6"
+AppVersion := "5.2.0"
 MainWinTitle    := "BA Custom Control Box Remapper"
 BuilderWinTitle := "BA Custom Control Box - Button Builder"
 HelpWinTitle    := "BA Custom Control Box - Help"
@@ -388,6 +410,13 @@ KeyToBtnId["Right"] := "right"
 KeyToBtnId["Up"]    := "up"
 KeyToBtnId["Down"]  := "down"
 
+BtnNames := {heatmap: "Heat Map", putt: "Putt", flyover: "Flyover", clubup: "Club Up"
+    , clubdown: "Club Down", resetaim: "Reset Aim", teeleft: "Tee Left", teeright: "Tee Right"
+    , shotcam: "Shot Cam", left: "Aim Left", right: "Aim Right", up: "Aim Up", down: "Aim Down"}
+; Box order for the cheat sheet and the layout check
+BtnOrder := ["clubup","clubdown","heatmap","putt","flyover","teeleft","teeright","shotcam"
+    ,"up","down","left","right","resetaim"]
+
 ; ============================================================
 ;  GSPRO ACTIONS LIST  (for the Builder dropdown)
 ; ============================================================
@@ -403,7 +432,11 @@ GSProActions := "None|"
     . "F1 - Clear Tracer|F3 - Aimpoint|F5 - Free Look|"
     . "Tab - Shortcuts|Ctrl+M - Mulligan|Space - Fast Forward|"
     . "Up Arrow|Down Arrow|Left Arrow|Right Arrow|"
-    . "Enter|Escape|Backspace"
+    . "Enter|Escape|Backspace|"
+    . "E|M|X|- (Minus)|= (Equals / Plus)|"
+    . "F2|F4|F6|F7|F8|F9|F10|F11|F12|"
+    . "Home|End|Page Up|Page Down|Insert|Delete"
+GSProCustomEntry := "Custom key or combo..."
 
 GSProKeyMap := {}
 GSProKeyMap["None"] := ""
@@ -447,6 +480,19 @@ GSProKeyMap["Right Arrow"]           := "{Right}"
 GSProKeyMap["Enter"]                 := "{Enter}"
 GSProKeyMap["Escape"]                := "{Escape}"
 GSProKeyMap["Backspace"]             := "{Backspace}"
+GSProKeyMap["E"]                     := "e"
+GSProKeyMap["M"]                     := "m"
+GSProKeyMap["X"]                     := "x"
+GSProKeyMap["- (Minus)"]             := "-"
+GSProKeyMap["= (Equals / Plus)"]     := "="
+for i, fk in ["F2","F4","F6","F7","F8","F9","F10","F11","F12"]
+    GSProKeyMap[fk] := "{" . fk . "}"
+GSProKeyMap["Home"]                  := "{Home}"
+GSProKeyMap["End"]                   := "{End}"
+GSProKeyMap["Page Up"]               := "{PgUp}"
+GSProKeyMap["Page Down"]             := "{PgDn}"
+GSProKeyMap["Insert"]                := "{Insert}"
+GSProKeyMap["Delete"]                := "{Delete}"
 
 GSProNameMap := {}
 for name, key in GSProKeyMap {
@@ -473,13 +519,27 @@ for name, key in GSProKeyMap {
 ;  the player cycles with Next Option and presses again.  The
 ;  software never guesses what page the menu is on.
 ; ============================================================
-OcrActionIds   := ["MoveForward","MoveBack","NextOption","DropRehit","Rehit"]
+OcrActionIds   := ["MoveForward","MoveBack","NextOption","DropRehit","Rehit"
+    ,"ReliefChoice1","ReliefChoice2","ReliefChoice3","ReliefLateral","ReliefFlagLine","ReliefMulligan"
+    ,"ReliefRotateLeft","ReliefRotateRight","ReliefZoomIn","ReliefZoomOut","ReliefRecenter"]
 OcrActionName  := {}
 OcrActionName["MoveForward"] := "Move Forward"
 OcrActionName["MoveBack"]    := "Move Back"
 OcrActionName["NextOption"]  := "Next Option"
 OcrActionName["DropRehit"]   := "Drop Ball / Rehit"
 OcrActionName["Rehit"]       := "OB Rehit"
+; v5.2.0: GSPro 4 relief list only (the older menu has no match)
+OcrActionName["ReliefChoice1"]     := "Relief list: Choice 1 + Enter"
+OcrActionName["ReliefChoice2"]     := "Relief list: Choice 2 + Enter"
+OcrActionName["ReliefChoice3"]     := "Relief list: Choice 3 + Enter"
+OcrActionName["ReliefLateral"]     := "Relief list: Lateral Drop + Enter"
+OcrActionName["ReliefFlagLine"]    := "Relief list: Flag Line + Enter"
+OcrActionName["ReliefMulligan"]    := "Relief list: Mulligan + Enter (OB)"
+OcrActionName["ReliefRotateLeft"]  := "Relief map: Rotate Left (Q)"
+OcrActionName["ReliefRotateRight"] := "Relief map: Rotate Right (E)"
+OcrActionName["ReliefZoomIn"]      := "Relief map: Zoom In"
+OcrActionName["ReliefZoomOut"]     := "Relief map: Zoom Out"
+OcrActionName["ReliefRecenter"]    := "Relief map: Recenter"
 
 OcrActionNeedles := {}
 OcrActionNeedles["MoveForward"] := ["move forward"]
@@ -573,6 +633,16 @@ ScrambleMemo := {}           ; what earlier frames read on each card
 SpotWin := ""                ; GSPro client rect the locked spots belong to
 Spots := {}                  ; locked Smart Click spots (see LOCKED SPOTS)
 ReliefLast := ""             ; last read of the GSPro 4 relief panel (see GSPRO 4 RELIEF SCREEN)
+ProfPrimary := {}            ; custom tap (white) keys of the active profile (v5.2.0)
+ProfileLoadNotes := []       ; saved entries LoadProfile turned off (layout check)
+ShowFnCheat := true          ; FN cheat sheet in GSPro (settings.ini [App] FnCheatSheet)
+CheatVisible := false
+CheatExcluded := true
+CheatShownFor := 0
+CheatHwnd := 0
+BuilderTestMode := false
+TestFnDown := false
+TestFnUsed := false
 ReliefLastAct := ""          ; ... last box action sent to it, and when
 ReliefLastActTick := 0
 ReliefExpectSel := 0         ; choice Next Option just highlighted (GSPro redraws a frame later)
@@ -803,6 +873,542 @@ ApplyIKSwap(pk) {
     return pk
 }
 
+; ============================================================
+;  CUSTOM LAYOUTS  (v5.2.0)
+;
+;  Every key a profile can send is stored in Send form and checked
+;  by KeyValid before it is loaded, imported or saved: up to three
+;  of Ctrl ^ / Alt ! / Shift +, then ONE key - a printable character
+;  or a {Name} from the list below.  No Win key, no {Click}, no
+;  {Raw}/{Text}, no strings: a profile file - typed by hand or
+;  imported from someone else - can only ever press a key.
+; ============================================================
+KeyNameAllowed(name) {
+    static names := "|Enter|Escape|Esc|Tab|Space|Backspace|BS|Delete|Del|Insert|Ins|Home|End|PgUp|PgDn|Up|Down|Left|Right|AppsKey|NumpadEnter|NumpadAdd|NumpadSub|NumpadMult|NumpadDiv|NumpadDot|"
+    if (RegExMatch(name, "i)^F([1-9]|1[0-9]|2[0-4])$") || RegExMatch(name, "i)^Numpad[0-9]$"))
+        return true
+    return InStr(names, "|" . name . "|") > 0
+}
+
+KeyValid(k) {
+    if (!RegExMatch(k, "^([\^!+]{0,3})(.+)$", m))
+        return false
+    key := m2
+    if (StrLen(key) = 1)
+        return RegExMatch(key, "^[\x21-\x7E]$") && !InStr("{}^!+#", key)
+    if (RegExMatch(key, "^\{([A-Za-z0-9]+)\}$", n))
+        return KeyNameAllowed(n1)
+    return false
+}
+
+; Key Sequence value: "<pause ms>:<key>|<key>..." - 1 to 4 keys.
+SeqParse(v) {
+    if (!RegExMatch(v, "^(\d{2,4}):(.+)$", m))
+        return ""
+    pause := m1 + 0
+    if (pause < 50 || pause > 2000)
+        return ""
+    keys := StrSplit(m2, "|")
+    if (keys.MaxIndex() < 1 || keys.MaxIndex() > 4)
+        return ""
+    for i, k in keys {
+        if (!KeyValid(k))
+            return ""
+    }
+    return {pause: pause, keys: keys}
+}
+
+SecondaryValid(type, value) {
+    global OcrActionName
+    if (type = "key")
+        return KeyValid(value)
+    if (type = "ocr")
+        return OcrActionName.HasKey(value)
+    if (type = "seq")
+        return IsObject(SeqParse(value))
+    if (type = "click")
+        return true
+    return false
+}
+
+; Gui Hotkey control text ("^+E", "F7", "Numpad1") -> Send form
+; ("^+e", "{F7}", "{Numpad1}"); "" when it is not an allowed key.
+HotkeyToSend(hk) {
+    if (!RegExMatch(hk, "^([\^!+#]*)(.+)$", m))
+        return ""
+    if (InStr(m1, "#"))
+        return ""
+    key := m2
+    if (StrLen(key) = 1) {
+        StringLower, key, key   ; "E" would send Shift+E
+        out := m1 . key
+    } else {
+        out := m1 . "{" . key . "}"
+    }
+    return KeyValid(out) ? out : ""
+}
+
+; Send form -> the Hotkey control's text (to show a saved key)
+SendToHotkey(k) {
+    RegExMatch(k, "^([\^!+]*)(.*)$", m)
+    key := m2
+    if (RegExMatch(key, "^\{(.+)\}$", n))
+        key := n1
+    return m1 . key
+}
+
+; "Ctrl+Shift+E", "F7", or the list name ("B - Camera Clip / Clear View")
+KeyDisplayName(k) {
+    global GSProNameMap
+    if (GSProNameMap.HasKey(k))
+        return GSProNameMap[k]
+    RegExMatch(k, "^([\^!+]*)(.*)$", m)
+    t := ""
+    if (InStr(m1, "^"))
+        t .= "Ctrl+"
+    if (InStr(m1, "!"))
+        t .= "Alt+"
+    if (InStr(m1, "+"))
+        t .= "Shift+"
+    key := m2
+    if (RegExMatch(key, "^\{(.+)\}$", n))
+        key := n1
+    else
+        StringUpper, key, key
+    return t . key
+}
+
+; Short key name for the cheat sheet / sequences: "B", "Enter", "Ctrl+M"
+KeyShortName(k) {
+    name := KeyDisplayName(k)
+    pos := InStr(name, " - ")
+    if (pos)
+        name := SubStr(name, 1, pos - 1)
+    pos := InStr(name, " (")
+    if (pos)
+        name := SubStr(name, 1, pos - 1)
+    return name
+}
+
+; What FN + this button does, in words (cheat sheet, test mode, check)
+SecondaryLongName(btnId) {
+    global SecType, SecValue, SecX, SecY, OcrActionName
+    if (!SecType.HasKey(btnId) || SecType[btnId] = "" || SecType[btnId] = "none")
+        return ""
+    t := SecType[btnId], v := SecValue[btnId]
+    if (t = "key") {
+        if (v = "b")
+            return "Clear View (B)"
+        name := KeyDisplayName(v)
+        pos := InStr(name, " - ")
+        return pos ? SubStr(name, pos + 3) . " (" . SubStr(name, 1, pos - 1) . ")" : "Key " . name
+    }
+    if (t = "ocr")
+        return OcrActionName.HasKey(v) ? OcrActionName[v] : v
+    if (t = "seq") {
+        q := SeqParse(v)
+        if (!IsObject(q))
+            return "Key sequence"
+        out := "Keys "
+        for i, k in q.keys
+            out .= (i > 1 ? " > " : "") . KeyShortName(k)
+        return out
+    }
+    if (t = "click")
+        return "Screen click at " . SecX[btnId] . ", " . SecY[btnId]
+    return ""
+}
+
+; What a plain tap sends: the profile's own tap key, else the box print
+BoxTapKey(btnId) {
+    global ProfPrimary, BtnPrimary
+    if (ProfPrimary.HasKey(btnId) && ProfPrimary[btnId] != "")
+        return ProfPrimary[btnId]
+    return ApplyIKSwap(BtnPrimary[btnId])
+}
+
+TapLongName(btnId) {
+    global ProfPrimary
+    name := KeyDisplayName(BoxTapKey(btnId))
+    return (ProfPrimary.HasKey(btnId) ? name . " (custom tap)" : name)
+}
+
+; Box keys typed into one of this app's own text boxes (a profile
+; name, the custom key box) reach that box instead of being remapped.
+OwnTextFocus() {
+    WinGet, apid, PID, A
+    if (apid != DllCall("GetCurrentProcessId", "UInt"))
+        return false
+    ControlGetFocus, fc, A
+    return (InStr(fc, "Edit") = 1 || InStr(fc, "msctls_hotkey32") = 1)
+}
+
+; ------------------------------------------------------------
+;  Builder test mode: box presses show what they would do in the
+;  Builder's status line; nothing reaches GSPro.
+; ------------------------------------------------------------
+BuilderTestActive() {
+    global BuilderTestMode, BuilderHwnd
+    return (BuilderTestMode && BuilderHwnd && WinActive("ahk_id " . BuilderHwnd))
+}
+
+BuilderTestKey(btnId, down) {
+    global FnButtonId, TestFnDown, TestFnUsed, BtnNames
+    if (btnId = FnButtonId) {
+        if (down) {
+            if (TestFnDown)
+                return
+            TestFnDown := true
+            TestFnUsed := false
+            msg := "TEST: FN (" . BtnNames[btnId] . ") held - press a button to see its yellow function"
+        } else {
+            TestFnDown := false
+            if (TestFnUsed)
+                return
+            msg := "TEST: " . BtnNames[btnId] . " tapped alone -> " . TapLongName(btnId)
+        }
+    } else {
+        if (!down)
+            return
+        if (TestFnDown) {
+            TestFnUsed := true
+            sec := SecondaryLongName(btnId)
+            msg := "TEST: FN + " . BtnNames[btnId] . " -> " . (sec = "" ? "nothing assigned" : sec)
+        } else {
+            msg := "TEST: " . BtnNames[btnId] . " -> " . TapLongName(btnId)
+        }
+    }
+    GuiControl, Builder:, BuilderStatus, % msg . "   (test mode - nothing sent)"
+}
+
+; ------------------------------------------------------------
+;  Layout check: things in the active profile worth a look.
+; ------------------------------------------------------------
+ProfileCheck() {
+    global ProfileLoadNotes, SecType, SecValue, SecX, SecY, FnButtonId, BtnNames, BtnOrder
+    notes := []
+    for i, n in ProfileLoadNotes
+        notes.Push(n)
+    taps := {}
+    for i, id in BtnOrder {
+        t := SecType.HasKey(id) ? SecType[id] : "none"
+        if (id = FnButtonId && t != "none" && t != "")
+            notes.Push(BtnNames[id] . " is the FN button - its FN function never fires")
+        if (t = "click" && SecX[id] = 0 && SecY[id] = 0)
+            notes.Push(BtnNames[id] . ": Taught Screen Click has no position - capture one")
+        if (id != FnButtonId) {
+            k := BoxTapKey(id)
+            if (k != "" && taps.HasKey(k))
+                notes.Push(BtnNames[taps[k]] . " and " . BtnNames[id] . " both tap " . KeyShortName(k))
+            else if (k != "")
+                taps[k] := id
+        }
+    }
+    return notes
+}
+
+UpdateLayoutCheck() {
+    global BuilderWinTitle
+    if (!WinExist(BuilderWinTitle))
+        return
+    notes := ProfileCheck()
+    n := notes.MaxIndex() ? notes.MaxIndex() : 0
+    text := n ? "Layout check: " . n . (n = 1 ? " thing" : " things") . " to look at - " . notes[1] . (n > 1 ? "  (Details)" : "") : "Layout check: OK"
+    GuiControl, Builder:, BuilderCheck, %text%
+}
+
+BuilderCheckDetails:
+    notes := ProfileCheck()
+    if (!notes.MaxIndex())
+        Return
+    t := ""
+    for i, n in notes
+        t .= "- " . n . "`n"
+    Gui, Builder:+OwnDialogs
+    MsgBox, 64, Layout Check - %ActiveProfile%, %t%
+Return
+
+; ------------------------------------------------------------
+;  FN cheat sheet: while FN is held over GSPro, a small copy of
+;  the control box shows at the bottom left of the game - every
+;  button where it sits on the box, the FN button marked, and the
+;  yellow function of the current profile printed under each
+;  button like the real yellow print.  Main window checkbox turns
+;  it on / off.  Same overlay style as the scramble highlight:
+;  click-through, never takes focus, left out of screen capture
+;  (OcrLockTake hides it before a read if Windows cannot).
+; ------------------------------------------------------------
+; Box layout in Builder units (900 x 560, from the Builder replica):
+; [id, left, top, printed name]
+CheatBoxButtons() {
+    static b := [["mulligan", 25, 10, "MULLIGAN"], ["heatmap", 250, 10, "HEAT MAP"], ["putt", 475, 10, "PUTT"], ["flyover", 770, 10, "FLYOVER"]
+        , ["clubup", 160, 118, "CLUB UP"], ["up", 615, 118, "AIM UP"]
+        , ["left", 505, 230, "AIM LEFT"], ["right", 775, 230, "AIM RIGHT"]
+        , ["clubdown", 160, 340, "CLUB DOWN"], ["down", 615, 340, "AIM DOWN"]
+        , ["resetaim", 25, 450, "RESET AIM"], ["teeleft", 355, 450, "TEE LEFT"], ["teeright", 530, 450, "TEE RIGHT"], ["shotcam", 770, 450, "SHOT CAM"]]
+    return b
+}
+
+; The yellow print for every button: [{id, name, yellow, fn}]
+CheatModel() {
+    global FnButtonId, ReliefLast
+    relief := IsObject(ReliefLast) && ReliefLast.found && (A_TickCount - ReliefLast.at) < 4000
+    model := []
+    for i, b in CheatBoxButtons() {
+        id := b[1]
+        isFn := (id = FnButtonId)
+        yellow := (id = "mulligan") ? "" : (isFn ? "FN - HOLD" : YellowSecName(id, relief))
+        model.Push({id: id, name: b[4], yellow: yellow, fn: isFn, x: b[2], y: b[3]})
+    }
+    return model
+}
+
+CheatStart() {
+    global ShowFnCheat
+    if (ShowFnCheat)
+        SetTimer, CheatShow, -450
+}
+
+CheatShow:
+    if (FnIsDown) {
+        CheatDraw()
+        if (CheatVisible)
+            SetTimer, CheatTick, 250
+    }
+Return
+
+CheatTick:
+    if (!FnIsDown || !CheatVisible) {
+        CheatHide()
+        Return
+    }
+    if (!WinActive("ahk_id " . CheatShownFor))
+        CheatHide()
+Return
+
+CheatDraw() {
+    global GSProWinNeedle, GSProWinExclude, ActiveProfile, CheatVisible, CheatExcluded, CheatShownFor, ReliefLast
+    global CheatPanelW, CheatPanelH, CheatHwnd
+    win := ClientRectByTitle(GSProWinNeedle, GSProWinExclude)
+    if (!win.found || !WinActive("ahk_id " . win.hwnd)) {
+        CheatHide()
+        return
+    }
+    model := CheatModel()
+    any := false
+    for i, m in model {
+        if (!m.fn && m.yellow != "")
+            any := true
+    }
+    if (!any) {
+        CheatHide()
+        return
+    }
+    relief := IsObject(ReliefLast) && ReliefLast.found && (A_TickCount - ReliefLast.at) < 4000
+    overlay := ScramblePreviewWindow("Cheat", "1C1C1C")
+    CheatExcluded := overlay.excluded
+    CheatShownFor := win.hwnd
+    ; Size follows the game in physical pixels (like the scramble
+    ; panel), independent of Windows display scaling.
+    pw := Round(Min(Max(win.w * 0.34, 380), win.w - 40, (win.h - 40) * 900 / 640))
+    sc := pw / 900
+    pad := Round(16 * sc)
+    head := Round(44 * sc)
+    ph := head + Round(570 * sc) + pad
+    px2pt := 72 / A_ScreenDPI
+    namePt := Max(6, Round(15 * sc)) * px2pt * 96 / 72
+    yelPt := Max(6, Round(16 * sc)) * px2pt * 96 / 72
+    headPt := Max(7, Round(18 * sc)) * px2pt * 96 / 72
+    Gui, Cheat:Margin, 0, 0
+    title := "HOLD FN + BUTTON  -  " . ActiveProfile . (relief ? "  -  GSPro 4 relief list" : "")
+    Gui, Cheat:Font, s%headPt% cFFFFFF Bold, Segoe UI
+    tw := pw - pad * 2
+    Gui, Cheat:Add, Text, x%pad% y%pad% w%tw% BackgroundTrans, %title%
+    ; Panel print
+    Gui, Cheat:Font, s%namePt% cFFFFFF Bold, Segoe UI
+    for i, t in [["BA CUSTOM PRODUCTS", 270, 162, 320], ["CLUB", 127, 262, 150], ["AIM", 610, 262, 150], ["TEE POS", 425, 430, 120]] {
+        lx := pad + Round(t[2] * sc), ly := head + Round(t[3] * sc), lw := Round(t[4] * sc)
+        Gui, Cheat:Add, Text, x%lx% y%ly% w%lw% Center BackgroundTrans c8A8F96, % t[1]
+    }
+    bs := Round(85 * sc)
+    for i, m in model {
+        bx := pad + Round(m.x * sc), by := head + Round(m.y * sc)
+        color := m.fn ? "FFD400" : "3A3F47"
+        Gui, Cheat:Add, Progress, x%bx% y%by% w%bs% h%bs% Background%color% Disabled
+        Gui, Cheat:Font, s%namePt% Bold, Segoe UI
+        nameColor := m.fn ? "111111" : "FFFFFF"
+        Gui, Cheat:Add, Text, x%bx% y%by% w%bs% h%bs% Center 0x200 BackgroundTrans c%nameColor%, % (m.fn ? "FN`n" : "") . m.name
+        if (m.yellow != "") {
+            yw := Round(170 * sc), yx := bx + (bs - yw) // 2, yy := by + bs + Round(3 * sc)
+            Gui, Cheat:Font, s%yelPt% cFFD400 Bold, Segoe UI
+            Gui, Cheat:Add, Text, x%yx% y%yy% w%yw% Center BackgroundTrans, % m.yellow
+        }
+    }
+    cx := win.x + pad
+    cy := win.y + win.h - ph - pad
+    Gui, Cheat:Show, x%cx% y%cy% w%pw% h%ph% NoActivate
+    CheatPanelW := pw, CheatPanelH := ph
+    CheatHwnd := overlay.hwnd
+    CheatVisible := true
+}
+
+CheatHide() {
+    global CheatVisible
+    SetTimer, CheatShow, Off
+    SetTimer, CheatTick, Off
+    if (CheatVisible)
+        Gui, Cheat:Destroy
+    CheatVisible := false
+}
+
+; ------------------------------------------------------------
+;  Export / Import a profile (.baprofile = the profile's own ini
+;  plus a [BA Remapper] header).  Imports go through the same
+;  checks as LoadProfile; anything unsafe or unknown is turned off.
+; ------------------------------------------------------------
+ExportProfile(name, outFile) {
+    global ProfilesDir, AllBtnIds, AppVersion, ActiveProfile
+    if (name = ActiveProfile && !IsPresetProfile(name))
+        SaveProfile(name)
+    src := ProfilesDir . "\" . name . ".ini"
+    if (!FileExist(src))
+        return false
+    FileDelete, %outFile%
+    IniWrite, %name%, %outFile%, BA Remapper, Name
+    IniWrite, %AppVersion%, %outFile%, BA Remapper, Version
+    IniRead, fn, %src%, Profile, FnButtonId, resetaim
+    IniWrite, %fn%, %outFile%, Profile, FnButtonId
+    for i, id in AllBtnIds {
+        for j, f in ["Type", "Value", "X", "Y", "Primary"] {
+            IniRead, v, %src%, Profile, %id%_%f%, %A_Space%
+            if (v = "ERROR")
+                v := ""
+            IniWrite, %v%, %outFile%, Profile, %id%_%f%
+        }
+    }
+    return FileExist(outFile) ? true : false
+}
+
+ProfileNameUsable(name) {
+    global ProfileList
+    if (name = "" || StrLen(name) > 80 || RegExMatch(name, "[\\/:*?""<>|\x00-\x1F]")
+        || RegExMatch(name, "[. ]$") || RegExMatch(name, "i)^(CON|PRN|AUX|NUL|COM[0-9]|LPT[0-9])(\.|$)"))
+        return false
+    for i, existing in ProfileList {
+        if (existing = name)
+            return false
+    }
+    return true
+}
+
+; Returns {name: "...", notes: [...]} or {error: "..."}.
+ImportProfileFile(inFile) {
+    global ProfilesDir, ProfileList, AllBtnIds, BtnPrimary, BtnNames
+    if (!FileExist(inFile))
+        return {error: "The file was not found."}
+    IniRead, fn, %inFile%, Profile, FnButtonId, ERROR
+    if (fn = "ERROR")
+        return {error: "This is not a BA Remapper profile (no [Profile] section)."}
+    IniRead, name, %inFile%, BA Remapper, Name, %A_Space%
+    name := Trim(RegExReplace(name, "[\\/:*?""<>|\x00-\x1F]", ""))
+    if (name = "" || name = "ERROR")
+        SplitPath, inFile, , , , name
+    name := Trim(RegExReplace(name, "[. ]+$", ""))
+    if (name = "" || IsPresetProfile(name))
+        name := (name = "" ? "Imported" : name . " (imported)")
+    base := name, n := 1
+    while (!ProfileNameUsable(name) && n < 50) {
+        n += 1
+        name := (n = 2 && !InStr(base, "(imported)")) ? base . " (imported)" : base . " (" . n . ")"
+    }
+    if (!ProfileNameUsable(name))
+        return {error: "Could not find a free name for this profile."}
+    notes := []
+    if (!BtnPrimary.HasKey(fn) || fn = "mulligan") {
+        notes.Push("FN button was not valid - set to Reset Aim")
+        fn := "resetaim"
+    }
+    out := ProfilesDir . "\" . name . ".ini"
+    IniWrite, %fn%, %out%, Profile, FnButtonId
+    clicks := 0
+    for i, id in AllBtnIds {
+        IniRead, st, %inFile%, Profile, %id%_Type, none
+        IniRead, sv, %inFile%, Profile, %id%_Value, %A_Space%
+        IniRead, sx, %inFile%, Profile, %id%_X, 0
+        IniRead, sy, %inFile%, Profile, %id%_Y, 0
+        IniRead, sp, %inFile%, Profile, %id%_Primary, %A_Space%
+        if (st = "ERROR" || st = "")
+            st := "none"
+        if (sv = "ERROR")
+            sv := ""
+        if (st != "none" && !SecondaryValid(st, sv)) {
+            notes.Push(BtnNames[id] . ": FN function was not a plain key or known action - turned off")
+            st := "none", sv := ""
+        }
+        sx := RegExMatch(sx, "^-?\d{1,6}$") ? sx + 0 : 0
+        sy := RegExMatch(sy, "^-?\d{1,6}$") ? sy + 0 : 0
+        if (st = "click")
+            clicks += 1
+        else
+            sx := 0, sy := 0
+        if (sp = "ERROR")
+            sp := ""
+        if (sp != "" && !KeyValid(sp)) {
+            notes.Push(BtnNames[id] . ": tap key was not a plain key - box print used")
+            sp := ""
+        }
+        IniWrite, %st%, %out%, Profile, %id%_Type
+        IniWrite, %sv%, %out%, Profile, %id%_Value
+        IniWrite, %sx%, %out%, Profile, %id%_X
+        IniWrite, %sy%, %out%, Profile, %id%_Y
+        IniWrite, %sp%, %out%, Profile, %id%_Primary
+    }
+    if (clicks)
+        notes.Push(clicks . " Taught Screen Click" . (clicks > 1 ? "s were" : " was") . " captured on another PC - check the spot" . (clicks > 1 ? "s" : "") . " in the Builder")
+    ProfileList.Push(name)
+    return {name: name, notes: notes}
+}
+
+BuilderExport:
+    if (IsConfigDialogOpen())
+        Return
+    Gui, Builder:+OwnDialogs
+    expDefault := A_Desktop . "\" . ActiveProfile . ".baprofile"
+    FileSelectFile, expFile, S16, %expDefault%, Export "%ActiveProfile%", BA Remapper profile (*.baprofile)
+    if (ErrorLevel || expFile = "")
+        Return
+    if (!RegExMatch(expFile, "i)\.baprofile$"))
+        expFile .= ".baprofile"
+    if (ExportProfile(ActiveProfile, expFile))
+        GuiControl, Builder:, BuilderStatus, % "Exported """ . ActiveProfile . """ to " . expFile
+    else
+        MsgBox, 48, Export Failed, The profile could not be written to that file.
+Return
+
+BuilderImport:
+    if (IsConfigDialogOpen())
+        Return
+    Gui, Builder:+OwnDialogs
+    FileSelectFile, impFile, 3, %A_Desktop%, Import a BA Remapper profile, BA Remapper profile (*.baprofile; *.ini)
+    if (ErrorLevel || impFile = "")
+        Return
+    impRes := ImportProfileFile(impFile)
+    if (impRes.HasKey("error")) {
+        MsgBox, 48, Import Failed, % impRes.error
+        Return
+    }
+    SaveProfile(ActiveProfile)
+    ActiveProfile := impRes.name
+    LoadProfile(ActiveProfile)
+    SaveSettings()
+    RefreshProfileDropdown()
+    RefreshBuilderIfOpen()
+    impMsg := "Imported as """ . impRes.name . """ and switched to it."
+    for i, n in impRes.notes
+        impMsg .= (i = 1 ? "`n`nChecked and changed:`n" : "`n") . "- " . n
+    MsgBox, 64, Profile Imported, %impMsg%
+Return
+
 FnPhysicallyHeld() {
     global FnButtonId, BtnPrimary
     if (!BtnPrimary.HasKey(FnButtonId))
@@ -825,7 +1431,7 @@ FriendlyAction(k) {
 ; ============================================================
 LoadSettings() {
     global ConfigFile, ActiveProfile, StartupProfile, SwapIK
-    global ScrambleAutoPick, ScrambleDelaySec, ScrambleCountdown, ClickDelayMs
+    global ScrambleAutoPick, ScrambleDelaySec, ScrambleCountdown, ClickDelayMs, ShowFnCheat
     IniRead, ActiveProfile,  %ConfigFile%, App, ActiveProfile,  Default
     IniRead, StartupProfile, %ConfigFile%, App, StartupProfile, %ActiveProfile%
     IniRead, swapVal,        %ConfigFile%, App, SwapIK,         0
@@ -839,6 +1445,8 @@ LoadSettings() {
     ScrambleDelaySec := sdVal
     IniRead, cdVal,          %ConfigFile%, App, ScrambleCountdown, 1
     ScrambleCountdown := (cdVal + 0) ? true : false
+    IniRead, fcVal,          %ConfigFile%, App, FnCheatSheet, 1
+    ShowFnCheat := (fcVal + 0) ? true : false
     ; Power-user knob: Smart Click hover-before-click pacing.
     ; Edit settings.ini [App] ClickDelayMs (100-1000, default
     ; 300) to tune click feel at the sim without a new build.
@@ -851,7 +1459,7 @@ LoadSettings() {
 
 SaveSettings() {
     global ConfigFile, ActiveProfile, StartupProfile, SwapIK
-    global ScrambleAutoPick, ScrambleDelaySec, ScrambleCountdown, ClickDelayMs
+    global ScrambleAutoPick, ScrambleDelaySec, ScrambleCountdown, ClickDelayMs, ShowFnCheat
     IniWrite, %ActiveProfile%,  %ConfigFile%, App, ActiveProfile
     IniWrite, %StartupProfile%, %ConfigFile%, App, StartupProfile
     swapWrite := SwapIK ? 1 : 0
@@ -862,6 +1470,8 @@ SaveSettings() {
     cdWrite := ScrambleCountdown ? 1 : 0
     IniWrite, %cdWrite%, %ConfigFile%, App, ScrambleCountdown
     IniWrite, %ClickDelayMs%, %ConfigFile%, App, ClickDelayMs
+    fcWrite := ShowFnCheat ? 1 : 0
+    IniWrite, %fcWrite%, %ConfigFile%, App, FnCheatSheet
 }
 
 LoadWindowPos(ByRef wx, ByRef wy) {
@@ -1114,33 +1724,50 @@ SeedPresetProfiles() {
 }
 
 LoadProfile(profileName) {
-    global ProfilesDir, BtnPrimary, AllBtnIds
+    global ProfilesDir, BtnPrimary, AllBtnIds, BtnNames
     global FnButtonId, FnSendKey, SecType, SecValue, SecX, SecY
+    global ProfPrimary, ProfileLoadNotes
     pf := ProfilesDir . "\" . profileName . ".ini"
     IniRead, FnButtonId, %pf%, Profile, FnButtonId, resetaim
-    if (BtnPrimary.HasKey(FnButtonId))
-        FnSendKey := BtnPrimary[FnButtonId]
+    if (!BtnPrimary.HasKey(FnButtonId) || FnButtonId = "mulligan")
+        FnButtonId := "resetaim"
+    FnSendKey := BtnPrimary[FnButtonId]
     SecType  := {}
     SecValue := {}
     SecX     := {}
     SecY     := {}
+    ProfPrimary := {}
+    ProfileLoadNotes := []
     for i, id in AllBtnIds
     {
         IniRead, st, %pf%, Profile, %id%_Type,  none
         IniRead, sv, %pf%, Profile, %id%_Value,
         IniRead, sx, %pf%, Profile, %id%_X,     0
         IniRead, sy, %pf%, Profile, %id%_Y,     0
+        IniRead, sp, %pf%, Profile, %id%_Primary,
         if (st != "none" && st != "ERROR" && st != "") {
+            ; v5.2.0: a hand-edited or imported entry that is not a
+            ; plain key / known action is turned off, never sent.
+            if (!SecondaryValid(st, sv)) {
+                ProfileLoadNotes.Push(BtnNames[id] . ": saved FN function was not valid and is off")
+                continue
+            }
             SecType[id]  := st
             SecValue[id] := sv
             SecX[id]     := sx + 0
             SecY[id]     := sy + 0
         }
+        if (sp != "" && sp != "ERROR") {
+            if (KeyValid(sp))
+                ProfPrimary[id] := sp
+            else
+                ProfileLoadNotes.Push(BtnNames[id] . ": saved tap key was not valid; the box print is used")
+        }
     }
 }
 
 SaveProfile(profileName) {
-    global ProfilesDir, AllBtnIds, FnButtonId, SecType, SecValue, SecX, SecY
+    global ProfilesDir, AllBtnIds, FnButtonId, SecType, SecValue, SecX, SecY, ProfPrimary
     pf := ProfilesDir . "\" . profileName . ".ini"
     IniWrite, %FnButtonId%, %pf%, Profile, FnButtonId
     for i, id in AllBtnIds
@@ -1149,21 +1776,25 @@ SaveProfile(profileName) {
         sv := SecValue.HasKey(id) ? SecValue[id] : ""
         sx := SecX.HasKey(id)     ? SecX[id]     : 0
         sy := SecY.HasKey(id)     ? SecY[id]     : 0
+        sp := ProfPrimary.HasKey(id) ? ProfPrimary[id] : ""
         IniWrite, %st%, %pf%, Profile, %id%_Type
         IniWrite, %sv%, %pf%, Profile, %id%_Value
         IniWrite, %sx%, %pf%, Profile, %id%_X
         IniWrite, %sy%, %pf%, Profile, %id%_Y
+        IniWrite, %sp%, %pf%, Profile, %id%_Primary
     }
 }
 
 ResetProfile() {
-    global FnButtonId, FnSendKey, SecType, SecValue, SecX, SecY, BtnPrimary
+    global FnButtonId, FnSendKey, SecType, SecValue, SecX, SecY, BtnPrimary, ProfPrimary, ProfileLoadNotes
     FnButtonId := "resetaim"
     FnSendKey  := BtnPrimary["resetaim"]
     SecType  := {}
     SecValue := {}
     SecX     := {}
     SecY     := {}
+    ProfPrimary := {}
+    ProfileLoadNotes := []
 }
 
 ; ============================================================
@@ -1263,6 +1894,16 @@ HandleBoxKeyDown(keyName) {
     btnId := KeyToBtnId[keyName]
     if (btnId = "")
         return
+    ; v5.2.0: Builder test mode shows the press instead of sending it;
+    ; typing in this app's own text boxes gets the plain key.
+    if (BuilderTestActive()) {
+        BuilderTestKey(btnId, true)
+        return
+    }
+    if (OwnTextFocus()) {
+        Send, {Blind}{%keyName%}
+        return
+    }
 
     if (btnId = FnButtonId) {
         ; Windows repeats a held key. A repeated FN-down must
@@ -1278,6 +1919,7 @@ HandleBoxKeyDown(keyName) {
         FnIsDown := true
         FnUsedAsModifier := false
         FnLastDownTime := A_TickCount
+        CheatStart()
         ; Prefetch: start reading the GSPro menu NOW, so by the
         ; time the arrow lands (~half a second later for a human)
         ; the scan is already cached and the click is instant.
@@ -1300,8 +1942,7 @@ HandleBoxKeyDown(keyName) {
         return
     }
 
-    pk := BtnPrimary[btnId]
-    pk := ApplyIKSwap(pk)
+    pk := BoxTapKey(btnId)
     if (AnyOcrSecondary())
         OcrTrace("key " . keyName . " (" . btnId . ") down, FN not held -> sent " . pk)
     if (pk != "")
@@ -1314,12 +1955,16 @@ HandleBoxKeyUp(keyName) {
     btnId := KeyToBtnId[keyName]
     if (btnId = "")
         return
+    if (BuilderTestActive()) {
+        BuilderTestKey(btnId, false)
+        return
+    }
     if (btnId = FnButtonId) {
+        CheatHide()
         if (AnyOcrSecondary())
             OcrTrace("key FN (" . keyName . ") up" . (FnUsedAsModifier ? "" : " - tapped alone, sent its own key"))
-        if (!FnUsedAsModifier) {
-            pk := BtnPrimary[btnId]
-            pk := ApplyIKSwap(pk)
+        if (!FnUsedAsModifier && !OwnTextFocus()) {
+            pk := BoxTapKey(btnId)
             if (pk != "")
                 Send, %pk%
         }
@@ -1342,6 +1987,20 @@ FireSecondary(btnId) {
         if (sval != "") {
             sent := SendSecondaryKey(sval)
             OcrTrace("secondary " . btnId . " -> " . sval . (sent ? " sent (held keypress)" : " not sent (GSPro not focused)"))
+        }
+    }
+    else if (stype = "seq") {
+        ; v5.2.0 Key Sequence: each key a held press into GSPro,
+        ; the set pause between them.
+        q := SeqParse(SecValue[btnId])
+        if (IsObject(q)) {
+            for i, k in q.keys {
+                if (i > 1)
+                    Sleep, % q.pause
+                if (!SendSecondaryKey(k))
+                    break
+            }
+            OcrTrace("secondary " . btnId . " -> key sequence " . SecValue[btnId])
         }
     }
     else if (stype = "click") {
@@ -1416,7 +2075,7 @@ SmartAction(actionId) {
     global LastActionId, LastFireTick
     ; The older menu is up and being used (a Smart Click landed on
     ; it moments ago): stay on its fast repeat path, no extra read.
-    if (LastActionId != "" && (A_TickCount - LastFireTick) < 4000) {
+    if (!ReliefOnlyAction(actionId) && LastActionId != "" && (A_TickCount - LastFireTick) < 4000) {
         RunOcrAction(actionId)
         return
     }
@@ -1449,7 +2108,17 @@ SmartAction(actionId) {
         ReliefRun(actionId, rel)
         return
     }
+    if (ReliefOnlyAction(actionId)) {
+        OcrTrace("press " . actionId . ": no GSPro 4 relief list on screen - nothing sent")
+        ShowGsproTip(YellowOcrName(actionId) . " - works on GSPro 4's relief list", 1800)
+        return
+    }
     RunOcrAction(actionId)
+}
+
+; v5.2.0 actions that exist only on GSPro 4's relief list
+ReliefOnlyAction(actionId) {
+    return (SubStr(actionId, 1, 6) = "Relief")
 }
 
 ; FN-down prefetch: read the panel corner (lock must be free).
@@ -1700,8 +2369,104 @@ ReliefPlan(actionId, rel, sel) {
             keys.Push(actionId = "MoveForward" ? "f" : "b")
         else
             why := (actionId = "MoveForward" ? "Move Forward" : "Move Back") . (flag ? " - pick Flag Line first (Next Option)" : " - no Flag Line on this screen")
+    } else if (RegExMatch(actionId, "^ReliefChoice(\d)$", cm)) {
+        if (cm1 <= n) {
+            keys.Push(cm1 . "")
+            keys.Push("{Enter}")
+        } else {
+            why := "Choice " . cm1 . " - this screen has " . n . (n = 1 ? " choice" : " choices")
+        }
+    } else if (actionId = "ReliefLateral" || actionId = "ReliefFlagLine" || actionId = "ReliefMulligan") {
+        word := (actionId = "ReliefLateral") ? "lateral drop" : (actionId = "ReliefFlagLine" ? "flag line" : "mulligan")
+        k := ReliefFind(rel, word)
+        if (k) {
+            keys.Push(k . "")
+            keys.Push("{Enter}")
+        } else {
+            why := YellowOcrName(actionId) . " - not a choice on this screen"
+        }
+    } else if (actionId = "ReliefRotateLeft") {
+        keys.Push("q")
+    } else if (actionId = "ReliefRotateRight") {
+        keys.Push("e")
+    } else if (actionId = "ReliefZoomIn") {
+        keys.Push("@wheelup")
+    } else if (actionId = "ReliefZoomOut") {
+        keys.Push("@wheeldown")
+    } else if (actionId = "ReliefRecenter") {
+        keys.Push("@recenter")
     }
     return {keys: keys, why: why}
+}
+
+; Zoom: GSPro 4's hint is "Scroll zoom" - one wheel notch over the
+; middle of the map, then the pointer goes back where it was.
+ReliefWheel(dir) {
+    global GSProWinNeedle, GSProWinExclude
+    win := ClientRectByTitle(GSProWinNeedle, GSProWinExclude)
+    if (!win.found)
+        return false
+    if (!WinActive("ahk_id " . win.hwnd)) {
+        WinActivate, % "ahk_id " . win.hwnd
+        WinWaitActive, % "ahk_id " . win.hwnd, , 0.6
+    }
+    if (!WinActive("ahk_id " . win.hwnd))
+        return false
+    DpiGetCursor(ox, oy)
+    DpiSetCursor(win.x + win.w // 2, win.y + win.h // 2)
+    Sleep, 40
+    if (dir > 0)
+        Send, {WheelUp}
+    else
+        Send, {WheelDown}
+    Sleep, 40
+    DpiSetCursor(ox, oy)
+    return true
+}
+
+; Recenter has no key: read the bottom bar and click its RECENTER.
+; reader (tests): as ReliefRead.  Returns the button line or "".
+ReliefFindRecenter(win, reader := "") {
+    rx := win.x + Round(win.w * 0.15), ry := win.y + Round(win.h * 0.82)
+    rw := Round(win.w * 0.75), rh := win.h - Round(win.h * 0.82)
+    sc := (win.h < 1300) ? 2 : 1
+    if (IsObject(reader))
+        o := reader.Call(rx, ry, rw, rh, sc)
+    else if (sc > 1)
+        o := OcrRegionScaled(rx, ry, rw, rh, sc)
+    else
+        o := OcrRegion(rx, ry, rw, rh)
+    for i, ln in o.lines {
+        if (OcrNorm(ln.text) = "recenter" || LevDist(OcrNorm(ln.text), "recenter") <= 1)
+            return ln
+    }
+    return ""
+}
+
+ReliefClickRecenter() {
+    global GSProWinNeedle, GSProWinExclude, OcrBusy
+    win := ClientRectByTitle(GSProWinNeedle, GSProWinExclude)
+    if (!win.found)
+        return false
+    OcrStaleCheck()
+    if (OcrBusy)
+        return false
+    OcrLockTake()
+    ln := ""
+    try {
+        ln := ReliefFindRecenter(win)
+    } catch appErr {
+        LogAppError("ReliefRecenter", appErr)
+    }
+    OcrBusy := false
+    if (!IsObject(ln)) {
+        ShowGsproTip("Recenter - button not found on screen", 1800)
+        return false
+    }
+    DpiClickLine(ln)
+    Sleep, 80
+    ParkMouse()
+    return true
 }
 
 ReliefNote(rel) {
@@ -1720,7 +2485,7 @@ ReliefKeysText(keys) {
 
 ReliefRun(actionId, rel) {
     global ReliefLast, ReliefLastAct, ReliefLastActTick, ReliefExpectSel, ReliefExpectTick
-    closes := (actionId = "Rehit" || actionId = "DropRehit")
+    closes := (actionId = "Rehit" || actionId = "DropRehit" || RegExMatch(actionId, "^Relief(Choice\d|Lateral|FlagLine|Mulligan)$"))
     ; Same timing rules as the older menu: OS auto-repeat is not a
     ; new request, and a closing action never repeats into the fade.
     if (actionId = ReliefLastAct && (A_TickCount - ReliefLastActTick) < (closes ? 900 : 120))
@@ -1738,7 +2503,13 @@ ReliefRun(actionId, rel) {
     for i, k in plan.keys {
         if (i > 1)
             Sleep, 180   ; GSPro takes the pick before Enter
-        if (!SendSecondaryKey(k))
+        if (k = "@wheelup" || k = "@wheeldown")
+            ok := ReliefWheel(k = "@wheelup" ? 1 : -1)
+        else if (k = "@recenter")
+            ok := ReliefClickRecenter()
+        else
+            ok := SendSecondaryKey(k)
+        if (!ok)
             break
     }
     ReliefLastActTick := A_TickCount
@@ -3272,6 +4043,11 @@ OcrLockTake() {
         ScrambleHidePreview() ; preview only
         DllCall("dwmapi\DwmFlush") ; preview only
     } ; preview only
+    global CheatVisible, CheatExcluded ; preview only
+    if (CheatVisible && !CheatExcluded) { ; preview only
+        CheatHide() ; preview only
+        DllCall("dwmapi\DwmFlush") ; preview only
+    } ; preview only
 }
 OcrStaleCheck() {
     global OcrBusy, OcrBusySince, ScrambleBusy
@@ -4447,6 +5223,7 @@ ToggleRemap() {
         FnIsDown := false
         FnUsedAsModifier := false
         FnLastDownTime := 0
+        CheatHide()
     }
     UpdateMainStatus()
 }
@@ -4561,7 +5338,9 @@ Gui, Main:Add, DropDownList, x415 y512 w120 vScrambleDelayChoice gOnScrambleDela
 GuiControl, Main:ChooseString, ScrambleDelayChoice, %ScrambleDelaySec% seconds
 Gui, Main:Font, s10 cCCCCCC Normal, Segoe UI
 cdChecked := ScrambleCountdown ? 1 : 0
-Gui, Main:Add, Checkbox, x25 y548 w510 vScrambleCdCheck gOnScrambleCdToggle Checked%cdChecked%, Show chosen card highlight and countdown
+Gui, Main:Add, Checkbox, x25 y548 w300 vScrambleCdCheck gOnScrambleCdToggle Checked%cdChecked%, Show chosen card highlight and countdown
+cheatChecked := ShowFnCheat ? 1 : 0
+Gui, Main:Add, Checkbox, x335 y548 w200 vFnCheatCheck gOnFnCheatToggle Checked%cheatChecked%, Show FN cheat sheet
 Gui, Main:Add, Text, x25 y580 w510 0x10
 Gui, Main:Font, s9 c999999 Normal, Segoe UI
 Gui, Main:Add, Text, x25 y592 w510, Files are saved at:
@@ -4750,6 +5529,7 @@ OnCopyProfile:
     sourceValue := SecValue.Clone()
     sourceX := SecX.Clone()
     sourceY := SecY.Clone()
+    sourcePrimary := ProfPrimary.Clone()
     ; Own the dialog to the active window, including the Builder.
     copyOwner := (A_Gui = "Builder") ? "Builder" : "Main"
     Gui, %copyOwner%:+OwnDialogs
@@ -4769,10 +5549,12 @@ OnCopyProfile:
             sv := sourceValue.HasKey(id) ? sourceValue[id] : ""
             sx := sourceX.HasKey(id) ? sourceX[id] : 0
             sy := sourceY.HasKey(id) ? sourceY[id] : 0
+            sp := sourcePrimary.HasKey(id) ? sourcePrimary[id] : ""
             IniWrite, %st%, %copyFile%, Profile, %id%_Type
             IniWrite, %sv%, %copyFile%, Profile, %id%_Value
             IniWrite, %sx%, %copyFile%, Profile, %id%_X
             IniWrite, %sy%, %copyFile%, Profile, %id%_Y
+            IniWrite, %sp%, %copyFile%, Profile, %id%_Primary
         }
     } catch copyError {
         SafeFileDelete(copyFile)
@@ -4933,6 +5715,15 @@ OnScrambleCdToggle:
     SaveSettings()
     if (!ScrambleCountdown)
         ScrambleHidePreview()
+Return
+
+; v5.2.0: the control-box picture shown while FN is held in GSPro
+OnFnCheatToggle:
+    Gui, Main:Submit, NoHide
+    ShowFnCheat := FnCheatCheck ? true : false
+    SaveSettings()
+    if (!ShowFnCheat)
+        CheatHide()
 Return
 
 OnScrambleDelayChange:
@@ -5824,17 +6615,32 @@ ShowBuilder:
     Gui, Builder:Add, Text, x787 y639 w121 Center vSecShotcam,
 
     ; Bottom action buttons
-    Gui, Builder:Font, s11 c000000 Bold, Segoe UI
-    Gui, Builder:Add, Button, x340 y662 w150 h40 gBuilderReset vBuilderResetBtn, Reset Profile
-    Gui, Builder:Add, Button, x510 y662 w150 h40 gBuilderClose, Close
+    Gui, Builder:Font, s10 c000000 Bold, Segoe UI
+    Gui, Builder:Add, Button, x40 y662 w150 h40 gBuilderImport, Import Profile...
+    Gui, Builder:Add, Button, x200 y662 w150 h40 gBuilderExport, Export Profile...
+    Gui, Builder:Font, s9 cFFFFFF Normal, Segoe UI
+    BuilderTestMode := false
+    Gui, Builder:Add, Checkbox, x370 y668 w230 h30 vBuilderTest gOnBuilderTest, Test mode: press box buttons, see what they do (nothing sent)
+    Gui, Builder:Font, s10 c000000 Bold, Segoe UI
+    Gui, Builder:Add, Button, x620 y662 w150 h40 gBuilderReset vBuilderResetBtn, Reset Profile
+    Gui, Builder:Add, Button, x780 y662 w150 h40 gBuilderClose, Close
 
     Gui, Builder:Font, s9 cC8E6C2 Normal, Segoe UI
     Gui, Builder:Add, Text, x20 y712 w940 Center vBuilderStatus, Click a button to set its FN secondary  -  yellow text = current secondary  -  auto-saves
+    Gui, Builder:Font, s9 cFFD400 Normal, Segoe UI
+    Gui, Builder:Add, Text, x20 y736 w940 Center vBuilderCheck gBuilderCheckDetails, Layout check: OK
 
     UpdateBuilderLabels()
     RefreshBuilderPresetControls()
     WinGetPos, bx, by, , , ahk_id %MainHwnd%
-    ShowSettingsWindow("Builder", BuilderHwnd, 980, 748, false, bx, by)
+    ShowSettingsWindow("Builder", BuilderHwnd, 980, 772, false, bx, by)
+Return
+
+OnBuilderTest:
+    Gui, Builder:Submit, NoHide
+    BuilderTestMode := BuilderTest ? true : false
+    TestFnDown := false
+    GuiControl, Builder:, BuilderStatus, % BuilderTestMode ? "TEST MODE: press any box button (FN too) - the Builder shows what it does, nothing is sent" : "Test mode off"
 Return
 
 OnFnChange:
@@ -5921,11 +6727,12 @@ Return
 ; ============================================================
 ConfigButton(btnIdVal, displayName, primaryKey) {
     global ConfiguringBtnId, ConfiguringDisplayName, SecType, SecValue, SecX, SecY
-    global GSProActions, GSProNameMap, GSProKeyMap, ActiveProfile
-    global OcrActionList, OcrActionName, OcrActionByName
-    global CfgTypeKey, CfgTypeOcr, CfgTypeClick, CfgTypeNone
-    global CfgKeyChoice, CfgOcrChoice, CfgClickPos, CfgCapturedX, CfgCapturedY
-    global CfgPreview, CfgCaptureBtn
+    global GSProActions, GSProNameMap, GSProKeyMap, GSProCustomEntry, ActiveProfile
+    global OcrActionList, OcrActionName, OcrActionByName, ProfPrimary
+    global CfgTypeKey, CfgTypeOcr, CfgTypeSeq, CfgTypeClick, CfgTypeNone
+    global CfgKeyChoice, CfgKeyCustom, CfgOcrChoice, CfgClickPos, CfgCapturedX, CfgCapturedY
+    global CfgSeq1, CfgSeq2, CfgSeq3, CfgSeq4, CfgSeqPause, CfgTapChoice, CfgTapCustom
+    global CfgPreview, CfgCaptureBtn, CfgTapDefault
     global FnButtonId, ConfiguringProfile, CfgHwnd
     if (IsConfigDialogOpen())
         return
@@ -5947,52 +6754,108 @@ ConfigButton(btnIdVal, displayName, primaryKey) {
     curVal  := SecValue.HasKey(btnIdVal) ? SecValue[btnIdVal] : ""
     CfgCapturedX := SecX.HasKey(btnIdVal) ? SecX[btnIdVal] : 0
     CfgCapturedY := SecY.HasKey(btnIdVal) ? SecY[btnIdVal] : 0
+    CfgTapDefault := "Box print: " . displayName . " (" . primaryKey . ")"
+    keyList := GSProActions . "|" . GSProCustomEntry
+    tapList := CfgTapDefault . "|" . SubStr(GSProActions, 6) . "|" . GSProCustomEntry   ; drops "None|"
 
     Gui, Cfg:Destroy
     Gui, Main:+Disabled
     Gui, Builder:+Disabled
-    Gui, Cfg:New, +AlwaysOnTop +OwnerBuilder +HwndCfgHwnd +Resize +MinSize300x220 +0x300000, %displayName% - Secondary Function
+    Gui, Cfg:New, +AlwaysOnTop +OwnerBuilder +HwndCfgHwnd +Resize +MinSize300x220 +0x300000, %displayName% - Button Setup
     Gui, Cfg:Color, 1a1a2e
     Gui, Cfg:Font, s11 cWhite Bold, Segoe UI
-    Gui, Cfg:Add, Text, x15 y10 w430, FN + %displayName%
+    Gui, Cfg:Add, Text, x15 y10 w430, %displayName%
+
+    ; ---- Tap alone (white print) ----
+    Gui, Cfg:Font, s10 cWhite Normal, Segoe UI
+    Gui, Cfg:Add, Text, x15 y40 w90, Tap alone:
+    Gui, Cfg:Font, s9 c000000 Normal, Segoe UI
+    Gui, Cfg:Add, DropDownList, x105 y37 w325 vCfgTapChoice gCfgAnyChanged, %tapList%
+    Gui, Cfg:Add, Hotkey, x105 y67 w160 vCfgTapCustom gCfgAnyChanged
+    Gui, Cfg:Font, s8 cAAAAAA Normal, Segoe UI
+    Gui, Cfg:Add, Text, x275 y70 w160, custom tap: click, press the key
+    Gui, Cfg:Add, Text, x15 y100 w430 0x10
+
+    ; ---- Hold FN + this button (yellow print) ----
+    Gui, Cfg:Font, s10 cFFD400 Bold, Segoe UI
+    Gui, Cfg:Add, Text, x15 y110 w430, Hold FN + %displayName%:
+    Gui, Cfg:Font, s10 cWhite Normal, Segoe UI
+    Gui, Cfg:Add, Radio, x15 y136 w430 vCfgTypeKey gCfgTypeChanged Group, GSPro Hotkey - one key or combo
+    Gui, Cfg:Font, s9 c000000 Normal, Segoe UI
+    Gui, Cfg:Add, DropDownList, x35 y160 w395 vCfgKeyChoice gCfgKeyChanged, %keyList%
+    Gui, Cfg:Add, Hotkey, x35 y190 w160 vCfgKeyCustom gCfgKeyChanged
+    Gui, Cfg:Font, s8 cAAAAAA Normal, Segoe UI
+    Gui, Cfg:Add, Text, x205 y193 w230, custom key: click, press the key or combo
+
+    Gui, Cfg:Font, s10 cWhite Normal, Segoe UI
+    Gui, Cfg:Add, Radio, x15 y224 w430 vCfgTypeOcr gCfgTypeChanged, Smart Click - GSPro relief menu / GSPro 4 relief list
+    Gui, Cfg:Font, s9 c000000 Normal, Segoe UI
+    Gui, Cfg:Add, DropDownList, x35 y248 w395 R16 vCfgOcrChoice gCfgOcrChanged, %OcrActionList%
+
+    Gui, Cfg:Font, s10 cWhite Normal, Segoe UI
+    Gui, Cfg:Add, Radio, x15 y284 w430 vCfgTypeSeq gCfgTypeChanged, Key Sequence - up to 4 keys in a row
+    Gui, Cfg:Font, s9 c000000 Normal, Segoe UI
+    Gui, Cfg:Add, DropDownList, x35 y308 w195 vCfgSeq1 gCfgSeqChanged, %GSProActions%
+    Gui, Cfg:Add, DropDownList, x235 y308 w195 vCfgSeq2 gCfgSeqChanged, %GSProActions%
+    Gui, Cfg:Add, DropDownList, x35 y338 w195 vCfgSeq3 gCfgSeqChanged, %GSProActions%
+    Gui, Cfg:Add, DropDownList, x235 y338 w195 vCfgSeq4 gCfgSeqChanged, %GSProActions%
     Gui, Cfg:Font, s9 cCCCCCC Normal, Segoe UI
-    Gui, Cfg:Add, Text, x15 y34 w430 h30, Tap alone: %displayName% (%primaryKey%). Choose what holding FN adds.
+    Gui, Cfg:Add, Text, x35 y373 w140, Pause between keys:
+    Gui, Cfg:Font, s9 c000000 Normal, Segoe UI
+    Gui, Cfg:Add, DropDownList, x180 y369 w110 vCfgSeqPause gCfgSeqChanged, 100 ms|200 ms|300 ms|500 ms|800 ms
 
     Gui, Cfg:Font, s10 cWhite Normal, Segoe UI
-    Gui, Cfg:Add, Radio, x15 y72 w430 vCfgTypeKey gCfgTypeChanged Group, GSPro Hotkey - send a keyboard key
+    Gui, Cfg:Add, Radio, x15 y406 w430 vCfgTypeClick gCfgTypeChanged, Taught Screen Click - a fixed position you capture
     Gui, Cfg:Font, s9 c000000 Normal, Segoe UI
-    Gui, Cfg:Add, DropDownList, x35 y96 w395 vCfgKeyChoice gCfgKeyChanged, %GSProActions%
-
-    Gui, Cfg:Font, s10 cWhite Normal, Segoe UI
-    Gui, Cfg:Add, Radio, x15 y132 w430 vCfgTypeOcr gCfgTypeChanged, Smart Click - find a GSPro menu button on screen
-    Gui, Cfg:Font, s9 c000000 Normal, Segoe UI
-    Gui, Cfg:Add, DropDownList, x35 y156 w395 vCfgOcrChoice gCfgOcrChanged, %OcrActionList%
-
-    Gui, Cfg:Font, s10 cWhite Normal, Segoe UI
-    Gui, Cfg:Add, Radio, x15 y192 w430 vCfgTypeClick gCfgTypeChanged, Taught Screen Click - a fixed position you capture
-    Gui, Cfg:Font, s9 c000000 Normal, Segoe UI
-    Gui, Cfg:Add, Button, x35 y216 w150 h26 gCfgCapture vCfgCaptureBtn, Capture Position
+    Gui, Cfg:Add, Button, x35 y430 w150 h26 gCfgCapture vCfgCaptureBtn, Capture Position
     Gui, Cfg:Font, s9 cCCCCCC Normal, Segoe UI
-    Gui, Cfg:Add, Text, x195 y220 w235 vCfgClickPos, (none captured)
+    Gui, Cfg:Add, Text, x195 y434 w235 vCfgClickPos, (none captured)
 
     Gui, Cfg:Font, s10 cWhite Normal, Segoe UI
-    Gui, Cfg:Add, Radio, x15 y254 w430 vCfgTypeNone gCfgTypeChanged, None - no secondary action
+    Gui, Cfg:Add, Radio, x15 y468 w430 vCfgTypeNone gCfgTypeChanged, None - no FN function
     Gui, Cfg:Font, s10 cFFD400 Normal, Segoe UI
-    Gui, Cfg:Add, Text, x15 y287 w430 h60 vCfgPreview,
+    Gui, Cfg:Add, Text, x15 y498 w430 h60 vCfgPreview,
 
     Gui, Cfg:Font, s10 c000000 Normal, Segoe UI
-    Gui, Cfg:Add, Button, x90 y365 w120 h32 gCfgOK Default, Save
-    Gui, Cfg:Add, Button, x240 y365 w120 h32 gCfgCancel, Cancel
+    Gui, Cfg:Add, Button, x90 y566 w120 h32 gCfgOK Default, Save
+    Gui, Cfg:Add, Button, x240 y566 w120 h32 gCfgCancel, Cancel
 
+    ; Preselect the tap key
+    if (ProfPrimary.HasKey(btnIdVal)) {
+        tk := ProfPrimary[btnIdVal]
+        if (GSProNameMap.HasKey(tk)) {
+            GuiControl, Cfg:ChooseString, CfgTapChoice, % GSProNameMap[tk]
+        } else {
+            GuiControl, Cfg:ChooseString, CfgTapChoice, %GSProCustomEntry%
+            GuiControl, Cfg:, CfgTapCustom, % SendToHotkey(tk)
+        }
+    } else {
+        GuiControl, Cfg:Choose, CfgTapChoice, 1
+    }
+    GuiControl, Cfg:ChooseString, CfgSeqPause, 200 ms
     ; Preselect from the button's current configuration
     if (curType = "key") {
         GuiControl, Cfg:, CfgTypeKey, 1
-        if (GSProNameMap.HasKey(curVal))
+        if (GSProNameMap.HasKey(curVal)) {
             GuiControl, Cfg:ChooseString, CfgKeyChoice, % GSProNameMap[curVal]
+        } else {
+            GuiControl, Cfg:ChooseString, CfgKeyChoice, %GSProCustomEntry%
+            GuiControl, Cfg:, CfgKeyCustom, % SendToHotkey(curVal)
+        }
     } else if (curType = "ocr") {
         GuiControl, Cfg:, CfgTypeOcr, 1
         if (OcrActionName.HasKey(curVal))
             GuiControl, Cfg:ChooseString, CfgOcrChoice, % OcrActionName[curVal]
+    } else if (curType = "seq") {
+        GuiControl, Cfg:, CfgTypeSeq, 1
+        q := SeqParse(curVal)
+        if (IsObject(q)) {
+            for i, k in q.keys {
+                if (GSProNameMap.HasKey(k))
+                    GuiControl, Cfg:ChooseString, CfgSeq%i%, % GSProNameMap[k]
+            }
+            GuiControl, Cfg:ChooseString, CfgSeqPause, % q.pause . " ms"
+        }
     } else if (curType = "click") {
         GuiControl, Cfg:, CfgTypeClick, 1
         GuiControl, Cfg:, CfgClickPos, % "at " . CfgCapturedX . ", " . CfgCapturedY
@@ -6001,11 +6864,11 @@ ConfigButton(btnIdVal, displayName, primaryKey) {
         GuiControl, Cfg:ChooseString, CfgKeyChoice, None
     }
     SelectConfigType(curType)
-    ShowSettingsWindow("Cfg", CfgHwnd, 460, 416)
+    ShowSettingsWindow("Cfg", CfgHwnd, 460, 612)
 }
 
 CfgTypeChanged:
-    chosenType := A_GuiControl = "CfgTypeKey" ? "key" : A_GuiControl = "CfgTypeOcr" ? "ocr" : A_GuiControl = "CfgTypeClick" ? "click" : "none"
+    chosenType := A_GuiControl = "CfgTypeKey" ? "key" : A_GuiControl = "CfgTypeOcr" ? "ocr" : A_GuiControl = "CfgTypeSeq" ? "seq" : A_GuiControl = "CfgTypeClick" ? "click" : "none"
     SelectConfigType(chosenType)
 Return
 
@@ -6017,40 +6880,73 @@ CfgOcrChanged:
     SelectConfigType("ocr")
 Return
 
+CfgSeqChanged:
+    SelectConfigType("seq")
+Return
+
+CfgAnyChanged:
+    UpdateConfigPreview()
+Return
+
 SelectConfigType(type) {
     ; Dropdowns between radio buttons can split native radio
     ; groups. Explicitly select exactly one action type.
     GuiControl, Cfg:, CfgTypeKey, % type = "key"
     GuiControl, Cfg:, CfgTypeOcr, % type = "ocr"
+    GuiControl, Cfg:, CfgTypeSeq, % type = "seq"
     GuiControl, Cfg:, CfgTypeClick, % type = "click"
-    GuiControl, Cfg:, CfgTypeNone, % (type != "key" && type != "ocr" && type != "click")
+    GuiControl, Cfg:, CfgTypeNone, % (type != "key" && type != "ocr" && type != "seq" && type != "click")
     UpdateConfigPreview()
 }
 
 UpdateConfigPreview() {
-    global FnChoiceMap, FnButtonId, ConfiguringDisplayName, CfgCapturedX, CfgCapturedY
+    global FnChoiceMap, FnButtonId, ConfiguringDisplayName, CfgCapturedX, CfgCapturedY, GSProCustomEntry, GSProKeyMap
     GuiControlGet, keyMode, Cfg:, CfgTypeKey
     GuiControlGet, ocrMode, Cfg:, CfgTypeOcr
+    GuiControlGet, seqMode, Cfg:, CfgTypeSeq
     GuiControlGet, clickMode, Cfg:, CfgTypeClick
     GuiControlGet, keyChoice, Cfg:, CfgKeyChoice
+    GuiControlGet, keyCustom, Cfg:, CfgKeyCustom
     GuiControlGet, ocrChoice, Cfg:, CfgOcrChoice
+    GuiControlGet, tapChoice, Cfg:, CfgTapChoice
+    GuiControlGet, tapCustom, Cfg:, CfgTapCustom
+    customKey := keyMode && keyChoice = GSProCustomEntry
+    customTap := (tapChoice = GSProCustomEntry)
     GuiControl, Cfg:Enable%keyMode%, CfgKeyChoice
+    GuiControl, Cfg:Enable%customKey%, CfgKeyCustom
+    GuiControl, Cfg:Enable%customTap%, CfgTapCustom
     GuiControl, Cfg:Enable%ocrMode%, CfgOcrChoice
+    Loop, 4
+        GuiControl, Cfg:Enable%seqMode%, CfgSeq%A_Index%
+    GuiControl, Cfg:Enable%seqMode%, CfgSeqPause
     GuiControl, Cfg:Enable%clickMode%, CfgCaptureBtn
     fnName := "FN"
     for name, id in FnChoiceMap {
         if (id = FnButtonId)
             fnName := name
     }
-    if (keyMode)
-        action := (keyChoice = "" || keyChoice = "None") ? "no secondary action" : keyChoice
-    else if (ocrMode)
+    if (keyMode) {
+        if (customKey)
+            action := (HotkeyToSend(keyCustom) = "") ? "click the custom key box and press a key (no Win key)" : "key " . KeyDisplayName(HotkeyToSend(keyCustom))
+        else
+            action := (keyChoice = "" || keyChoice = "None") ? "no FN function" : keyChoice
+    } else if (ocrMode) {
         action := (ocrChoice = "") ? "choose a Smart Click action" : ocrChoice
-    else if (clickMode)
+    } else if (seqMode) {
+        steps := ""
+        Loop, 4 {
+            GuiControlGet, sq, Cfg:, CfgSeq%A_Index%
+            if (GSProKeyMap.HasKey(sq) && GSProKeyMap[sq] != "")
+                steps .= (steps = "" ? "" : " > ") . KeyShortName(GSProKeyMap[sq])
+        }
+        action := (steps = "") ? "choose the keys in order" : "keys " . steps
+    } else if (clickMode) {
         action := (CfgCapturedX = 0 && CfgCapturedY = 0) ? "capture a screen position first" : "click at " . CfgCapturedX . ", " . CfgCapturedY
-    else
-        action := "no secondary action"
-    GuiControl, Cfg:, CfgPreview, % "Hold " . fnName . " + " . ConfiguringDisplayName . " -> " . action
+    } else {
+        action := "no FN function"
+    }
+    tap := customTap ? (HotkeyToSend(tapCustom) = "" ? "press a key in the custom tap box" : KeyDisplayName(HotkeyToSend(tapCustom))) : RegExReplace(tapChoice, "^Box print: ")
+    GuiControl, Cfg:, CfgPreview, % "Tap " . ConfiguringDisplayName . " -> " . tap . "`nHold " . fnName . " + " . ConfiguringDisplayName . " -> " . action
 }
 
 CloseButtonConfig() {
@@ -6102,7 +6998,49 @@ CfgOK:
         Return
     }
     Gui, Cfg:Submit, NoHide
-    if (CfgTypeKey) {
+    ; Tap (white print): box print, a list key or a custom key.
+    ; Checked first, applied only once everything is valid.
+    tapKey := ""
+    if (CfgTapChoice = GSProCustomEntry) {
+        tapKey := HotkeyToSend(CfgTapCustom)
+        if (tapKey = "") {
+            Gui, Cfg:+OwnDialogs
+            MsgBox, 48, Custom tap key, Click the custom tap box and press the key you want (Win key combos are not allowed).
+            Return
+        }
+    } else if (GSProKeyMap.HasKey(CfgTapChoice) && GSProKeyMap[CfgTapChoice] != "") {
+        tapKey := GSProKeyMap[CfgTapChoice]
+    }
+    if (CfgTypeKey && CfgKeyChoice = GSProCustomEntry) {
+        sendKey := HotkeyToSend(CfgKeyCustom)
+        if (sendKey = "") {
+            Gui, Cfg:+OwnDialogs
+            MsgBox, 48, Custom key, Click the custom key box and press the key or combo you want (Win key combos are not allowed).
+            Return
+        }
+        SecType[ConfiguringBtnId]  := "key"
+        SecValue[ConfiguringBtnId] := sendKey
+        SecX[ConfiguringBtnId] := 0
+        SecY[ConfiguringBtnId] := 0
+    } else if (CfgTypeSeq) {
+        seqKeys := ""
+        Loop, 4 {
+            sq := CfgSeq%A_Index%
+            if (GSProKeyMap.HasKey(sq) && GSProKeyMap[sq] != "")
+                seqKeys .= (seqKeys = "" ? "" : "|") . GSProKeyMap[sq]
+        }
+        seqPause := RegExReplace(CfgSeqPause, "\D")
+        seqVal := (seqPause = "" ? 200 : seqPause) . ":" . seqKeys
+        if (seqKeys = "" || !IsObject(SeqParse(seqVal))) {
+            Gui, Cfg:+OwnDialogs
+            MsgBox, 48, Key Sequence, Choose at least one key for the sequence.
+            Return
+        }
+        SecType[ConfiguringBtnId]  := "seq"
+        SecValue[ConfiguringBtnId] := seqVal
+        SecX[ConfiguringBtnId] := 0
+        SecY[ConfiguringBtnId] := 0
+    } else if (CfgTypeKey) {
         sendKey := GSProKeyMap.HasKey(CfgKeyChoice) ? GSProKeyMap[CfgKeyChoice] : ""
         if (sendKey = "") {
             ; "None" or no selection = no secondary
@@ -6140,10 +7078,14 @@ CfgOK:
         SecX[ConfiguringBtnId] := 0
         SecY[ConfiguringBtnId] := 0
     }
+    if (tapKey != "")
+        ProfPrimary[ConfiguringBtnId] := tapKey
+    else
+        ProfPrimary.Delete(ConfiguringBtnId)
     CloseButtonConfig()
     SaveProfile(ActiveProfile)
     UpdateBuilderLabels()
-    GuiControl, Builder:, BuilderStatus, % ConfiguringDisplayName . ": secondary updated  (saved)"
+    GuiControl, Builder:, BuilderStatus, % ConfiguringDisplayName . ": updated  (saved)"
 Return
 
 CfgCancel:
@@ -6156,6 +7098,7 @@ Return
 ;  UPDATE BUILDER LABELS
 ; ============================================================
 UpdateBuilderLabels() {
+    UpdateLayoutCheck()
     UpdateOneLabel("heatmap",  "BtnHeatmap",  "SecHeatmap",  "HEAT MAP",  "Y")
     UpdateOneLabel("putt",     "BtnPutt",     "SecPutt",     "PUTT",      "U")
     UpdateOneLabel("flyover",  "BtnFlyover",  "SecFlyover",  "FLYOVER",   "O")
@@ -6172,23 +7115,16 @@ UpdateBuilderLabels() {
 }
 
 UpdateOneLabel(btnIdVal, ctrlName, secCtrl, dispName, priKey) {
-    global FnButtonId, SecType, SecValue
+    global FnButtonId, ProfPrimary
+    ; A custom tap key shows on the button with a * (v5.2.0)
+    if (ProfPrimary.HasKey(btnIdVal))
+        priKey := KeyShortName(ProfPrimary[btnIdVal]) . " *"
     label := dispName . "`n" . priKey
     if (btnIdVal = FnButtonId)
         label := "[FN]`n" . dispName . "`n" . priKey
     GuiControl, Builder:, %ctrlName%, %label%
     ; Yellow panel print under the button = the secondary
-    sec := ""
-    if (btnIdVal = FnButtonId) {
-        sec := "FN / SHIFT KEY"
-    } else if (SecType.HasKey(btnIdVal) && SecType[btnIdVal] != "none" && SecType[btnIdVal] != "") {
-        if (SecType[btnIdVal] = "key")
-            sec := YellowKeyName(SecValue[btnIdVal])
-        else if (SecType[btnIdVal] = "ocr")
-            sec := YellowOcrName(SecValue[btnIdVal])
-        else if (SecType[btnIdVal] = "click")
-            sec := "SCREEN CLICK"
-    }
+    sec := (btnIdVal = FnButtonId) ? "FN / SHIFT KEY" : YellowSecName(btnIdVal)
     GuiControl, Builder:, %secCtrl%, %sec%
 }
 
@@ -6197,7 +7133,7 @@ YellowKeyName(sendKey) {
     global GSProNameMap
     if (sendKey = "b")
         return "CLEAR VIEW"
-    name := GSProNameMap.HasKey(sendKey) ? GSProNameMap[sendKey] : sendKey
+    name := GSProNameMap.HasKey(sendKey) ? GSProNameMap[sendKey] : KeyDisplayName(sendKey)
     ; strip a "X - " prefix if present
     pos := InStr(name, " - ")
     if (pos)
@@ -6214,17 +7150,45 @@ YellowKeyName(sendKey) {
 
 ; Short yellow-print name for a Smart Click secondary
 YellowOcrName(actionId) {
-    if (actionId = "MoveForward")
-        return "MOVE FORWARD"
-    if (actionId = "MoveBack")
-        return "MOVE BACK"
-    if (actionId = "NextOption")
-        return "NEXT OPTION"
-    if (actionId = "DropRehit")
-        return "DROP/REHIT"
-    if (actionId = "Rehit")
-        return "OB REHIT"
-    return actionId
+    static n := {MoveForward: "MOVE FORWARD", MoveBack: "MOVE BACK", NextOption: "NEXT OPTION"
+        , DropRehit: "DROP/REHIT", Rehit: "OB REHIT"
+        , ReliefChoice1: "CHOICE 1 + ENTER", ReliefChoice2: "CHOICE 2 + ENTER", ReliefChoice3: "CHOICE 3 + ENTER"
+        , ReliefLateral: "LATERAL DROP", ReliefFlagLine: "FLAG LINE", ReliefMulligan: "MULLIGAN"
+        , ReliefRotateLeft: "ROTATE LEFT", ReliefRotateRight: "ROTATE RIGHT"
+        , ReliefZoomIn: "ZOOM IN", ReliefZoomOut: "ZOOM OUT", ReliefRecenter: "RECENTER"}
+    return n.HasKey(actionId) ? n[actionId] : actionId
+}
+
+; On GSPro 4's relief list the five basic actions mean:
+YellowReliefName(actionId) {
+    static n := {MoveForward: "CLOSER (F)", MoveBack: "FURTHER BACK (B)", NextOption: "NEXT CHOICE"
+        , DropRehit: "TAKE CHOICE", Rehit: "REHIT + ENTER"}
+    return n.HasKey(actionId) ? n[actionId] : YellowOcrName(actionId)
+}
+
+; The yellow print for one button: what FN + it does ("" = nothing).
+YellowSecName(btnId, relief := false) {
+    global SecType, SecValue
+    if (!SecType.HasKey(btnId) || SecType[btnId] = "" || SecType[btnId] = "none")
+        return ""
+    t := SecType[btnId], v := SecValue[btnId]
+    if (t = "key")
+        return YellowKeyName(v)
+    if (t = "ocr")
+        return relief ? YellowReliefName(v) : YellowOcrName(v)
+    if (t = "seq") {
+        q := SeqParse(v)
+        if (!IsObject(q))
+            return "KEYS"
+        out := ""
+        for i, k in q.keys
+            out .= (i > 1 ? ">" : "") . KeyShortName(k)
+        StringUpper, out, out
+        return SubStr(out, 1, 17)
+    }
+    if (t = "click")
+        return "SCREEN CLICK"
+    return ""
 }
 
 ; Keep the Builder in sync when the profile changes while it
@@ -6254,8 +7218,9 @@ RefreshBuilderPresetControls() {
         GuiControl, Builder:Enable%editable%, %A_LoopField%
     note := editable ? "Editable copy - changes auto-save" : "Built-in preset - read only"
     GuiControl, Builder:, BuilderLockNote, %note%
-    status := editable ? "Click a button to set its FN secondary. Yellow text shows the current action. Changes auto-save."
-        : "This preset matches the box print. Choose Customize a Copy above to change any secondary functions."
+    ; Test mode, Export and Import work on every profile, presets too.
+    status := editable ? "Click a button to set its tap and FN functions. Yellow text shows the FN action. Changes auto-save."
+        : "This preset matches the box print. Choose Customize a Copy above to change any functions."
     GuiControl, Builder:, BuilderStatus, %status%
 }
 
@@ -6286,6 +7251,8 @@ BuilderGuiClose:
         Return
     ScrollViews.Delete(BuilderHwnd)
     BuilderHwnd := 0
+    BuilderTestMode := false
+    TestFnDown := false
     Gui, Builder:Destroy
 Return
 
