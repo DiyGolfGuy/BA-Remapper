@@ -1039,8 +1039,14 @@ OwnTextFocus() {
     WinGet, apid, PID, A
     if (apid != DllCall("GetCurrentProcessId", "UInt"))
         return false
-    ControlGetFocus, fc, A
-    return (InStr(fc, "Edit") = 1 || InStr(fc, "msctls_hotkey32") = 1)
+    ; GetFocus/GetClassName set no ErrorLevel (ControlGetFocus would
+    ; throw when called from inside a try with nothing focused).
+    h := DllCall("GetFocus", "Ptr")
+    if (!h)
+        return false
+    VarSetCapacity(fc, 256, 0)
+    DllCall("GetClassName", "Ptr", h, "Str", fc, "Int", 128)
+    return (fc = "Edit" || fc = "msctls_hotkey32")
 }
 
 ; ------------------------------------------------------------
@@ -1258,7 +1264,10 @@ ExportProfile(name, outFile) {
     src := ProfilesDir . "\" . name . ".ini"
     if (!FileExist(src))
         return false
-    FileDelete, %outFile%
+    ; (no ErrorLevel commands that can fail here: they would throw
+    ; when called from inside a try)
+    if (FileExist(outFile))
+        FileDelete, %outFile%
     IniWrite, %name%, %outFile%, BA Remapper, Name
     IniWrite, %AppVersion%, %outFile%, BA Remapper, Version
     IniRead, fn, %src%, Profile, FnButtonId, resetaim
@@ -2361,7 +2370,11 @@ ReliefWheel(dir) {
         return false
     if (!WinActive("ahk_id " . win.hwnd)) {
         WinActivate, % "ahk_id " . win.hwnd
-        WinWaitActive, % "ahk_id " . win.hwnd, , 0.6
+        Loop, 12 {
+            if (WinActive("ahk_id " . win.hwnd))
+                break
+            Sleep, 50
+        }
     }
     if (!WinActive("ahk_id " . win.hwnd))
         return false

@@ -411,7 +411,8 @@ UiSmoke:
         LoadProfile(imp.name)
         Assert(FnButtonId = "shotcam" && SecValue["clubup"] = "^+{F7}" && SecValue["left"] = "ReliefChoice2" && SecValue["heatmap"] = "300:2|{Enter}" && SecX["putt"] = 640 && ProfPrimary["teeright"] = "x" && imp.notes.MaxIndex() = 1, "Import keeps every function and notes the screen click from another PC")
         hostile := A_ScriptDir . "\hostile.baprofile"
-        FileDelete, %hostile%
+        if (FileExist(hostile))
+            FileDelete, %hostile%
         FileAppend, % "[BA Remapper]`nName=Basic Secondary`n[Profile]`nFnButtonId=mulligan`nheatmap_Type=key`nheatmap_Value={Click 100 100}`nputt_Type=seq`nputt_Value=100:{LWin}`nflyover_Type=ocr`nflyover_Value=RunAnything`nclubup_Type=key`nclubup_Value=#r`nteeleft_Primary={Raw}abc`nclubdown_Type=key`nclubdown_Value=b`n", %hostile%
         imp2 := ImportProfileFile(hostile)
         Assert(imp2.name = "Basic Secondary (imported)" && imp2.notes.MaxIndex() >= 6, "Hostile import renamed off the preset and every unsafe entry noted: " . imp2.name . " " . imp2.notes.MaxIndex())
