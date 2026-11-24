@@ -2279,6 +2279,7 @@ ReliefRead(win, reader := "") {
         o := OcrRegion(r.x, r.y, r.w, r.h)
     rel := ReliefParse(o.lines)
     rel.win := win
+    rel.lines := o.lines     ; kept for the trace when a read surprises
     rel.at := A_TickCount
     return rel
 }
@@ -2582,6 +2583,16 @@ ReliefNote(rel) {
     for i, o in rel.opts
         t .= (i = 1 ? ": " : ", ") . i . " " . o.text
     return t . (rel.header ? "" : " (panel title not read)")
+}
+
+; The panel corner's lines as read, for the trace: text@x,y,w,h.
+ReliefLinesText(rel) {
+    t := ""
+    if (!IsObject(rel.lines))
+        return t
+    for i, ln in rel.lines
+        t .= (i > 1 ? " | " : "") . ln.text . "@" . ln.x . "," . ln.y . "," . ln.w . "," . ln.h
+    return t
 }
 
 ReliefKeysText(keys) {
@@ -6185,6 +6196,8 @@ MulliganFollowUp() {
     keys := MulliganFollowKeys(rel)
     if (!keys.MaxIndex()) {
         OcrTrace("Mulligan button: Ctrl+M only (" . ((IsObject(rel) && rel.found) ? "relief list without Mulligan: " . ReliefNote(rel) : "no GSPro 4 relief list") . ")")
+        if (IsObject(rel) && rel.found)
+            OcrTrace("  read: " . ReliefLinesText(rel))
         return
     }
     OcrTrace("Mulligan button on the GSPro 4 relief list: Ctrl+M, then " . ReliefKeysText(keys))

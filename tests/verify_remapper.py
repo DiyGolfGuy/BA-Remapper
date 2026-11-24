@@ -1356,7 +1356,8 @@ ReliefShotSmoke:
             , ["relief-water-flagline.jpg", "LATERAL DROP|FLAG LINE|REHIT", 2, "3 {Enter}", "3", "f", "b", 1569, 2034]
             , ["relief-ob-rehit.jpg", "REHIT", 1, "1 {Enter}", "", "", "", 1569, 2039]
             , ["relief-water-mulligan.jpg", "LATERAL DROP|FLAG LINE|REHIT|MULLIGAN", 1, "3 {Enter}", "2", "", "", 1572, 2036]
-            , ["relief-water-mulligan-picked.jpg", "LATERAL DROP|FLAG LINE|REHIT|MULLIGAN", 4, "3 {Enter}", "1", "", "", 1572, 2036]]
+            , ["relief-water-mulligan-picked.jpg", "LATERAL DROP|FLAG LINE|REHIT|MULLIGAN", 4, "3 {Enter}", "1", "", "", 1572, 2036]
+            , ["relief-water-mulligan-callout.jpg", "LATERAL DROP|FLAG LINE|REHIT|MULLIGAN", 4, "3 {Enter}", "1", "", "", 1572, 2036]]
         ; v5.2.0 relief-list actions: [Choice 1, Choice 2, Choice 3, Lateral, Flag Line, Mulligan, Rotate L, Rotate R, Zoom In, Zoom Out, Recenter]
         more := {}
         more["relief-water-lateral.jpg"] := "1 {Enter}|2 {Enter}|3 {Enter}|1 {Enter}|2 {Enter}||q|e|@wheelup|@wheeldown|@recenter"
@@ -1364,6 +1365,7 @@ ReliefShotSmoke:
         more["relief-ob-rehit.jpg"] := "1 {Enter}||||||q|e|@wheelup|@wheeldown|@recenter"
         more["relief-water-mulligan.jpg"] := "1 {Enter}|2 {Enter}|3 {Enter}|1 {Enter}|2 {Enter}|4 {Enter}|q|e|@wheelup|@wheeldown|@recenter"
         more["relief-water-mulligan-picked.jpg"] := more["relief-water-mulligan.jpg"]
+        more["relief-water-mulligan-callout.jpg"] := more["relief-water-mulligan.jpg"]
         ; v5.2.1 cheat sheet labels [Drop Ball, Next Option, Move Forward, Move Back, OB Rehit] and the Mulligan button's follow-up
         labels := {}
         labels["relief-water-lateral.jpg"] := "ENTER: LATERAL|NEXT: 2 FLAG LINE|||REHIT + ENTER|mulligan:"
@@ -1371,6 +1373,7 @@ ReliefShotSmoke:
         labels["relief-ob-rehit.jpg"] := "ENTER: REHIT||||REHIT + ENTER|mulligan:"
         labels["relief-water-mulligan.jpg"] := "ENTER: LATERAL|NEXT: 2 FLAG LINE|||REHIT + ENTER|mulligan:4 {Enter}"
         labels["relief-water-mulligan-picked.jpg"] := "ENTER: MULLIGAN|NEXT: 1 LATERAL|||REHIT + ENTER|mulligan:4 {Enter}"
+        labels["relief-water-mulligan-callout.jpg"] := labels["relief-water-mulligan-picked.jpg"]
         for i, s in shots {
             src := LoadPicture(dir . "\" . s[1])
             VarSetCapacity(bm, 32, 0)
@@ -1407,8 +1410,10 @@ ReliefShotSmoke:
                 ok := ok && rcOk
                 ScrambleNote(ok ? "PASS" : "FAIL", "  new actions [" . extra . "]; Recenter " . (IsObject(rc) ? "at " . Round(rc.x + rc.w / 2) . "," . Round(rc.y + rc.h / 2) . " (want " . Round(s[8] * f) . "," . Round(s[9] * f) . ")" : "not found"))
                 ScrambleNote(ok ? "PASS" : "FAIL", s[1] . " at " . tw . "x" . th . ": " . (rel.found ? ReliefNote(rel) : "no panel") . "; highlighted " . sel . " (want " . s[3] . "); OB Rehit [" . plans[1] . "] Next Option [" . plans[2] . "] Move Forward [" . plans[3] . "] Move Back [" . plans[4] . "] Drop Ball/Rehit [" . plans[5] . "]")
-                if (!ok)
+                if (!ok) {
                     fails += 1
+                    ScrambleNote("FAIL", "  read: " . ReliefLinesText(rel))
+                }
                 if (hbm != src)
                     DllCall("DeleteObject", "Ptr", hbm)
             }
