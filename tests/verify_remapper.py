@@ -494,6 +494,25 @@ UiSmoke:
         Assert(MulliganPressTick > mulBefore, "The box's Ctrl+M is watched while GSPro is in front")
         SendSecondaryKey("{F9}")
         Assert(MulliganFollowKeys("").MaxIndex() = "" && MulliganFollowKeys({found: false, opts: []}).MaxIndex() = "" && ReliefKeysText(MulliganFollowKeys({found: true, opts: [{text: "REHIT"}, {text: "MULLIGAN"}]})) = "2 {Enter}" && MulliganFollowKeys({found: true, opts: [{text: "LATERAL DROP"}, {text: "FLAG LINE"}, {text: "REHIT"}]}).MaxIndex() = "", "Mulligan's number and Enter only when Mulligan is a choice")
+        ; v5.2.2: a title is the leading capital words of its line, so
+        ; GSPro's callout or a map label on the same row (one OCR line)
+        ; no longer hides it; off-column titles are dropped.
+        Assert(ReliefTitleText("4 MULLIGAN NO STROKE No stroke, re") = "MULLIGAN" && ReliefTitleText("MULLIGAN NO STROKE From your last spot · 475 yd to pin") = "MULLIGAN"
+            && ReliefTitleText("3 REHIT +1 From your l") = "REHIT" && ReliefTitleText("1 LATERAL DROP +1") = "LATERAL DROP" && ReliefTitleText("FLAG LINE") = "FLAG LINE"
+            && ReliefTitleText("Rough · 472 yd to pin") = "" && ReliefTitleText("RELIEF OPTIONS") = "" && ReliefTitleText("No stroke, replay the shot") = "" && ReliefTitleText("NO STROKE") = "", "Relief titles: leading capital words only")
+        water := [{text: "RELIEF OPTIONS", x: 55, y: 300, w: 230, h: 24}
+            , {text: "1 LATERAL DROP +1", x: 80, y: 380, w: 650, h: 40}, {text: "Rough · 160 yd to pin", x: 157, y: 430, w: 270, h: 30}
+            , {text: "2 FLAG LINE +1", x: 80, y: 530, w: 650, h: 40}, {text: "Rough · 163 yd to pin", x: 157, y: 580, w: 270, h: 30}
+            , {text: "3 REHIT +1", x: 80, y: 680, w: 650, h: 40}, {text: "From your last spot · 163 yd to pin", x: 157, y: 730, w: 420, h: 30}
+            , {text: "MULLIGAN", x: 900, y: 740, w: 128, h: 40}, {text: "From your last spot · 475 yd to pin", x: 870, y: 790, w: 158, h: 30}
+            , {text: "4 MULLIGAN NO STROKE No stroke, re", x: 80, y: 830, w: 948, h: 40}, {text: "Replay the shot, it doesn't count", x: 157, y: 880, w: 380, h: 30}]
+        wrel := ReliefParse(water)
+        Assert(ReliefNote(wrel) = "4 choices: 1 LATERAL DROP, 2 FLAG LINE, 3 REHIT, 4 MULLIGAN" && ReliefKeysText(MulliganFollowKeys(wrel)) = "4 {Enter}", "Water with the Mulligan callout on card 4's row and beside the panel: 4 choices, Mulligan = 4 Enter (" . ReliefNote(wrel) . ")")
+        ob := [{text: "YOUR OPTIONS", x: 55, y: 300, w: 200, h: 24}
+            , {text: "1 REHIT +1", x: 80, y: 380, w: 650, h: 40}, {text: "From your last spot · 200 yd to pin", x: 157, y: 430, w: 420, h: 30}
+            , {text: "MULLIGAN", x: 900, y: 382, w: 128, h: 40}, {text: "From your last spot · 200 yd to pin", x: 870, y: 432, w: 158, h: 30}]
+        orel := ReliefParse(ob)
+        Assert(ReliefNote(orel) = "1 choices: 1 REHIT" && !MulliganFollowKeys(orel).MaxIndex(), "OB with a callout title on Rehit's row: the panel column wins, no Mulligan (" . ReliefNote(orel) . ")")
         RemapActive := false
         mulBefore := MulliganPressTick
         SendLevel, 1
@@ -510,7 +529,21 @@ UiSmoke:
         SendEvent, ^m
         SendLevel, 0
         Sleep, 150
-        Assert(MulliganPressTick = mulBefore, "Ctrl+M in another window is not watched")
+        Assert(MulliganPressTick = mulBefore, "Ctrl+M in the Remapper's own window is not watched")
+        ; v5.2.2: GSPro open but another program in front (GSPro can
+        ; take Ctrl+M unfocused) - watched; nothing more without a list.
+        Run, notepad.exe
+        WinWait, ahk_exe notepad.exe, , 10
+        WinActivate, ahk_exe notepad.exe
+        WinWaitActive, ahk_exe notepad.exe, , 3
+        mulBefore := MulliganPressTick
+        SendLevel, 1
+        SendEvent, ^m
+        SendLevel, 0
+        Sleep, 900
+        Assert(MulliganPressTick > mulBefore && WinActive("ahk_exe notepad.exe"), "Ctrl+M with GSPro open behind another program is watched; nothing is pressed without the relief list")
+        WinClose, ahk_exe notepad.exe
+        Sleep, 300
         ; Builder test mode: box presses show what they do, nothing is sent.
         Gosub, ShowBuilder
         GuiControl, Builder:, BuilderTest, 1
@@ -1374,7 +1407,7 @@ ReliefShotSmoke:
         labels["relief-water-flagline.jpg"] := "ENTER: FLAG LINE|NEXT: 3 REHIT|CLOSER (F)|FURTHER BACK (B)|REHIT + ENTER|mulligan:"
         labels["relief-ob-rehit.jpg"] := "ENTER: REHIT||||REHIT + ENTER|mulligan:"
         labels["relief-water-mulligan.jpg"] := "ENTER: LATERAL|NEXT: 2 FLAG LINE|||REHIT + ENTER|mulligan:4 {Enter}"
-        labels["relief-water-mulligan-picked.jpg"] := "ENTER: MULLIGAN|NEXT: 1 LATERAL|||REHIT + ENTER|mulligan:4 {Enter}"
+        labels["relief-water-mulligan-picked.jpg"] := "ENTER: MULLIGAN|NEXT: 1 LATERAL|||REHIT + ENTER|mulligan:{Enter}"
         labels["relief-water-mulligan-callout.jpg"] := labels["relief-water-mulligan-picked.jpg"]
         labels["relief-water-mulligan-callout-row.jpg"] := labels["relief-water-mulligan-picked.jpg"]
         for i, s in shots {
@@ -1404,7 +1437,7 @@ ReliefShotSmoke:
                 lab := ""
                 for j, a in ["DropRehit", "NextOption", "MoveForward", "MoveBack", "Rehit"]
                     lab .= YellowReliefLabel(a, rel, sel) . "|"
-                lab .= "mulligan:" . ReliefKeysText(MulliganFollowKeys(rel))
+                lab .= "mulligan:" . ReliefKeysText(MulliganFollowKeys(rel, sel))
                 ok := ok && lab = labels[s[1]]
                 ScrambleNote(lab = labels[s[1]] ? "PASS" : "FAIL", "  sheet labels [" . lab . "]")
                 rc := ReliefFindRecenter(win, Func("ShotRead").Bind(hbm))
@@ -1452,7 +1485,7 @@ ReliefShotSmoke:
         ok := ReliefKeysText(ReliefPlan("Rehit", mul, 2).keys) = "1 {Enter}" && ReliefKeysText(ReliefPlan("NextOption", mul, 1).keys) = "2"
             && ReliefKeysText(ReliefPlan("NextOption", mul, 2).keys) = "1" && ReliefKeysText(ReliefPlan("NextOption", mul, 0).keys) = "2"
             && ReliefKeysText(ReliefPlan("MoveForward", mul, 1).keys) = "" && ReliefKeysText(ReliefPlan("DropRehit", mul, 2).keys) = "{Enter}"
-        ok := ok && ReliefKeysText(MulliganFollowKeys(mul)) = "2 {Enter}" && YellowReliefLabel("NextOption", mul, 1) = "NEXT: 2 MULLIGAN" && YellowReliefLabel("NextOption", mul, 2) = "NEXT: 1 REHIT"
+        ok := ok && ReliefKeysText(MulliganFollowKeys(mul)) = "2 {Enter}" && ReliefKeysText(MulliganFollowKeys(mul, 2)) = "{Enter}" && YellowReliefLabel("NextOption", mul, 1) = "NEXT: 2 MULLIGAN" && YellowReliefLabel("NextOption", mul, 2) = "NEXT: 1 REHIT"
             && YellowReliefLabel("DropRehit", mul, 2) = "ENTER: MULLIGAN" && YellowReliefLabel("MoveForward", mul, 1) = ""
         ScrambleNote(ok ? "PASS" : "FAIL", "OB with Mulligan: Rehit = 1 Enter, Next Option cycles 1-2, no Flag Line keys; Mulligan button = 2 Enter; labels NEXT: 2 MULLIGAN / ENTER: MULLIGAN")
         if (!ok)
