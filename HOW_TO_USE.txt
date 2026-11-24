@@ -39,12 +39,16 @@ areas at the learned spots for faster response.
 GSPro 4 shows water and OB relief as a numbered list at the top left
 (RELIEF OPTIONS or YOUR OPTIONS). The same buttons work there:
   OB Rehit:          Rehit's number, then Enter
-  Drop Ball / Rehit: Enter (takes the highlighted choice; on water
-                     GSPro shows the lie first)
-  Next Option:       highlights the next choice down the list
+  Drop Ball / Rehit: Enter on the highlighted choice. Lateral Drop and
+                     Flag Line show the lie first (PREVIEW LIE); press
+                     Drop Ball again to confirm the drop. Rehit and
+                     Mulligan are taken at once.
+  Next Option:       highlights the next choice down the list (1 to 4
+                     choices; Mulligan is listed when mulligans are on)
   Move Forward/Back: Closer / Further Back, when Flag Line is picked
-  Mulligan button:   when Mulligan is one of the choices, takes it
-                     (Ctrl+M as always, then its number and Enter)
+  Mulligan button:   when Mulligan is one of the choices, takes it:
+                     GSPro highlights Mulligan on Ctrl+M, and the box
+                     then presses Mulligan's number and Enter itself
 Preview Lie, rotating or moving the map: use the mouse or keyboard.
 Hold FN there and the cheat sheet follows the list: the top line shows
 the choice picked, and each button says what it does for that choice,
