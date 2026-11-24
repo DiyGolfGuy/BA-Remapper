@@ -10,6 +10,10 @@ OCR tests read a clean screen picture:
 
   relief-water-mulligan.jpg         Lateral Drop highlighted (as GSPro opens)
   relief-water-mulligan-picked.jpg  Mulligan highlighted (after Ctrl+M)
+  relief-water-mulligan-callout.jpg the same with GSPro's Mulligan callout
+                                    right beside the panel
+  relief-water-mulligan-callout-row.jpg  the callout's last line on card 4's
+                                    title row, map label under the panel
 
 Edited pictures, not captures: see fixtures/gspro/README.md.
 """
@@ -78,6 +82,40 @@ def main():
     blank(d, top4, blue_bg, blue_circle)
     card_text(d, top4, 4, "MULLIGAN", "Replay the shot, it doesn't count", "NO STROKE", (255, 255, 255))
     b.save(HERE / "relief-water-mulligan-picked.jpg", quality=95)
+
+    # Mulligan highlighted with GSPro's callout for it right beside the
+    # panel (Bruce's photos, 2026-11-24: the callout sits at the ball's
+    # last spot, which can be just right of the list).  Its lines share
+    # rows with card 4 and reach into the panel corner that is read.
+    c = b.copy()
+    d = ImageDraw.Draw(c)
+    cx0, cy0, cx1, cy1 = X1, top4 - 58, X1 + 494, top4 + 110
+    d.rounded_rectangle([cx0, cy0, cx1, cy1], radius=8, fill=(30, 34, 48), outline=(120, 220, 210), width=3)
+    mid = (cx0 + cx1) / 2
+    for text, f, fill, y in [("MULLIGAN", TITLE, (255, 255, 255), top4 - 40)
+                             , ("From your last spot  ·  475 yd to pin", DETAIL, (225, 230, 240), top4 + 30)
+                             , ("No stroke, replay the shot", font("DejaVuSans-Bold.ttf", 23), (140, 230, 200), top4 + 68)]:
+        d.text((mid - d.textlength(text, font=f) / 2, y), text, font=f, fill=fill)
+    c.save(HERE / "relief-water-mulligan-callout.jpg", quality=95)
+
+    # As in Bruce's photo 5301 (2026-11-24): the callout's last line,
+    # "No stroke, replay the shot", on the same row as card 4's title
+    # and badge, its left part inside the corner that is read, and the
+    # map's "3 REHIT" label just under the panel.  Moving the map moves
+    # these away - which is when the Mulligan button worked.
+    e = b.copy()
+    d = ImageDraw.Draw(e)
+    cx0, cy0, cx1, cy1 = X1 + 7, top4 - 96, X1 + 487, top4 + 94
+    d.rounded_rectangle([cx0, cy0, cx1, cy1], radius=8, fill=(30, 34, 48), outline=(120, 220, 210), width=3)
+    mid = (cx0 + cx1) / 2
+    for text, f, fill, y in [("MULLIGAN", TITLE, (255, 255, 255), top4 - 62)
+                             , ("From your last spot  ·  475 yd to pin", DETAIL, (225, 230, 240), top4 - 2)
+                             , ("No stroke, replay the shot", font("DejaVuSans-Bold.ttf", 23), (140, 230, 200), top4 + 41)]:
+        d.text((mid - d.textlength(text, font=f) / 2, y), text, font=f, fill=fill)
+    lab = font("DejaVuSans-Bold.ttf", 24)
+    d.rounded_rectangle([332, top4 + 222, 470, top4 + 262], radius=5, fill=(28, 30, 38))
+    d.text((344, top4 + 228), "3 REHIT", font=lab, fill=(255, 255, 255))
+    e.save(HERE / "relief-water-mulligan-callout-row.jpg", quality=95)
 
 if __name__ == "__main__":
     main()

@@ -2,7 +2,7 @@
 ;@Ahk2Exe-SetName BA Remapper
 ;@Ahk2Exe-SetDescription BA Custom Products Control Box Remapper
 ;@Ahk2Exe-SetCompanyName BA Custom Products
-;@Ahk2Exe-SetVersion 5.2.1
+;@Ahk2Exe-SetVersion 5.2.2
 ;@Ahk2Exe-SetOrigFilename BARemapper.exe
 ;@Ahk2Exe-SetMainIcon BARemapper.ico
 #SingleInstance Off
@@ -18,8 +18,18 @@ CoordMode, Mouse, Screen
 DllCall("SetProcessDPIAware")
 
 ; ============================================================
-;  BA CUSTOM PRODUCTS - CONTROL BOX REMAPPER v5.2.1
+;  BA CUSTOM PRODUCTS - CONTROL BOX REMAPPER v5.2.2
 ;  bacustomproducts@gmail.com   GitHub: DiyGolfGuy
+;
+;  CHANGES IN v5.2.2  (Bruce, Nov 24 2026)
+;  - Mulligan button on GSPro 4's water relief list: it highlighted
+;    Mulligan but did not press Enter (Bruce's log: the highlighted
+;    4th card was not read - its number circle started its line left
+;    of the title column).  The highlighted card now counts, a card
+;    without its detail line counts when it sits one spacing lower,
+;    a title is the capital words at the start of its line, the list
+;    is read up to three times, Enter alone takes a highlighted
+;    Mulligan, and Ctrl+M is watched with GSPro behind another window.
 ;
 ;  CHANGES IN v5.2.1  (Bruce, Nov 23 2026)
 ;  - Mulligan button on GSPro 4's relief list: when Mulligan is one of
@@ -362,7 +372,7 @@ DllCall("SetProcessDPIAware")
 ; ============================================================
 ;  CONSTANTS / PATHS
 ; ============================================================
-AppVersion := "5.2.1"
+AppVersion := "5.2.2"
 MainWinTitle    := "BA Custom Control Box Remapper"
 BuilderWinTitle := "BA Custom Control Box - Button Builder"
 HelpWinTitle    := "BA Custom Control Box - Help"
@@ -2279,6 +2289,7 @@ ReliefRead(win, reader := "") {
         o := OcrRegion(r.x, r.y, r.w, r.h)
     rel := ReliefParse(o.lines)
     rel.win := win
+    rel.lines := o.lines     ; kept for the trace when a read surprises
     rel.at := A_TickCount
     return rel
 }
@@ -2287,15 +2298,37 @@ ReliefRead(win, reader := "") {
 ; and the stroke badge ("+1", "NO STROKE") read on the same line
 ; are removed.  "" when the line is not a title.
 ReliefTitleText(text) {
-    t := Trim(text)
-    t := RegExReplace(t, "^\d\s+", "")
-    t := RegExReplace(t, "\s*\+\s*\d\s*$", "")
-    t := RegExReplace(t, "i)\s*no\s*stroke\s*$", "")
-    t := Trim(t)
-    ; Capitals, no digits.  One small letter per five capitals is
-    ; allowed: the reader turns a capital I into l now and then.
-    if (RegExMatch(t, "\d"))
-        return ""
+    ; A title is the run of capital words at the start of its line.
+    ; Anything after it is dropped: GSPro's callout for the picked
+    ; choice ("MULLIGAN / From your last spot ... / No stroke, replay
+    ; the shot") and the map's labels sit at the ball's last spot, which
+    ; can be right beside the panel; when one of their lines shares a
+    ; title's row the reader returns both as one line ("MULLIGAN NO
+    ; STROKE No stroke, re").  v5.2.1 then lost the title, so the
+    ; Mulligan button saw no Mulligan on water until the map was moved
+    ; (Bruce, 2026-11-24).  Leading 1-2 character pieces (the choice's
+    ; number circle, a speck) are skipped first.
+    run := "", started := false
+    Loop, Parse, text, %A_Space%%A_Tab%
+    {
+        w := A_LoopField
+        if (w = "")
+            continue
+        if (!started && StrLen(w) <= 2)
+            continue
+        started := true
+        ; Capitals; one small letter per word (from 3 letters) is
+        ; allowed: the reader turns a capital I into l now and then.
+        if (!RegExMatch(w, "^[A-Za-z]+$"))
+            break
+        up := StrLen(RegExReplace(w, "[^A-Z]", ""))
+        low := StrLen(w) - up
+        if (up < 1 || low > ((StrLen(w) >= 3) ? Max(1, StrLen(w) // 5) : 0))
+            break
+        run .= (run = "" ? "" : " ") . w
+    }
+    ; Mulligan's green badge reads as part of its title row.
+    t := Trim(RegExReplace(run, "i)\s+no(\s*stroke)?$", ""))
     up := StrLen(RegExReplace(t, "[^A-Z]", ""))
     low := StrLen(RegExReplace(t, "[^a-z]", ""))
     if (up < 4 || low > Max(1, up // 5))
@@ -2319,8 +2352,16 @@ ReliefParse(lines) {
         if (LevDist(n, "reliefoptions") <= 2 || LevDist(n, "youroptions") <= 2)
             rel.header := true
         t := ReliefTitleText(ln.text)
-        if (t != "")
-            cands.Push({x: ln.x, y: ln.y, w: ln.w, h: ln.h, text: t})
+        if (t != "") {
+            ; lead: the line starts with the choice's number circle.  The
+            ; highlighted card's white-on-blue number is read far more
+            ; often than the grey ones, and it starts its line about
+            ; 1.6 title heights left of the title (v5.2.1 then dropped
+            ; that card as off-column: on water the highlighted Mulligan,
+            ; card 4 - Bruce's log, 2026-11-24).  ax = the title's column.
+            lead := RegExMatch(Trim(ln.text), "^\S{1,2}\s") ? true : false
+            cands.Push({x: ln.x, y: ln.y, w: ln.w, h: ln.h, text: t, lead: lead, ax: ln.x + (lead ? Round(ln.h * 1.6) : 0)})
+        }
     }
     ; A title counts only with its detail line right under it.
     rows := []
@@ -2351,27 +2392,56 @@ ReliefParse(lines) {
     opts := []
     for i, c in sorted {
         last := opts.MaxIndex() ? opts[opts.MaxIndex()] : ""
-        if (IsObject(last) && Abs(c.y - last.y) < last.h * 0.5) {
+        ; (only pieces next to each other: a callout title on the same
+        ; row further right stays apart, and the column check drops it)
+        gap := (c.x < last.x) ? last.x - (c.x + c.w) : c.x - (last.x + last.w)
+        if (IsObject(last) && Abs(c.y - last.y) < last.h * 0.5 && gap <= Max(c.h, last.h) * 2) {
             if (c.x < last.x) {
                 last.text := c.text . " " . last.text
                 last.w := last.x + last.w - c.x
                 last.x := c.x
+                last.lead := c.lead, last.ax := c.ax
             } else {
                 last.text := last.text . " " . c.text
                 last.w := c.x + c.w - last.x
             }
             continue
         }
-        opts.Push({x: c.x, y: c.y, w: c.w, h: c.h, text: c.text})
+        opts.Push({x: c.x, y: c.y, w: c.w, h: c.h, text: c.text, lead: c.lead, ax: c.ax})
     }
-    ; One column: the panel's titles share their left edge.
-    xs := []
-    for i, o in opts
-        xs.Push(o.x)
-    mx := ReliefMedian(xs)
+    ; One column: the panel's titles share their left edge.  The
+    ; column is the largest group of titles lined up; on a tie the
+    ; leftmost, since the panel sits at the screen's left edge and a
+    ; callout or map label beside it is further right.
+    ; (Compared by ax, the title's own column.)
+    mx := "", best := -1
     for i, o in opts {
-        if (Abs(o.x - mx) <= o.h * 1.5)
+        cnt := 0
+        for j, q in opts {
+            if (Abs(q.ax - o.ax) <= o.h * 1.5)
+                cnt += 1
+        }
+        if (cnt > best || (cnt = best && o.ax < mx))
+            best := cnt, mx := o.ax
+    }
+    for i, o in opts {
+        if (Abs(o.ax - mx) <= o.h * 1.5)
             rel.opts.Push(o)
+    }
+    ; The card under the last one may have lost its detail line (cut
+    ; or run together with text beside the list): a title in the
+    ; column one card spacing lower is the next choice.
+    n := rel.opts.MaxIndex()
+    if (n >= 2) {
+        first := rel.opts[1], last := rel.opts[n]
+        pitch := (last.y - first.y) / (n - 1)
+        for i, c in cands {
+            dy := c.y - last.y
+            if (pitch > 0 && dy >= pitch * 0.7 && dy <= pitch * 1.3 && Abs(c.ax - mx) <= c.h * 1.5) {
+                rel.opts.Push({x: c.x, y: c.y, w: c.w, h: c.h, text: c.text, lead: c.lead, ax: c.ax})
+                break
+            }
+        }
     }
     rel.found := (rel.opts.MaxIndex() >= 1)
     return rel
@@ -2582,6 +2652,16 @@ ReliefNote(rel) {
     for i, o in rel.opts
         t .= (i = 1 ? ": " : ", ") . i . " " . o.text
     return t . (rel.header ? "" : " (panel title not read)")
+}
+
+; The panel corner's lines as read, for the trace: text@x,y,w,h.
+ReliefLinesText(rel) {
+    t := ""
+    if (!IsObject(rel.lines))
+        return t
+    for i, ln in rel.lines
+        t .= (i > 1 ? " | " : "") . ln.text . "@" . ln.x . "," . ln.y . "," . ln.w . "," . ln.h
+    return t
 }
 
 ReliefKeysText(keys) {
@@ -6135,11 +6215,21 @@ MulliganCheck:
 Return
 
 ; Cheap check run by the hook on every Ctrl+M: is GSPro in front?
+; GSPro in front - or (v5.2.2) open with another program's window in
+; front: GSPro can take the box's Ctrl+M (it highlights Mulligan)
+; while another window has the focus; the follow-up brings GSPro to
+; the front before it presses anything.  Never from the Remapper's
+; own windows.
 MulliganWatchWanted() {
     global GSProWinNeedle, GSProWinExclude
     WinGetTitle, t, A
     t := LowerStr(t)
-    return InStr(t, LowerStr(GSProWinNeedle)) && !(GSProWinExclude != "" && InStr(t, LowerStr(GSProWinExclude)))
+    if (InStr(t, LowerStr(GSProWinNeedle)) && !(GSProWinExclude != "" && InStr(t, LowerStr(GSProWinExclude))))
+        return true
+    WinGet, apid, PID, A
+    if (apid = DllCall("GetCurrentProcessId"))
+        return false
+    return ClientRectByTitle(GSProWinNeedle, GSProWinExclude).found
 }
 
 MulliganPressed() {
@@ -6151,11 +6241,16 @@ MulliganPressed() {
 ; The keys the Mulligan button adds after its Ctrl+M on this screen:
 ; the Mulligan choice's number and Enter when the relief list offers
 ; a Mulligan, otherwise none.
-MulliganFollowKeys(rel) {
+; sel: the highlighted choice.  GSPro's Ctrl+M already highlights
+; Mulligan; then Enter alone takes it (TAKE MULLIGAN), as Bruce asked.
+; If the highlight is elsewhere (or not seen yet) its number goes first.
+MulliganFollowKeys(rel, sel := 0) {
     if (!IsObject(rel) || !rel.found)
         return []
     n := ReliefFind(rel, "mulligan")
-    return n ? [n . "", "{Enter}"] : []
+    if (!n)
+        return []
+    return (sel = n) ? ["{Enter}"] : [n . "", "{Enter}"]
 }
 
 MulliganFollowUp() {
@@ -6174,21 +6269,55 @@ MulliganFollowUp() {
     t0 := A_TickCount
     while (GetKeyState("Ctrl") && (A_TickCount - t0) < 500)
         Sleep, 15
+    ; Up to three reads, 0.35 s apart, while the list is seen without
+    ; Mulligan: after Ctrl+M GSPro flies the map to the last spot and
+    ; its callout and labels pass beside the list (the box missed on
+    ; water until the map was moved - Bruce, 2026-11-24).  No list at
+    ; all (a mulligan in normal play): one read.
     OcrLockTake()
-    rel := ""
-    try {
-        rel := ReliefProbe()
-    } catch appErr {
-        LogAppError("MulliganProbe", appErr)
+    rel := "", keys := [], sel := 0
+    Loop, 3 {
+        if (A_Index > 1)
+            Sleep, 350
+        try {
+            rel := ReliefProbe()
+        } catch appErr {
+            LogAppError("MulliganProbe", appErr)
+        }
+        if (!IsObject(rel) || (!rel.found && !rel.header))
+            break
+        sel := rel.found ? ReliefSelected(rel) : 0
+        keys := MulliganFollowKeys(rel, sel)
+        if (keys.MaxIndex())
+            break
+        OcrTrace("Mulligan button: read " . A_Index . " sees " . (rel.found ? "the list without Mulligan: " . ReliefNote(rel) : "the panel title only"))
+        OcrTrace("  read: " . ReliefLinesText(rel))
     }
     OcrBusy := false
-    keys := MulliganFollowKeys(rel)
     if (!keys.MaxIndex()) {
-        OcrTrace("Mulligan button: Ctrl+M only (" . ((IsObject(rel) && rel.found) ? "relief list without Mulligan: " . ReliefNote(rel) : "no GSPro 4 relief list") . ")")
+        OcrTrace("Mulligan button: Ctrl+M only (" . ((IsObject(rel) && (rel.found || rel.header)) ? "no Mulligan on the relief list" : "no GSPro 4 relief list") . ")")
         return
     }
-    OcrTrace("Mulligan button on the GSPro 4 relief list: Ctrl+M, then " . ReliefKeysText(keys))
-    ReliefRun("ReliefMulligan", rel)
+    OcrTrace("Mulligan button on the GSPro 4 relief list (" . ReliefNote(rel) . "; highlighted " . sel . "): Ctrl+M, then " . ReliefKeysText(keys))
+    MulliganSend(keys)
+}
+
+; Mulligan's number (when needed) and Enter, held and delivered to
+; GSPro (SendSecondaryKey brings it to the front first).
+MulliganSend(keys) {
+    global ReliefLast, ReliefExpectSel, ReliefLastAct, ReliefLastActTick
+    if (ReliefLastAct = "ReliefMulligan" && (A_TickCount - ReliefLastActTick) < 900)
+        return
+    ReliefLastAct := "ReliefMulligan"
+    for i, k in keys {
+        if (i > 1)
+            Sleep, 180   ; GSPro takes the pick before Enter
+        if (!SendSecondaryKey(k))
+            break
+    }
+    ReliefLastActTick := A_TickCount
+    ReliefLast := ""
+    ReliefExpectSel := 0
 }
 
 ; Parks the cursor at the corner once a click burst ends (kept
