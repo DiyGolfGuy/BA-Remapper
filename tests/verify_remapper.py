@@ -532,7 +532,7 @@ UiSmoke:
         Assert(MulliganPressTick = mulBefore, "Ctrl+M in the Remapper's own window is not watched")
         ; v5.2.2: GSPro open but another program in front (GSPro can
         ; take Ctrl+M unfocused) - watched; nothing more without a list.
-        Run, notepad.exe
+        Run, notepad.exe, %A_WinDir%   ; not the test folder: it must not hold that open
         WinWait, ahk_exe notepad.exe, , 10
         WinActivate, ahk_exe notepad.exe
         WinWaitActive, ahk_exe notepad.exe, , 3
@@ -542,8 +542,8 @@ UiSmoke:
         SendLevel, 0
         Sleep, 900
         Assert(MulliganPressTick > mulBefore && WinActive("ahk_exe notepad.exe"), "Ctrl+M with GSPro open behind another program is watched; nothing is pressed without the relief list")
-        WinClose, ahk_exe notepad.exe
-        Sleep, 300
+        WinKill, ahk_exe notepad.exe   ; Ctrl+M typed a line break: no save prompt
+        WinWaitClose, ahk_exe notepad.exe, , 5
         ; Builder test mode: box presses show what they do, nothing is sent.
         Gosub, ShowBuilder
         GuiControl, Builder:, BuilderTest, 1
