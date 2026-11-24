@@ -2,7 +2,7 @@
 ;@Ahk2Exe-SetName BA Remapper
 ;@Ahk2Exe-SetDescription BA Custom Products Control Box Remapper
 ;@Ahk2Exe-SetCompanyName BA Custom Products
-;@Ahk2Exe-SetVersion 5.2.0
+;@Ahk2Exe-SetVersion 5.2.1
 ;@Ahk2Exe-SetOrigFilename BARemapper.exe
 ;@Ahk2Exe-SetMainIcon BARemapper.ico
 #SingleInstance Off
@@ -18,8 +18,16 @@ CoordMode, Mouse, Screen
 DllCall("SetProcessDPIAware")
 
 ; ============================================================
-;  BA CUSTOM PRODUCTS - CONTROL BOX REMAPPER v5.2.0
+;  BA CUSTOM PRODUCTS - CONTROL BOX REMAPPER v5.2.1
 ;  bacustomproducts@gmail.com   GitHub: DiyGolfGuy
+;
+;  CHANGES IN v5.2.1  (Bruce, Nov 23 2026)
+;  - Mulligan button on GSPro 4's relief list: when Mulligan is one of
+;    the choices, the box takes it (Ctrl+M as always, then Mulligan's
+;    number and Enter).  Anywhere else Ctrl+M is unchanged.
+;  - Cheat sheet: the Drop Ball / Rehit button reads ENTER on the
+;    relief list, and the sheet updates to the relief-list labels
+;    once the FN-down read sees the list.
 ;
 ;  CHANGES IN v5.2.0  (Bruce, Nov 16 2026: "lets do all of it")
 ;  Custom layouts:
@@ -354,7 +362,7 @@ DllCall("SetProcessDPIAware")
 ; ============================================================
 ;  CONSTANTS / PATHS
 ; ============================================================
-AppVersion := "5.2.0"
+AppVersion := "5.2.1"
 MainWinTitle    := "BA Custom Control Box Remapper"
 BuilderWinTitle := "BA Custom Control Box - Button Builder"
 HelpWinTitle    := "BA Custom Control Box - Help"
@@ -642,6 +650,8 @@ CheatPosX := 0               ; its spot: 0 = left ... 1000 = right of the free s
 CheatPosY := 1000            ; 0 = top ... 1000 = bottom (FnCheatY); default bottom left
 CheatAdjusting := false      ; Size and place mode (main window button) is open
 CheatAdjHwnd := 0
+CheatReliefShown := false    ; the sheet on screen has the relief-list labels
+MulliganPressTick := 0
 CheatAdjOrig := ""
 CheatDrag := ""
 CheatVisible := false
@@ -1221,7 +1231,7 @@ CheatGeom(win) {
 ; click-through so it can be dragged, with a green outline.
 CheatDraw(adjust := false) {
     global ActiveProfile, CheatVisible, CheatExcluded, CheatShownFor, ReliefLast
-    global CheatPanelW, CheatPanelH, CheatHwnd, CheatAdjHwnd
+    global CheatPanelW, CheatPanelH, CheatHwnd, CheatAdjHwnd, CheatReliefShown
     win := CheatArea(adjust)
     if (!win.found || (!adjust && !WinActive("ahk_id " . win.hwnd))) {
         CheatHide(adjust)
@@ -1238,6 +1248,7 @@ CheatDraw(adjust := false) {
         return
     }
     relief := IsObject(ReliefLast) && ReliefLast.found && (A_TickCount - ReliefLast.at) < 4000
+    CheatReliefShown := relief
     if (adjust) {
         ; Same window as the scramble overlay minus click-through
         ; (WS_EX_TRANSPARENT), so it takes the mouse for dragging;
@@ -6076,6 +6087,70 @@ OcrDeferred:
     SmartAction(dfAct)
 Return
 
+; Mulligan button (see MULLIGAN BUTTON): the read runs from a timer
+; a moment after the press, so GSPro has taken the Ctrl+M and the
+; hotkey thread never waits on OCR.
+MulliganCheck:
+    MulliganFollowUp()
+Return
+
+; Cheap check run by the hook on every Ctrl+M: is GSPro in front?
+MulliganWatchWanted() {
+    global GSProWinNeedle, GSProWinExclude
+    WinGetTitle, t, A
+    t := LowerStr(t)
+    return InStr(t, LowerStr(GSProWinNeedle)) && !(GSProWinExclude != "" && InStr(t, LowerStr(GSProWinExclude)))
+}
+
+MulliganPressed() {
+    global MulliganPressTick
+    MulliganPressTick := A_TickCount
+    SetTimer, MulliganCheck, -150
+}
+
+; The keys the Mulligan button adds after its Ctrl+M on this screen:
+; the Mulligan choice's number and Enter when the relief list offers
+; a Mulligan, otherwise none.
+MulliganFollowKeys(rel) {
+    if (!IsObject(rel) || !rel.found)
+        return []
+    n := ReliefFind(rel, "mulligan")
+    return n ? [n . "", "{Enter}"] : []
+}
+
+MulliganFollowUp() {
+    global OcrBusy, MulliganPressTick
+    ; Up to 1.5 s after the press for a scan in flight to finish;
+    ; this timer returns between checks so that scan keeps running.
+    OcrStaleCheck()
+    if (OcrBusy) {
+        if ((A_TickCount - MulliganPressTick) < 1500)
+            SetTimer, MulliganCheck, -60
+        else
+            OcrTrace("Mulligan button: OCR busy, Ctrl+M only")
+        return
+    }
+    ; the box's Ctrl must be up before a number key goes out
+    t0 := A_TickCount
+    while (GetKeyState("Ctrl") && (A_TickCount - t0) < 500)
+        Sleep, 15
+    OcrLockTake()
+    rel := ""
+    try {
+        rel := ReliefProbe()
+    } catch appErr {
+        LogAppError("MulliganProbe", appErr)
+    }
+    OcrBusy := false
+    keys := MulliganFollowKeys(rel)
+    if (!keys.MaxIndex()) {
+        OcrTrace("Mulligan button: Ctrl+M only (" . ((IsObject(rel) && rel.found) ? "relief list without Mulligan: " . ReliefNote(rel) : "no GSPro 4 relief list") . ")")
+        return
+    }
+    OcrTrace("Mulligan button on the GSPro 4 relief list: Ctrl+M, then " . ReliefKeysText(keys))
+    ReliefRun("ReliefMulligan", rel)
+}
+
 ; Parks the cursor at the corner once a click burst ends (kept
 ; hovering between rapid repeats so repeat clicks are instant).
 ParkTick:
@@ -6436,6 +6511,24 @@ Return
 Return
 
 ; ============================================================
+;  MULLIGAN BUTTON  (v5.2.1)
+;
+;  The box's Mulligan button sends Ctrl+M itself.  On GSPro 4's
+;  relief list (OB "YOUR OPTIONS", water "RELIEF OPTIONS") Ctrl+M
+;  only highlights the Mulligan choice; the player still had to
+;  press Enter (FN + Drop Ball).  Bruce's ruling (2026-11-23), the
+;  safe version: Ctrl+M still goes to GSPro untouched and at once
+;  (~ = pass-through), then one read of the panel corner; only when
+;  Mulligan is a choice on that list does the box press its number
+;  and Enter.  No list, or no Mulligan on it (mulligans off): nothing
+;  more is sent, so Enter never takes a drop or rehit by mistake.
+;  Mapping OFF, or GSPro not the active window: not watched at all.
+; ============================================================
+#If (RemapActive && MulliganWatchWanted())
+~^m::MulliganPressed()
+#If
+
+; ============================================================
 ;  BOX KEY HOTKEYS  (active only when RemapActive)
 ; ============================================================
 #If (RemapActive)
@@ -6657,7 +6750,9 @@ ShowHelp:
 
     TIPS
     - Ctrl+F12 toggles mapping ON/OFF system-wide
-    - Ctrl+M (Mulligan) always works as normal
+    - Ctrl+M (Mulligan) works as normal; on GSPro 4's relief
+      list it also takes the Mulligan (its number, then Enter)
+      when Mulligan is one of the choices
     - Double-click the .exe anytime to reopen the GUI
     - Click the tray icon to reopen the GUI
     - Minimize to Tray keeps mapping running; Exit fully quits
@@ -6747,8 +6842,14 @@ CheatTick:
         CheatHide()
         Return
     }
-    if (!WinActive("ahk_id " . CheatShownFor))
+    if (!WinActive("ahk_id " . CheatShownFor)) {
         CheatHide()
+        Return
+    }
+    ; The FN-down read of the relief panel can land after the sheet
+    ; was drawn: redraw once with the relief-list labels (ENTER ...).
+    if (!CheatReliefShown && !CheatAdjusting && IsObject(ReliefLast) && ReliefLast.found && (A_TickCount - ReliefLast.at) < 4000)
+        CheatDraw()
 Return
 
 BuilderExport:
@@ -7460,7 +7561,7 @@ YellowOcrName(actionId) {
 ; On GSPro 4's relief list the five basic actions mean:
 YellowReliefName(actionId) {
     static n := {MoveForward: "CLOSER (F)", MoveBack: "FURTHER BACK (B)", NextOption: "NEXT CHOICE"
-        , DropRehit: "TAKE CHOICE", Rehit: "REHIT + ENTER"}
+        , DropRehit: "ENTER", Rehit: "REHIT + ENTER"}
     return n.HasKey(actionId) ? n[actionId] : YellowOcrName(actionId)
 }
 
