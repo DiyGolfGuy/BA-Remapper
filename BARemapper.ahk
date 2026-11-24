@@ -7646,16 +7646,11 @@ YellowSecName(btnId, relief := false) {
     if (!SecType.HasKey(btnId) || SecType[btnId] = "" || SecType[btnId] = "none")
         return ""
     t := SecType[btnId], v := SecValue[btnId]
-    if (t = "key") {
-        ; GSPro's own hint on the relief list: "B / F further back /
-        ; closer" while Flag Line is picked.
-        if (IsObject(relief) && (v = "b" || v = "f")) {
-            flag := ReliefFind(relief.rel, "flag line")
-            if (flag && relief.sel = flag)
-                return (v = "b") ? "FURTHER BACK (B)" : "CLOSER (F)"
-        }
+    ; A key keeps its own name everywhere: Clear View (B) stays CLEAR
+    ; VIEW on the relief list too (Bruce, 2026-11-23); only Move
+    ; Forward / Move Back show Closer / Further Back on Flag Line.
+    if (t = "key")
         return YellowKeyName(v)
-    }
     if (t = "ocr")
         return IsObject(relief) ? YellowReliefLabel(v, relief.rel, relief.sel) : (relief ? YellowReliefName(v) : YellowOcrName(v))
     if (t = "seq") {

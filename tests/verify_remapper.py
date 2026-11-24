@@ -440,7 +440,7 @@ UiSmoke:
         yl := {}
         for i, m in CheatModel()
             yl[m.id] := m.yellow
-        Assert(yl.right = "ENTER: FLAG LINE" && yl.left = "NEXT: 3 REHIT" && yl.up = "CLOSER (F)" && yl.down = "FURTHER BACK (B)" && yl.teeleft = "REHIT + ENTER" && yl.clubup = "FURTHER BACK (B)" && yl.mulligan = "", "Relief list, Flag Line picked: ENTER: FLAG LINE, NEXT: 3 REHIT, Closer / Further Back, B = further back: " . yl.right . " / " . yl.left . " / " . yl.up . " / " . yl.clubup)
+        Assert(yl.right = "ENTER: FLAG LINE" && yl.left = "NEXT: 3 REHIT" && yl.up = "CLOSER (F)" && yl.down = "FURTHER BACK (B)" && yl.teeleft = "REHIT + ENTER" && yl.clubup = YellowKeyName("b") && yl.clubdown = YellowKeyName("b") && yl.mulligan = "", "Relief list, Flag Line picked: ENTER: FLAG LINE, NEXT: 3 REHIT, Closer / Further Back on the arrows, Clear View stays Clear View: " . yl.right . " / " . yl.left . " / " . yl.up . " / " . yl.clubup)
         ReliefExpectSel := 1, ReliefExpectTick := A_TickCount
         yl := {}
         for i, m in CheatModel()

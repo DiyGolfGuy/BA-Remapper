@@ -13,7 +13,7 @@ Hold FN on the relief list and the cheat sheet shows what each button does on th
 - The top line shows the pick, for example **RELIEF LIST: 2 FLAG LINE PICKED**.
 - Drop Ball / Rehit reads **ENTER: FLAG LINE** - Enter on the highlighted choice. Lateral Drop and Flag Line show the lie first (PREVIEW LIE); press Drop Ball again to confirm the drop (CONFIRM DROP). Rehit and Mulligan are taken at once.
 - Next Option reads **NEXT: 3 REHIT** - the choice it moves to, going down the list (1 to 4 choices, depending on the screen and mulligans).
-- Move Forward / Move Back read **CLOSER (F)** / **FURTHER BACK (B)** only while Flag Line is picked, like GSPro's own bottom bar; the B (Clear View) buttons show FURTHER BACK there too, because that is what B does on that screen.
+- Move Forward / Move Back (the up / down arrows) read **CLOSER (F)** / **FURTHER BACK (B)** only while Flag Line is picked, like GSPro's own bottom bar. Clear View on the club buttons stays CLEAR VIEW.
 - OB Rehit reads **REHIT + ENTER**; the Mulligan button reads **MULLIGAN + ENTER** when Mulligan is a choice.
 
 Away from the relief list the sheet shows the printed names as before.
