@@ -650,7 +650,8 @@ CheatPosX := 0               ; its spot: 0 = left ... 1000 = right of the free s
 CheatPosY := 1000            ; 0 = top ... 1000 = bottom (FnCheatY); default bottom left
 CheatAdjusting := false      ; Size and place mode (main window button) is open
 CheatAdjHwnd := 0
-CheatReliefShown := false    ; the sheet on screen has the relief-list labels
+CheatShownKey := ""          ; relief state the sheet on screen was drawn for
+CheatPendingKey := ""
 MulliganPressTick := 0
 CheatAdjOrig := ""
 CheatDrag := ""
@@ -1164,17 +1165,51 @@ CheatBoxButtons() {
 }
 
 ; The yellow print for every button: [{id, name, yellow, fn}]
-CheatModel() {
-    global FnButtonId, ReliefLast
-    relief := IsObject(ReliefLast) && ReliefLast.found && (A_TickCount - ReliefLast.at) < 4000
+; st: CheatReliefState() (taken fresh when not given).  On GSPro 4's
+; relief list each label says what the press does on that screen for
+; the choice highlighted right now (v5.2.1).
+CheatModel(st := "") {
+    global FnButtonId
+    if (!IsObject(st))
+        st := CheatReliefState()
     model := []
     for i, b in CheatBoxButtons() {
         id := b[1]
         isFn := (id = FnButtonId)
-        yellow := (id = "mulligan") ? "" : (isFn ? "FN - HOLD" : YellowSecName(id, relief))
+        if (id = "mulligan")
+            yellow := (st.on && ReliefFind(st.rel, "mulligan")) ? "MULLIGAN + ENTER" : ""
+        else
+            yellow := isFn ? "FN - HOLD" : YellowSecName(id, st.on ? st : false)
         model.Push({id: id, name: b[4], yellow: yellow, fn: isFn, x: b[2], y: b[3]})
     }
     return model
+}
+
+; Is GSPro 4's relief list up (read in the last 4 s; FN-down reads
+; keep it fresh) and which choice is highlighted?  The highlight is
+; read from the pixels of the blue card - no OCR - or taken from a
+; Next Option press of the last 0.7 s while GSPro redraws.
+CheatReliefState() {
+    global ReliefLast, ReliefExpectSel, ReliefExpectTick
+    rel := ReliefLast
+    if (!IsObject(rel) || !rel.found || (A_TickCount - rel.at) >= 4000)
+        return {on: false, sel: 0, key: "off"}
+    sel := ReliefSelected(rel)
+    if (ReliefExpectSel && (A_TickCount - ReliefExpectTick) < 700)
+        sel := ReliefExpectSel
+    names := ""
+    for i, o in rel.opts
+        names .= o.text . "|"
+    return {on: true, rel: rel, sel: sel, key: sel . "|" . names}
+}
+
+; A relief choice's title, short enough for one line of yellow print.
+ReliefShortName(t) {
+    t := Trim(t)
+    StringUpper, t, t
+    if (FuzzyIs(t, "lateral drop"))
+        return "LATERAL"
+    return t
 }
 
 ; Saved size: whole percent of GSPro's width, 20 to 80.
@@ -1231,13 +1266,14 @@ CheatGeom(win) {
 ; click-through so it can be dragged, with a green outline.
 CheatDraw(adjust := false) {
     global ActiveProfile, CheatVisible, CheatExcluded, CheatShownFor, ReliefLast
-    global CheatPanelW, CheatPanelH, CheatHwnd, CheatAdjHwnd, CheatReliefShown
+    global CheatPanelW, CheatPanelH, CheatHwnd, CheatAdjHwnd, CheatShownKey
     win := CheatArea(adjust)
     if (!win.found || (!adjust && !WinActive("ahk_id " . win.hwnd))) {
         CheatHide(adjust)
         return
     }
-    model := CheatModel()
+    st := CheatReliefState()
+    model := CheatModel(st)
     any := false
     for i, m in model {
         if (!m.fn && m.yellow != "")
@@ -1247,8 +1283,8 @@ CheatDraw(adjust := false) {
         CheatHide()
         return
     }
-    relief := IsObject(ReliefLast) && ReliefLast.found && (A_TickCount - ReliefLast.at) < 4000
-    CheatReliefShown := relief
+    relief := st.on
+    CheatShownKey := st.key
     if (adjust) {
         ; Same window as the scramble overlay minus click-through
         ; (WS_EX_TRANSPARENT), so it takes the mouse for dragging;
@@ -1272,9 +1308,12 @@ CheatDraw(adjust := false) {
     ; broken in the middle of the word.
     longPt := Max(6, Round(10.5 * sc)) * px2pt * 96 / 72
     yelPt := Max(6, Round(15 * sc)) * px2pt * 96 / 72
+    yelSmallPt := Max(6, Round(13 * sc)) * px2pt * 96 / 72
     headPt := Max(7, Round(18 * sc)) * px2pt * 96 / 72
     Gui, Cheat:Margin, 0, 0
-    title := "HOLD FN + BUTTON  -  " . ActiveProfile . (relief ? "  -  GSPro 4 relief list" : "")
+    title := "HOLD FN + BUTTON  -  " . ActiveProfile
+    if (relief)
+        title := "HOLD FN + BUTTON  -  RELIEF LIST" . ((st.sel && st.rel.opts.HasKey(st.sel)) ? ":  " . st.sel . " " . ReliefShortName(st.rel.opts[st.sel].text) . " PICKED" : "")
     if (adjust)
         title := "DRAG TO PLACE  -  " . ActiveProfile
     Gui, Cheat:Font, s%headPt% cFFFFFF Bold, Segoe UI
@@ -1301,9 +1340,10 @@ CheatDraw(adjust := false) {
             ; One line (0x200 = SS_CENTERIMAGE, never wraps into the
             ; button below), wide enough for custom names, kept inside
             ; the panel.
-            yw := Round(220 * sc), yh := Round(24 * sc), yy := by + bs + Round(3 * sc)
+            yw := Round(250 * sc), yh := Round(24 * sc), yy := by + bs + Round(3 * sc)
             yx := Max(Round(pad / 2), Min(bx + (bs - yw) // 2, pw - Round(pad / 2) - yw))
-            Gui, Cheat:Font, s%yelPt% cFFD400 Bold, Segoe UI
+            yPt := (StrLen(m.yellow) > 15) ? yelSmallPt : yelPt
+            Gui, Cheat:Font, s%yPt% cFFD400 Bold, Segoe UI
             Gui, Cheat:Add, Text, x%yx% y%yy% w%yw% h%yh% Center +0x200 BackgroundTrans, % m.yellow
         }
     }
@@ -6654,6 +6694,10 @@ ShowHelp:
       function for the current profile shows.  Size and
       Place... (main window) shows it over GSPro: slide the
       size, drag it where you want it, then Lock it in.
+      On GSPro 4's relief list it follows the screen: the
+      top line shows the choice picked and each button says
+      what it does for it (ENTER: FLAG LINE, NEXT: 3 REHIT,
+      CLOSER (F) / FURTHER BACK (B) with Flag Line picked).
 
     BUILT-IN PRESET: "Basic Secondary"
     QUICK START: pick "Basic Secondary" in the profile dropdown and the
@@ -6846,10 +6890,22 @@ CheatTick:
         CheatHide()
         Return
     }
-    ; The FN-down read of the relief panel can land after the sheet
-    ; was drawn: redraw once with the relief-list labels (ENTER ...).
-    if (!CheatReliefShown && !CheatAdjusting && IsObject(ReliefLast) && ReliefLast.found && (A_TickCount - ReliefLast.at) < 4000)
+    ; Follow GSPro 4's relief list: the FN-down read lands after the
+    ; sheet was drawn, the player picks another choice (box, number
+    ; key or mouse), or the list closes - redraw for what is up now.
+    ; (A new state must be seen on two ticks in a row, so a frame of
+    ; GSPro's own redraw never makes the sheet flicker.)
+    if (CheatAdjusting)
+        Return
+    cheatNowKey := CheatReliefState().key
+    if (cheatNowKey = CheatShownKey) {
+        CheatPendingKey := ""
+    } else if (cheatNowKey = CheatPendingKey) {
+        CheatPendingKey := ""
         CheatDraw()
+    } else {
+        CheatPendingKey := cheatNowKey
+    }
 Return
 
 BuilderExport:
@@ -7565,16 +7621,43 @@ YellowReliefName(actionId) {
     return n.HasKey(actionId) ? n[actionId] : YellowOcrName(actionId)
 }
 
+; What a Smart Click does on the relief list right now, from the same
+; plan the press would run: "" when it does nothing there.  Drop Ball
+; is Enter on the highlighted choice, Next Option names the choice it
+; moves to, Closer / Further Back show only with Flag Line picked.
+YellowReliefLabel(actionId, rel, sel) {
+    plan := ReliefPlan(actionId, rel, sel)
+    if (!plan.keys.MaxIndex())
+        return ""
+    if (actionId = "DropRehit")
+        return (sel && rel.opts.HasKey(sel)) ? "ENTER: " . ReliefShortName(rel.opts[sel].text) : "ENTER"
+    if (actionId = "NextOption") {
+        k := plan.keys[1] + 0
+        return "NEXT: " . k . (rel.opts.HasKey(k) ? " " . ReliefShortName(rel.opts[k].text) : "")
+    }
+    return YellowReliefName(actionId)
+}
+
 ; The yellow print for one button: what FN + it does ("" = nothing).
+; relief: a CheatReliefState() with on = true for GSPro 4's relief
+; list (true = the generic relief names), false elsewhere.
 YellowSecName(btnId, relief := false) {
     global SecType, SecValue
     if (!SecType.HasKey(btnId) || SecType[btnId] = "" || SecType[btnId] = "none")
         return ""
     t := SecType[btnId], v := SecValue[btnId]
-    if (t = "key")
+    if (t = "key") {
+        ; GSPro's own hint on the relief list: "B / F further back /
+        ; closer" while Flag Line is picked.
+        if (IsObject(relief) && (v = "b" || v = "f")) {
+            flag := ReliefFind(relief.rel, "flag line")
+            if (flag && relief.sel = flag)
+                return (v = "b") ? "FURTHER BACK (B)" : "CLOSER (F)"
+        }
         return YellowKeyName(v)
+    }
     if (t = "ocr")
-        return relief ? YellowReliefName(v) : YellowOcrName(v)
+        return IsObject(relief) ? YellowReliefLabel(v, relief.rel, relief.sel) : (relief ? YellowReliefName(v) : YellowOcrName(v))
     if (t = "seq") {
         q := SeqParse(v)
         if (!IsObject(q))

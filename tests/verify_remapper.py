@@ -432,6 +432,85 @@ UiSmoke:
         Gosub, CheatAdjCancel
         Assert(CheatSizePct = 50 && CheatPosX = dragX && CheatPosY = dragY && !CheatAdjusting && !CheatVisible, "Cancel keeps the locked size and spot")
         CheatSizePct := 35, CheatPosX := 0, CheatPosY := 1000
+        ; ---- v5.2.1: the sheet follows GSPro 4's relief list ----
+        ; Labels from the plan each press would run, for the choice
+        ; highlighted now (ReliefExpectSel stands in for the blue card).
+        fakeRel := {found: true, at: A_TickCount, opts: [{text: "LATERAL DROP", x: 5, y: 5, w: 80, h: 20}, {text: "FLAG LINE", x: 5, y: 40, w: 80, h: 20}, {text: "REHIT", x: 5, y: 75, w: 80, h: 20}]}
+        ReliefLast := fakeRel, ReliefExpectSel := 2, ReliefExpectTick := A_TickCount
+        yl := {}
+        for i, m in CheatModel()
+            yl[m.id] := m.yellow
+        Assert(yl.right = "ENTER: FLAG LINE" && yl.left = "NEXT: 3 REHIT" && yl.up = "CLOSER (F)" && yl.down = "FURTHER BACK (B)" && yl.teeleft = "REHIT + ENTER" && yl.clubup = "FURTHER BACK (B)" && yl.mulligan = "", "Relief list, Flag Line picked: ENTER: FLAG LINE, NEXT: 3 REHIT, Closer / Further Back, B = further back: " . yl.right . " / " . yl.left . " / " . yl.up . " / " . yl.clubup)
+        ReliefExpectSel := 1, ReliefExpectTick := A_TickCount
+        yl := {}
+        for i, m in CheatModel()
+            yl[m.id] := m.yellow
+        Assert(yl.right = "ENTER: LATERAL" && yl.left = "NEXT: 2 FLAG LINE" && yl.up = "" && yl.down = "" && yl.clubup = YellowKeyName("b"), "Relief list, Lateral Drop picked: no Closer / Further Back: " . yl.right . " / " . yl.left . " / [" . yl.up . "]")
+        ReliefLast := {found: true, at: A_TickCount, opts: [{text: "REHIT", x: 5, y: 5, w: 80, h: 20}, {text: "MULLIGAN", x: 5, y: 40, w: 80, h: 20}]}
+        ReliefExpectSel := 1, ReliefExpectTick := A_TickCount
+        yl := {}
+        for i, m in CheatModel()
+            yl[m.id] := m.yellow
+        Assert(yl.mulligan = "MULLIGAN + ENTER" && yl.left = "NEXT: 2 MULLIGAN" && yl.right = "ENTER: REHIT" && yl.up = "", "OB with mulligans on: Mulligan button MULLIGAN + ENTER, NEXT: 2 MULLIGAN, ENTER: REHIT")
+        ReliefLast := "", ReliefExpectSel := 0
+        yl := {}
+        for i, m in CheatModel()
+            yl[m.id] := m.yellow
+        Assert(yl.right = YellowOcrName("DropRehit") && yl.mulligan = "", "Without the relief list the printed names are back")
+        ; The sheet on screen follows the highlighted choice (no screen
+        ; reads: the OCR lock is held so FN-down reads stand aside).
+        WinActivate, GSPro BA Remapper regression target
+        WinWaitActive, GSPro BA Remapper regression target, , 2
+        OcrBusy := true, OcrBusySince := A_TickCount
+        ReliefLast := fakeRel, ReliefExpectSel := 2
+        SetTimer, KeepReliefExpect, 100
+        Gosub, KeepReliefExpect
+        HandleBoxKeyDown("a")
+        Sleep, 750
+        WinGetText, cheatText, ahk_id %CheatHwnd%
+        Assert(CheatVisible && InStr(cheatText, "ENTER: FLAG LINE") && InStr(cheatText, "CLOSER (F)") && InStr(cheatText, "2 FLAG LINE PICKED"), "Held FN on the relief list: the sheet shows the Flag Line labels")
+        ReliefExpectSel := 1
+        Sleep, 800
+        WinGetText, cheatText, ahk_id %CheatHwnd%
+        Assert(CheatVisible && InStr(cheatText, "ENTER: LATERAL") && !InStr(cheatText, "CLOSER") && InStr(cheatText, "1 LATERAL PICKED"), "Picking another choice redraws the sheet for it")
+        SetTimer, KeepReliefExpect, Off
+        ReliefLast := "", ReliefExpectSel := 0
+        Sleep, 800
+        WinGetText, cheatText, ahk_id %CheatHwnd%
+        Assert(CheatVisible && !InStr(cheatText, "RELIEF LIST") && !InStr(cheatText, "ENTER:"), "The list closing puts the printed names back")
+        HandleBoxKeyDown("o")
+        HandleBoxKeyUp("a")
+        OcrBusy := false
+        Sleep, 100
+        ; ---- v5.2.1 Mulligan button ----
+        ; The box's Ctrl+M reaches GSPro untouched (the sink logs it
+        ; between F8 and F9); with no relief list nothing follows it.
+        SendSecondaryKey("{F8}")
+        mulBefore := MulliganPressTick
+        SendLevel, 1
+        SendEvent, ^m
+        SendLevel, 0
+        Sleep, 1200
+        Assert(MulliganPressTick > mulBefore, "The box's Ctrl+M is watched while GSPro is in front")
+        SendSecondaryKey("{F9}")
+        Assert(MulliganFollowKeys("").MaxIndex() = "" && MulliganFollowKeys({found: false, opts: []}).MaxIndex() = "" && ReliefKeysText(MulliganFollowKeys({found: true, opts: [{text: "REHIT"}, {text: "MULLIGAN"}]})) = "2 {Enter}" && MulliganFollowKeys({found: true, opts: [{text: "LATERAL DROP"}, {text: "FLAG LINE"}, {text: "REHIT"}]}).MaxIndex() = "", "Mulligan's number and Enter only when Mulligan is a choice")
+        RemapActive := false
+        mulBefore := MulliganPressTick
+        SendLevel, 1
+        SendEvent, ^m
+        SendLevel, 0
+        Sleep, 150
+        RemapActive := true
+        Assert(MulliganPressTick = mulBefore, "Mapping OFF: Ctrl+M is not watched")
+        Gui, Main:Show
+        WinActivate, ahk_id %MainHwnd%
+        WinWaitActive, ahk_id %MainHwnd%, , 2
+        mulBefore := MulliganPressTick
+        SendLevel, 1
+        SendEvent, ^m
+        SendLevel, 0
+        Sleep, 150
+        Assert(MulliganPressTick = mulBefore, "Ctrl+M in another window is not watched")
         ; Builder test mode: box presses show what they do, nothing is sent.
         Gosub, ShowBuilder
         GuiControl, Builder:, BuilderTest, 1
@@ -520,6 +599,12 @@ Return
 
 ; Repeats until the dialog is up: on a slow runner the InputBox can
 ; take longer than one tick to appear (main run 44010896827 hung).
+KeepReliefExpect:
+    ReliefExpectTick := A_TickCount
+    if (IsObject(ReliefLast))
+        ReliefLast.at := A_TickCount
+Return
+
 FillCopyName:
     if (!WinExist("Customize a Copy"))
         Return
@@ -1275,6 +1360,11 @@ ReliefShotSmoke:
         more["relief-water-lateral.jpg"] := "1 {Enter}|2 {Enter}|3 {Enter}|1 {Enter}|2 {Enter}||q|e|@wheelup|@wheeldown|@recenter"
         more["relief-water-flagline.jpg"] := "1 {Enter}|2 {Enter}|3 {Enter}|1 {Enter}|2 {Enter}||q|e|@wheelup|@wheeldown|@recenter"
         more["relief-ob-rehit.jpg"] := "1 {Enter}||||||q|e|@wheelup|@wheeldown|@recenter"
+        ; v5.2.1 cheat sheet labels [Drop Ball, Next Option, Move Forward, Move Back, OB Rehit] and the Mulligan button's follow-up
+        labels := {}
+        labels["relief-water-lateral.jpg"] := "ENTER: LATERAL|NEXT: 2 FLAG LINE|||REHIT + ENTER|mulligan:"
+        labels["relief-water-flagline.jpg"] := "ENTER: FLAG LINE|NEXT: 3 REHIT|CLOSER (F)|FURTHER BACK (B)|REHIT + ENTER|mulligan:"
+        labels["relief-ob-rehit.jpg"] := "ENTER: REHIT||||REHIT + ENTER|mulligan:"
         for i, s in shots {
             src := LoadPicture(dir . "\" . s[1])
             VarSetCapacity(bm, 32, 0)
@@ -1299,6 +1389,12 @@ ReliefShotSmoke:
                 for j, a in ["ReliefChoice1", "ReliefChoice2", "ReliefChoice3", "ReliefLateral", "ReliefFlagLine", "ReliefMulligan", "ReliefRotateLeft", "ReliefRotateRight", "ReliefZoomIn", "ReliefZoomOut", "ReliefRecenter"]
                     extra .= (j > 1 ? "|" : "") . ReliefKeysText(ReliefPlan(a, rel, sel).keys)
                 ok := ok && extra = more[s[1]]
+                lab := ""
+                for j, a in ["DropRehit", "NextOption", "MoveForward", "MoveBack", "Rehit"]
+                    lab .= YellowReliefLabel(a, rel, sel) . "|"
+                lab .= "mulligan:" . ReliefKeysText(MulliganFollowKeys(rel))
+                ok := ok && lab = labels[s[1]]
+                ScrambleNote(lab = labels[s[1]] ? "PASS" : "FAIL", "  sheet labels [" . lab . "]")
                 rc := ReliefFindRecenter(win, Func("ShotRead").Bind(hbm))
                 f := tw / W
                 rcOk := IsObject(rc) && Abs(rc.x + rc.w / 2 - s[8] * f) <= 60 * f + 4 && Abs(rc.y + rc.h / 2 - s[9] * f) <= 25 * f + 4
@@ -1342,7 +1438,9 @@ ReliefShotSmoke:
         ok := ReliefKeysText(ReliefPlan("Rehit", mul, 2).keys) = "1 {Enter}" && ReliefKeysText(ReliefPlan("NextOption", mul, 1).keys) = "2"
             && ReliefKeysText(ReliefPlan("NextOption", mul, 2).keys) = "1" && ReliefKeysText(ReliefPlan("NextOption", mul, 0).keys) = "2"
             && ReliefKeysText(ReliefPlan("MoveForward", mul, 1).keys) = "" && ReliefKeysText(ReliefPlan("DropRehit", mul, 2).keys) = "{Enter}"
-        ScrambleNote(ok ? "PASS" : "FAIL", "OB with Mulligan: Rehit = 1 Enter, Next Option cycles 1-2, no Flag Line keys")
+        ok := ok && ReliefKeysText(MulliganFollowKeys(mul)) = "2 {Enter}" && YellowReliefLabel("NextOption", mul, 1) = "NEXT: 2 MULLIGAN" && YellowReliefLabel("NextOption", mul, 2) = "NEXT: 1 REHIT"
+            && YellowReliefLabel("DropRehit", mul, 2) = "ENTER: MULLIGAN" && YellowReliefLabel("MoveForward", mul, 1) = ""
+        ScrambleNote(ok ? "PASS" : "FAIL", "OB with Mulligan: Rehit = 1 Enter, Next Option cycles 1-2, no Flag Line keys; Mulligan button = 2 Enter; labels NEXT: 2 MULLIGAN / ENTER: MULLIGAN")
         if (!ok)
             fails += 1
         FileAppend, % (fails ? "FAIL: " . fails . " relief checks failed" : "PASS: GSPro 4 relief screens read and planned") . "`n", % A_ScriptDir . "\result.txt"
@@ -1520,6 +1618,11 @@ def runtime_checks(source, ahk):
         assert any(key == 0x27 for _, _, key in rows), "Arrow was not received"
         assert any(key == 0x11 for _, _, key in rows) and any(key == 0x4D for _, _, key in rows), "Ctrl+M was not received"
         assert not any(key in (0x43, 0x25) for _, _, key in rows), f"FN + Tee Left / Aim Left leaked their own keys: {rows}"
+        downs = [key for _, message, key in rows if message in (0x100, 0x104)]
+        assert 0x77 in downs and 0x78 in downs, f"F8 / F9 markers around the Mulligan press: {downs}"
+        between = downs[downs.index(0x77) + 1:downs.index(0x78)]
+        assert 0x4D in between and 0x0D not in between and not any(0x30 <= key <= 0x39 for key in between), f"Mulligan button without the relief list: Ctrl+M only, got {between}"
+        print("PASS: the box's Ctrl+M reached the game untouched; no number or Enter followed it without the relief list")
         relief_downs = [key for _, message, key in rows if message in (0x100, 0x104) and key in (0x32, 0x33, 0x0D, 0x34, 0x71, 0x58)]
         assert relief_downs[:6] == [0x32, 0x33, 0x0D, 0x34, 0x71, 0x58], f"Panel keys 2, 3, Enter; sequence 4, F2; custom tap X: {relief_downs}"
         assert not any(key in (0x59, 0x56, 0x4F) for _, _, key in rows), f"Heat Map / Tee Right / Flyover leaked their printed keys: {rows}"
