@@ -1,45 +1,36 @@
-# BA Remapper 5.2.0
+# BA Remapper 5.2.1
 
-Two things in this release: customers can build their own button layouts with many more choices, and players can see what each button does without looking it up.
+Two improvements for GSPro 4's relief list (the numbered RELIEF OPTIONS / YOUR OPTIONS list at the top left after water or out of bounds).
 
-## FN cheat sheet
+## Mulligan button takes the mulligan
 
-Hold FN (Reset Aim on the standard layout) in GSPro and a picture of the control box appears at the bottom left of the game. Every button is where it sits on the box, the FN button is yellow, and each button's yellow function for the current profile is printed under it, like the yellow print on the box. On GSPro 4's relief list it shows what the buttons do there (Next choice, Closer, Further Back...). It disappears when FN is released, never takes clicks or focus, and stays out of screen captures and streams. A custom layout shows its own functions. **Show FN cheat sheet** on the main window turns it on or off.
+With mulligans on, GSPro lists Mulligan as a choice (choice 4 on water after Lateral Drop, Flag Line and Rehit; choice 2 on out of bounds). The box's Mulligan button used to only highlight it (TAKE MULLIGAN); the player still had to press Enter (FN + Drop Ball). Now one press takes it: the box's Ctrl+M still goes to GSPro exactly as before, then the Remapper looks at the list, and only when **Mulligan is one of the choices** it presses Mulligan's number and Enter. With mulligans off, or anywhere else in GSPro, nothing more is sent, so Enter can never take a drop or a rehit by mistake. With mapping off (Ctrl+F12) Ctrl+M is not touched at all.
 
-**Size and Place...** on the main window shows the sheet over GSPro, the way it will look when FN is held, with a green outline. Slide the size (20% to 80% of the GSPro screen width) and it changes live; drag the sheet anywhere on the GSPro screen; **Lock it in** saves the size and spot for good (kept through updates). **Back to bottom left** returns it to the starting corner, and **Cancel** keeps what was locked in before.
+## The FN cheat sheet follows the relief list
 
-## Your own layout
+Hold FN on the relief list and the cheat sheet shows what each button does on that screen, for the choice that is highlighted right now, and changes as soon as a different choice is picked (box, number key or mouse):
 
-Choose **Customize a Copy**, open the **Button Builder** and click a button:
+- The top line shows the pick, for example **RELIEF LIST: 2 FLAG LINE PICKED**.
+- Drop Ball / Rehit reads **ENTER: FLAG LINE** - Enter on the highlighted choice. Lateral Drop and Flag Line show the lie first (PREVIEW LIE); press Drop Ball again to confirm the drop (CONFIRM DROP). Rehit and Mulligan are taken at once.
+- Next Option reads **NEXT: 3 REHIT** - the choice it moves to, going down the list (1 to 4 choices, depending on the screen and mulligans).
+- Move Forward / Move Back (the up / down arrows) read **CLOSER (F)** / **FURTHER BACK (B)** only while Flag Line is picked, like GSPro's own bottom bar. Clear View on the club buttons stays CLEAR VIEW.
+- OB Rehit reads **REHIT + ENTER**; the Mulligan button reads **MULLIGAN + ENTER** when Mulligan is a choice.
 
-- **Tap alone** (white print): keep the box print, choose a key from the list, or **Custom key or combo...** (click the box and press the key; Ctrl / Alt / Shift combos work). A `*` on the Builder button marks a custom tap. Basic Secondary stays locked to the box print.
-- **Hold FN** (yellow print):
-  - **GSPro Hotkey:** the list (now with E, M, X, minus, equals, F2–F12, Home, End, Page Up/Down, Insert, Delete) or **Custom key or combo...**
-  - **Smart Click:** the relief-menu actions as before, plus new **GSPro 4 relief-list** actions: Choice 1 / 2 / 3 + Enter, Lateral Drop / Flag Line / Mulligan + Enter (it finds the choice's number on screen), Rotate Left / Right (Q / E), Zoom In / Out, Recenter.
-  - **Key Sequence:** up to 4 keys in a row with a set pause (100–800 ms), for example "2 then Enter".
-  - Taught Screen Click or None, as before.
-- **Test mode:** tick it in the Builder and press the box buttons. The Builder shows what each one does, and nothing is sent to GSPro.
-- **Layout check:** the Builder's bottom line flags anything worth a look, such as a screen click with no position or two buttons that tap the same key. Click it for the full list.
-- **Export / Import Profile:** a `.baprofile` file to copy a layout to another bay or share it with a customer. Imported profiles are checked: a profile can only press keys (no Win-key combos, clicks or typed text), and anything else is turned off and listed. Screen-click spots from another PC are flagged to re-check.
+Away from the relief list the sheet shows the printed names as before.
 
-Also: typing a profile name or a custom key in the app's own boxes now gets the plain box keys instead of remapping them.
-
-Unchanged: Basic Secondary, the GSPro 4 relief list and older relief menu Smart Clicks, scramble Auto-Pick, startup behaviour.
+5.2.0 brought custom layouts (custom keys, key sequences, custom taps, relief-list actions, test mode, layout check, profile Export / Import) and the FN cheat sheet with Size and Place; all of it is unchanged.
 
 ## How this was checked
 
-- Windows CI sends real key presses through the box-key path to a test window: the key sequence (4 then F2) and a custom tap (X) arrive in order, the buttons' own printed keys never leak, and the GSPro 4 relief keys still arrive as before.
-- The cheat sheet is shown over a GSPro-titled window while FN is held: it sits at the bottom left, draws grey buttons, the yellow FN button and the yellow print, is the chosen size, is click-through and never takes focus, hides when FN is released, and stays off when switched off. FN + Club Down still sends a real held B (Clear View) to the game with the sheet showing, and the game keeps focus.
-- Size and Place: the sheet is shown over the game and takes the mouse; the size slider resizes it live; a real mouse drag moves it; nothing is saved until Lock it in, which saves the size and spot; holding FN afterwards shows it at exactly that size and spot; Cancel keeps the locked values; holding FN while placing leaves the sheet being placed alone. A saved top-right spot shows it top right.
-- Builder test mode reports FN + Club Up = Clear View, the custom tap and FN tapped alone, and sends nothing. Typing in the app's own text box gets the plain keys.
-- Export and import keep every kind of function; a hostile profile file (Win-key combo, a click, an unknown action, typed text, the preset's name) is renamed and every unsafe entry is turned off and listed.
-- Your GSPro 4 screenshots plan the right keys for every new relief action, and Recenter is found on each screenshot as captured and at 1920 wide.
-- All earlier checks (scramble, startup, relief list, 64-bit build, installer) still pass.
-- Not tested by the AI: a real bay, the physical box, a live round, how the cheat sheet looks on a projector.
+- Your GSPro 4 screenshots (water with Lateral Drop and with Flag Line picked, out of bounds), as captured and at 1920 wide: the sheet labels for each (ENTER: LATERAL / NEXT: 2 FLAG LINE; ENTER: FLAG LINE / NEXT: 3 REHIT / CLOSER (F) / FURTHER BACK (B); ENTER: REHIT) and no Mulligan follow-up on any of them.
+- Water with mulligans on (four choices, from your projector photos of that screen, built on your real screenshot): all four choices are read, the highlight is found on Lateral Drop and on Mulligan, the Mulligan button gives "4, Enter", Next Option goes 1 > 2 > 3 > 4 > 1, and an out-of-bounds list with Mulligan as choice 2 gives "2, Enter".
+- Windows CI: a real Ctrl+M through the hotkey reaches the test game window untouched and, with no relief list, nothing follows it; with mapping off or another window in front, Ctrl+M is not watched. The sheet on screen switches from the Flag Line labels to the Lateral Drop labels when the pick changes, and back to the printed names when the list closes.
+- All earlier checks (FN and held-B delivery, scramble, startup, relief list, cheat sheet size and place, 64-bit build, installer) still pass.
+- Not tested by the AI: a real bay, the physical box, a live round with mulligans on.
 
 ## Update/install
 
-Exit the running app from its tray menu. Download and extract **BARemapper_Setup_v5.2.0.zip**, then run Setup over the installed version. Profiles and settings are kept. On a PC where BayLauncher opens the Remapper, untick "Start BA Remapper with Windows" in Setup. The portable alternative is **BARemapper_v5.2.0_portable.zip**. **SHA256SUMS.txt** lists download checksums.
+Exit the running app from its tray menu. Download and extract **BARemapper_Setup_v5.2.1.zip**, then run Setup over the installed version. Profiles, settings and the cheat sheet's size and spot are kept. On a PC where BayLauncher opens the Remapper, untick "Start BA Remapper with Windows" in Setup. The portable alternative is **BARemapper_v5.2.1_portable.zip**. **SHA256SUMS.txt** lists download checksums.
 
 [Illustrated guide](https://github.com/DiyGolfGuy/BA-Remapper/blob/main/docs/scramble-preview.md) · [Full how-to](https://github.com/DiyGolfGuy/BA-Remapper/blob/main/HOW_TO_USE.txt)
 
