@@ -23,12 +23,13 @@ DllCall("SetProcessDPIAware")
 ;
 ;  CHANGES IN v5.2.2  (Bruce, Nov 24 2026)
 ;  - Mulligan button on GSPro 4's water relief list: it highlighted
-;    Mulligan but did not press Enter until the map was moved.  The
-;    list read now keeps a title when GSPro's callout or a map label
-;    beside the list shares its line, picks the list's own column,
-;    reads up to three times while GSPro flies the map, and presses
-;    Enter alone when Mulligan is already highlighted.  Ctrl+M is also
-;    watched when GSPro is open behind another program.
+;    Mulligan but did not press Enter (Bruce's log: the highlighted
+;    4th card was not read - its number circle started its line left
+;    of the title column).  The highlighted card now counts, a card
+;    without its detail line counts when it sits one spacing lower,
+;    a title is the capital words at the start of its line, the list
+;    is read up to three times, Enter alone takes a highlighted
+;    Mulligan, and Ctrl+M is watched with GSPro behind another window.
 ;
 ;  CHANGES IN v5.2.1  (Bruce, Nov 23 2026)
 ;  - Mulligan button on GSPro 4's relief list: when Mulligan is one of
@@ -2351,8 +2352,16 @@ ReliefParse(lines) {
         if (LevDist(n, "reliefoptions") <= 2 || LevDist(n, "youroptions") <= 2)
             rel.header := true
         t := ReliefTitleText(ln.text)
-        if (t != "")
-            cands.Push({x: ln.x, y: ln.y, w: ln.w, h: ln.h, text: t})
+        if (t != "") {
+            ; lead: the line starts with the choice's number circle.  The
+            ; highlighted card's white-on-blue number is read far more
+            ; often than the grey ones, and it starts its line about
+            ; 1.6 title heights left of the title (v5.2.1 then dropped
+            ; that card as off-column: on water the highlighted Mulligan,
+            ; card 4 - Bruce's log, 2026-11-24).  ax = the title's column.
+            lead := RegExMatch(Trim(ln.text), "^\S{1,2}\s") ? true : false
+            cands.Push({x: ln.x, y: ln.y, w: ln.w, h: ln.h, text: t, lead: lead, ax: ln.x + (lead ? Round(ln.h * 1.6) : 0)})
+        }
     }
     ; A title counts only with its detail line right under it.
     rows := []
@@ -2391,31 +2400,48 @@ ReliefParse(lines) {
                 last.text := c.text . " " . last.text
                 last.w := last.x + last.w - c.x
                 last.x := c.x
+                last.lead := c.lead, last.ax := c.ax
             } else {
                 last.text := last.text . " " . c.text
                 last.w := c.x + c.w - last.x
             }
             continue
         }
-        opts.Push({x: c.x, y: c.y, w: c.w, h: c.h, text: c.text})
+        opts.Push({x: c.x, y: c.y, w: c.w, h: c.h, text: c.text, lead: c.lead, ax: c.ax})
     }
     ; One column: the panel's titles share their left edge.  The
     ; column is the largest group of titles lined up; on a tie the
     ; leftmost, since the panel sits at the screen's left edge and a
     ; callout or map label beside it is further right.
+    ; (Compared by ax, the title's own column.)
     mx := "", best := -1
     for i, o in opts {
         cnt := 0
         for j, q in opts {
-            if (Abs(q.x - o.x) <= o.h * 1.5)
+            if (Abs(q.ax - o.ax) <= o.h * 1.5)
                 cnt += 1
         }
-        if (cnt > best || (cnt = best && o.x < mx))
-            best := cnt, mx := o.x
+        if (cnt > best || (cnt = best && o.ax < mx))
+            best := cnt, mx := o.ax
     }
     for i, o in opts {
-        if (Abs(o.x - mx) <= o.h * 1.5)
+        if (Abs(o.ax - mx) <= o.h * 1.5)
             rel.opts.Push(o)
+    }
+    ; The card under the last one may have lost its detail line (cut
+    ; or run together with text beside the list): a title in the
+    ; column one card spacing lower is the next choice.
+    n := rel.opts.MaxIndex()
+    if (n >= 2) {
+        first := rel.opts[1], last := rel.opts[n]
+        pitch := (last.y - first.y) / (n - 1)
+        for i, c in cands {
+            dy := c.y - last.y
+            if (pitch > 0 && dy >= pitch * 0.7 && dy <= pitch * 1.3 && Abs(c.ax - mx) <= c.h * 1.5) {
+                rel.opts.Push({x: c.x, y: c.y, w: c.w, h: c.h, text: c.text, lead: c.lead, ax: c.ax})
+                break
+            }
+        }
     }
     rel.found := (rel.opts.MaxIndex() >= 1)
     return rel

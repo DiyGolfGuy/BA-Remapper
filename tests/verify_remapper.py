@@ -513,6 +513,29 @@ UiSmoke:
             , {text: "MULLIGAN", x: 900, y: 382, w: 128, h: 40}, {text: "From your last spot · 200 yd to pin", x: 870, y: 432, w: 158, h: 30}]
         orel := ReliefParse(ob)
         Assert(ReliefNote(orel) = "1 choices: 1 REHIT" && !MulliganFollowKeys(orel).MaxIndex(), "OB with a callout title on Rehit's row: the panel column wins, no Mulligan (" . ReliefNote(orel) . ")")
+        ; Bruce's log (2026-11-24): on water the highlighted Mulligan card
+        ; was not read.  Its white-on-blue number starts the line ~1.6
+        ; title heights left of the title column; the grey numbers of
+        ; the other cards are not read.  v5.2.1 dropped it as off-column.
+        hl := [{text: "RELIEF OPTIONS", x: 55, y: 300, w: 230, h: 24}
+            , {text: "LATERAL DROP +1", x: 157, y: 380, w: 573, h: 40}, {text: "Rough · 472 yd to pin", x: 157, y: 430, w: 270, h: 30}
+            , {text: "FLAG LINE +1", x: 157, y: 530, w: 573, h: 40}, {text: "Rough · 475 yd to pin", x: 157, y: 580, w: 270, h: 30}
+            , {text: "REHIT +1", x: 157, y: 680, w: 573, h: 40}, {text: "From your last spot · 475 yd to pin", x: 157, y: 730, w: 420, h: 30}
+            , {text: "4 MULLIGAN NO STROKE", x: 92, y: 830, w: 638, h: 42}, {text: "Replay the shot, it doesn't count", x: 157, y: 880, w: 380, h: 30}]
+        hrel := ReliefParse(hl)
+        Assert(ReliefNote(hrel) = "4 choices: 1 LATERAL DROP, 2 FLAG LINE, 3 REHIT, 4 MULLIGAN" && ReliefKeysText(MulliganFollowKeys(hrel, 4)) = "{Enter}", "Highlighted Mulligan with its number read on its line: still choice 4, Enter takes it (" . ReliefNote(hrel) . ")")
+        ; ... and with its detail line lost: the card one spacing below
+        ; the last one is the next choice.
+        hl.RemoveAt(9)
+        hrel := ReliefParse(hl)
+        Assert(ReliefNote(hrel) = "4 choices: 1 LATERAL DROP, 2 FLAG LINE, 3 REHIT, 4 MULLIGAN", "Mulligan card without its detail line: still choice 4 (" . ReliefNote(hrel) . ")")
+        ; A map label under the panel and off the column is no choice.
+        lbl := [{text: "RELIEF OPTIONS", x: 55, y: 300, w: 230, h: 24}
+            , {text: "REHIT +1", x: 157, y: 380, w: 573, h: 40}, {text: "From your last spot · 200 yd to pin", x: 157, y: 430, w: 420, h: 30}
+            , {text: "MULLIGAN NO STROKE", x: 157, y: 530, w: 573, h: 40}, {text: "Replay the shot, it doesn't count", x: 157, y: 580, w: 380, h: 30}
+            , {text: "3 REHIT", x: 330, y: 680, w: 140, h: 36}]
+        lrel := ReliefParse(lbl)
+        Assert(ReliefNote(lrel) = "2 choices: 1 REHIT, 2 MULLIGAN", "A map label under the panel is not read as a choice (" . ReliefNote(lrel) . ")")
         RemapActive := false
         mulBefore := MulliganPressTick
         SendLevel, 1

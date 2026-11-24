@@ -163,7 +163,7 @@ The main window, Builder and action editor can be resized and scrolled when they
 
 ## Version History
 
-**v5.2.2** — Mulligan button on GSPro 4's water relief list: it highlighted Mulligan but did not press Enter until the map was moved. The list is now read correctly when GSPro's callout or a map label sits beside it, read again while GSPro flies the map, and Enter alone takes a Mulligan that is already highlighted.
+**v5.2.2** — Mulligan button on GSPro 4's water relief list: it highlighted Mulligan but did not press Enter (the highlighted 4th card was not read: its number circle shifted its line out of the list's column). The highlighted card now always counts, a card without its detail line still counts, text beside the list can't hide a title, the list is read again while GSPro moves the map, and Enter alone takes a Mulligan that is already highlighted.
 
 **v5.2.1** — GSPro 4 relief list: the Mulligan button takes the mulligan when Mulligan is one of the choices (choice 4 on water, 2 on out of bounds; Ctrl+M as always, then its number and Enter; never Enter on its own), and the FN cheat sheet follows the list and the highlighted choice (ENTER: <choice>, NEXT: <choice>, Closer / Further Back only with Flag Line picked).
 
