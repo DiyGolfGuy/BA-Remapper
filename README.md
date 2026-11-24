@@ -4,7 +4,7 @@
 
 [Full how-to guide](HOW_TO_USE.txt) · [Scramble highlight with screenshots](docs/scramble-preview.md)
 
-BA Remapper is the companion app for the BA Custom Products wireless control box. Out of the box, every button sends its printed GSPro hotkey with no software at all. BA Remapper adds the FN secondary layer (the yellow print), on-screen Smart Clicks powered by built-in Windows OCR, and an automatic scramble shot picker. Free with your box; installs like any normal Windows program (a portable version is available too).
+BA Remapper is the companion app for the BA Custom Products wireless control box. Out of the box, every button sends its printed GSPro hotkey with no software at all. BA Remapper adds the FN secondary layer (the yellow print) with an on-screen FN cheat sheet, support for GSPro 4's relief list (including a one-press Mulligan when mulligans are on), on-screen Smart Clicks powered by built-in Windows OCR, your own custom layouts, and an automatic scramble shot picker. Free with your box; installs like any normal Windows program (a portable version is available too).
 
 ---
 
@@ -32,6 +32,7 @@ The installer puts BA Remapper in Program Files, adds it to the Start Menu and *
 2. **Button Mapping** turns ON by itself every time BA Remapper opens (Ctrl+F12 or the button turns it off to type). Tap for a white function; hold Reset Aim (A) and tap another button for its yellow function. FN + either club button sends Camera Clip / Clear View (B).
 3. To change a function, choose **Customize a Copy**, give it a name, open the Builder, click a button, choose the action, and **Save**. The original preset and Windows Startup Profile stay unchanged. **New Blank** starts without secondary actions.
 4. Optional: choose **Use Current Profile at Windows Startup**, then check **Start with Windows**.
+5. Hold FN in GSPro to see the **FN cheat sheet**; **Size and Place...** on the main window sets its size and spot.
 
 **Button Mapping and Scramble Auto-Pick have separate status indicators.** Turning mapping off with Ctrl+F12 does not turn Auto-Pick off; use its own checkbox. **Reset Smart Click Spots** clears only learned OCR positions and temporary click caches so the next press reads the screen and learns again. Profiles, startup preferences, and Taught Screen Click positions are kept.
 

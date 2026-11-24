@@ -83,7 +83,7 @@ Runtime tests use a temporary app/data copy with startup repair and migration di
 
 ## Release and website update path
 
-The release contains `BARemapper_Setup_v5.1.0.zip`, `BARemapper_v5.1.0_portable.zip`, and `SHA256SUMS.txt`. The original green BA icon was extracted from the previous executable and preserved.
+Each release contains `BARemapper_Setup_v<version>.zip`, `BARemapper_v<version>_portable.zip`, and `SHA256SUMS.txt`. The original green BA icon was extracted from the previous executable and preserved. Latest: v5.2.1; the website wording and facts for it are in [docs/WEBSITE-UPDATE-5.2.1.md](docs/WEBSITE-UPDATE-5.2.1.md) (Bruce syncs the site himself).
 
 The BA website updater reads public GitHub releases and selects the versioned installer ZIP named `BARemapper_Setup_v<version>.zip`; it excludes drafts and prereleases. Public v5.1.0 meets that contract. The website Update button was not clicked by the AI.
 
