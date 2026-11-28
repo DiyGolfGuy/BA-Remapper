@@ -42,10 +42,14 @@ def function(source, name):
 
 def static_checks(source, baseline):
     # Compare the production algorithms to the known working release.
+    # v5.3.0 (Bruce, 2026-11-27): GSPro 4 only - the older relief menu's
+    # reading (RunOcrAction, ResolveOcrTarget, FindMenuLattice, FindObPair,
+    # LearnSpots, SpotFastResolve, SpotSlot2Confirm, SaveSpots, LoadSpots,
+    # DpiRepeatClick) and Reset Smart Click Spots were removed on purpose.
+    for gone in ["RunOcrAction(", "FindMenuLattice(", "LearnSpots(", "SpotFastResolve(", "ResetSmartSpots"]:
+        assert gone not in source.replace(";    before (RunOcrAction unchanged).", ""), f"Removed GSPro 3 code still present: {gone}"
     unchanged = [
-        "RunOcrAction", "ResolveOcrTarget", "FindMenuLattice", "FindObPair",
-        "LearnSpots", "SpotFastResolve", "SpotSlot2Confirm", "SaveSpots",
-        "LoadSpots", "DpiClickAt", "DpiRepeatClick", "GsproWinRect",
+        "DpiClickAt", "GsproWinRect",
         "ClientRectByTitle", "ScrambleDecide", "ScrambleSendPick",
         "ScrambleVoteLeader", "ScrambleCountRead",
         "ScrambleVoteSummary", "ScrambleKeepRead",
@@ -61,7 +65,7 @@ def static_checks(source, baseline):
     assert not early, f"Labels or hotkeys before the end of startup: {early}"
     print("PASS: no labels or hotkeys interrupt the startup section")
     for start, end in [
-        ("TrayOcrDump:", "; Forget this PC's locked Smart Click spots"),
+        ("TrayOcrDump:", "KeyTestShow:"),
         ("ScrambleWork:", "OnOpenFolder:"),
         (";  BOX KEY HOTKEYS", ";  HELP WINDOW"),
         ("ExitLabel:", "; ============================================================================"),
@@ -127,7 +131,6 @@ def static_checks(source, baseline):
     assert 'if (FnIsDown)\n            return' in function(source, "HandleBoxKeyDown")
     assert 'SetKeyDelay, 15, 60' in function(source, "SendSecondaryKey")
     assert 'SendEvent, %keys%' in function(source, "SendSecondaryKey")
-    assert 'gResetSmartSpots, Reset Smart Click Spots' in source
     assert 'gOnCleanup,' not in source
     print(f"PASS: {len(unchanged)} core functions, diagnostics, hotkeys and exit preserved; preview hooks do not change voting, deadlines, cancellation or shot-key delivery")
 
@@ -223,23 +226,6 @@ UiSmoke:
         SetTimer, CloseFnNotice, 100
         ConfigButton("resetaim", "RESET AIM", "A")
         Assert(ConfiguringProfile = "", "FN modifier has no unusable secondary editor")
-
-        Spots := {MoveForward: {x: 5, y: 6, w: 30, h: 12, inferred: 0}}
-        SpotWin := "0,0,1920,1080"
-        SaveSpots()
-        LastActionId := "MoveForward", LastClickX := 123, LastClickY := 456
-        LastFireTick := A_TickCount, LastScanObj := {found: true}, LastScanTick := A_TickCount
-        PendingOcrAction := "MoveForward", VerifyActionId := "DropRehit"
-        FileRead, profileBeforeReset, % ProfilesDir . "\Regression Copy.ini"
-        SaveSettings()
-        Gosub, ResetSmartSpots
-        Assert(SpotWin = "" && Spots.Count() = 0, "Reset clears learned spots")
-        Assert(LastActionId = "" && LastClickX = 0 && LastClickY = 0 && LastFireTick = 0, "Reset clears repeat cache")
-        Assert(LastScanObj = "" && LastScanTick = 0 && PendingOcrAction = "" && VerifyActionId = "", "Reset clears scan and pending caches")
-        FileRead, profileAfterReset, % ProfilesDir . "\Regression Copy.ini"
-        Assert(profileBeforeReset = profileAfterReset && StartupProfile = startupBefore, "OCR reset preserves profile and startup")
-        IniRead, preference, %ConfigFile%, App, ActiveProfile
-        Assert(preference = ActiveProfile, "OCR reset preserves preferences")
 
         WinMove, ahk_id %BuilderHwnd%, , , , 520, 340
         UpdateSettingsScroll(BuilderHwnd)

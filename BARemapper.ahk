@@ -2563,18 +2563,11 @@ SendSecondaryKey(keys) {
 ;  is on screen.  A choice is a CAPITALS title with its detail line
 ;  ("... yd to pin", "From your last spot", "Replay the shot")
 ;  right under it, numbered top to bottom.  The highlighted choice
-;  is read from the pixels (its card is blue).  No panel -> the
-;  older menu's RunOcrAction, unchanged.
+;  is read from the pixels (its card is blue).  No panel -> nothing
+;  is sent (v5.3.0: the older menu's reading was removed).
 ; ============================================================
 SmartAction(actionId) {
     global ReliefLast, OcrBusy, PendingOcrAction, PendingOcrSince
-    global LastActionId, LastFireTick
-    ; The older menu is up and being used (a Smart Click landed on
-    ; it moments ago): stay on its fast repeat path, no extra read.
-    if (!ReliefOnlyAction(actionId) && LastActionId != "" && (A_TickCount - LastFireTick) < 4000) {
-        RunOcrAction(actionId)
-        return
-    }
     rel := ReliefLast
     age := IsObject(rel) ? A_TickCount - rel.at : 99999
     fresh := (age <= 1500)
@@ -2604,12 +2597,11 @@ SmartAction(actionId) {
         ReliefRun(actionId, rel)
         return
     }
-    if (ReliefOnlyAction(actionId)) {
-        OcrTrace("press " . actionId . ": no GSPro 4 relief list on screen - nothing sent")
-        ShowGsproTip(YellowOcrName(actionId) . " - works on GSPro 4's relief list", 1800)
-        return
-    }
-    RunOcrAction(actionId)
+    ; v5.3.0: GSPro 4 only (Bruce, 2026-11-27: "we shouldent need any
+    ; of the old gspro stuff anymore").  The older relief menu's
+    ; reading and learned click spots are gone.
+    OcrTrace("press " . actionId . ": no GSPro 4 relief list on screen - nothing sent")
+    ShowGsproTip(YellowOcrName(actionId) . " - works on GSPro 4's relief list", 1800)
 }
 
 ; v5.2.0 actions that exist only on GSPro 4's relief list
@@ -3848,249 +3840,8 @@ ReliefRun(actionId, rel) {
     }
 }
 
-; ============================================================
-;  SMART CLICK EXECUTION
-;
-;  Stateless: scan the GSPro window, find the needle text,
-;  click the bottom-most match (titles repeat button words
-;  above the actual buttons).  Up to 3 scan attempts over
-;  ~2 seconds - the menu is normally already on screen when
-;  the player presses the combo.  Never blind-clicks; on a
-;  miss it shows a tooltip and dumps the scan text to
-;  ocr_last_miss.txt for diagnosis (proven support pattern).
-; ============================================================
-RunOcrAction(actionId) {
-    global OcrBusy, OcrActionNeedles, OcrActionName
-    global GSProWinNeedle, GSProWinExclude, PendingOcrAction, PendingOcrSince
-    global LastActionId, LastClickX, LastClickY, LastFireTick
-    global LastScanObj, LastScanTick, VerifyActionId, VerifyY, VerifyBandPx
-    global LastResolveBand, LastLatticeNote, LastRef, SpotWin
-    if (!OcrActionNeedles.HasKey(actionId))
-        return
-    closesMenu := (actionId = "DropRehit" || actionId = "Rehit")
-    now := A_TickCount
-    ; Per-action minimum gap: menu-cycling actions allow rapid
-    ; intentional taps (120ms absorbs only the OS auto-repeat
-    ; flood); menu-closing actions hold 900ms so a repeat can
-    ; never fire into the closing fade.
-    minGap := closesMenu ? 900 : 120
-    if (actionId = LastActionId && (now - LastFireTick) < minGap)
-        return
-    ; A new press supersedes any pending background re-click of
-    ; the previous closing action.
-    VerifyActionId := ""
-    ; A scan in flight (prefetch, watcher, verify) cannot finish
-    ; while this keypress thread runs, so never wait here: hand
-    ; the press to a timer that fires once the lock is free.
-    OcrTrace("press " . actionId)
-    OcrStaleCheck()
-    if (OcrBusy) {
-        PendingOcrAction := actionId
-        PendingOcrSince := A_TickCount
-        SetTimer, OcrDeferred, -60
-        OcrTrace("  deferred (scan in flight)")
-        return
-    }
-    OcrLockTake()
-    try {
-
-    ; FAST PATH 1 - identical repeat: the menu stack does not
-    ; move while it is up, and the cursor is still hovering the
-    ; button (parking waits for the burst to end).  Tap the same
-    ; combo again within 4s -> click the cached spot instantly.
-    if (!closesMenu && actionId = LastActionId && LastClickX
-        && (now - LastFireTick) < 4000) {
-        OcrTrace("  repeat click at " . LastClickX . "," . LastClickY)
-        DpiRepeatClick(LastClickX, LastClickY)
-        LastFireTick := A_TickCount
-        SetTimer, ParkTick, -1200
-        OcrBusy := false
-        return
-    }
-
-    found := false
-    learnNow := false
-    cx := 0
-    cy := 0
-    scan := {found: false, lines: [], text: "", lc: ""}
-
-    ; FAST PATH 2 - LOCKED SPOTS.  This PC's menu positions were
-    ; verified and saved on an earlier press (same GSPro window
-    ; size): read only the button's own small area, confirm its
-    ; word sits there at the saved size, click.  Tens of ms
-    ; instead of two full-window reads.
-    curWr := ClientRectByTitle(GSProWinNeedle, GSProWinExclude)
-    curKey := curWr.found ? curWr.x . "," . curWr.y . "," . curWr.w . "," . curWr.h : ""
-    spotsValid := (curKey != "" && curKey = SpotWin)
-    if (spotsValid) {
-        if (SpotFastResolve(actionId, cx, cy, 12)) {
-            found := true
-            LastScanObj := {found: true, lines: [], text: "", lc: "", win: curWr}
-        } else {
-            OcrTrace("  locked spot not confirmed - reading the whole screen")
-        }
-    }
-
-    ; LEARN PATH - TWO-FRAME AGREEMENT.  A click is authorized
-    ; only when two consecutive reads put the menu in the same
-    ; place.  GSPro slides its menus in: a frame caught mid-slide
-    ; forms a perfectly consistent menu ~100px from where it ends
-    ; up (field trace 4 Oct: the FN-press read had Drop Ball where
-    ; Move Back settles).  The first read is the whole window (or
-    ; the FN-press prefetch); the confirming read covers only the
-    ; menu's area, so it is fast.  When the two agree, the click
-    ; goes out and every button's position is LOCKED for next time.
-    if (!found) {
-        ; Up to 8 reads (after the first, each is the fast menu-
-        ; area read).  With locked spots the poll above already
-        ; waited for the menu, so three empty full reads in a row
-        ; mean no menu is up: stop instead of searching for 4s.
-        maxReads := 8
-        missRun := 0
-        prevOk := false
-        prevRef := ""
-        lastWin := curWr.found ? curWr : ""
-        px := 0
-        py := 0
-        if (!spotsValid && actionId != "Rehit" && IsObject(LastScanObj) && (A_TickCount - LastScanTick) <= 2500) {
-            tx := 0
-            ty := 0
-            if (ResolveOcrTarget(actionId, LastScanObj, tx, ty)) {
-                prevOk := true
-                prevRef := LastRef
-                px := LastRef.rx
-                py := LastRef.ry
-                OcrTrace("  frame A (prefetch): " . tx . "," . ty . "  " . LastLatticeNote)
-            }
-        }
-        Loop, %maxReads% {
-            useArea := (prevOk && IsObject(prevRef) && prevRef.kind = "menu" && IsObject(lastWin))
-            if (useArea) {
-                scan := ScanMenuArea(prevRef, lastWin)
-            } else {
-                scan := ScanWinClient(GSProWinNeedle, GSProWinExclude)
-                if (!scan.found)
-                    scan := ScanScreen()   ; window title fallback
-                if (scan.HasKey("win"))
-                    lastWin := scan.win
-            }
-            LastScanObj := scan
-            LastScanTick := A_TickCount
-            tx := 0
-            ty := 0
-            ok := ResolveOcrTarget(actionId, scan, tx, ty)
-            OcrTrace("  read " . A_Index . (useArea ? " (menu area)" : " (full)") . ": " . (ok ? tx . "," . ty : "no target") . "  " . LastLatticeNote)
-            if (ok && prevOk) {
-                agreeTol := LastResolveBand // 4
-                if (agreeTol < 4)
-                    agreeTol := 4
-                agreeX := agreeTol
-                agreeY := agreeTol
-                ; The OB dialog's Rehit button wobbles sideways
-                ; (field trace 1788 -> 1817 -> 1788): agree on
-                ; the button, not on one pixel.
-                if (LastRef.kind = "ob") {
-                    agreeX := Round(LastRef.w * 0.6) + 4
-                    agreeY := Round(LastRef.h * 0.6) + 4
-                }
-                if (Abs(LastRef.rx - px) <= agreeX && Abs(LastRef.ry - py) <= agreeY) {
-                    found := true
-                    learnNow := true
-                    cx := tx
-                    cy := ty
-                    break
-                }
-                OcrTrace("    moved since last read - waiting for the menu to settle")
-            }
-            prevOk := ok
-            if (ok) {
-                prevRef := LastRef
-                px := LastRef.rx
-                py := LastRef.ry
-            }
-            if (!ok) {
-                missRun += 1
-                if (spotsValid && missRun >= 3)
-                    break
-                Sleep, 120
-            } else {
-                missRun := 0
-            }
-        }
-    }
-
-    if (found) {
-        OcrTrace("  resolved at " . cx . "," . cy)
-        ; Lock in this PC's spots from the verified frames.
-        if (learnNow && IsObject(LastScanObj) && LastScanObj.HasKey("win") && LastScanObj.win.found) {
-            lw := LastScanObj.win
-            LearnSpots(lw.x . "," . lw.y . "," . lw.w . "," . lw.h)
-        }
-        ; The click is about to change the screen, so this scan
-        ; is spent: the next press must read fresh rather than
-        ; resolve against a pre-click cache.
-        LastScanTick := 0
-        ; Foreground guard: a click into an inactive window can
-        ; be consumed activating it, so the press never lands.
-        if (IsObject(LastScanObj) && LastScanObj.HasKey("win") && LastScanObj.win.hwnd) {
-            gsHwnd := LastScanObj.win.hwnd
-            if (!WinActive("ahk_id " . gsHwnd)) {
-                WinActivate, ahk_id %gsHwnd%
-                Sleep, 150
-            }
-        }
-        DpiClickAt(cx, cy)
-        LastFireTick := A_TickCount
-        if (closesMenu) {
-            ; No repeat cache after a closing action; hand the
-            ; fade-proof verify to a background timer so the
-            ; next press is never swallowed by a busy lock.
-            LastActionId := ""
-            LastClickX := 0
-            LastClickY := 0
-            LastScanTick := 0
-            VerifyActionId := actionId
-            VerifyY := cy
-            VerifyBandPx := LastResolveBand
-            SetTimer, OcrVerifyTick, -900
-            ; Extra taps of the same button made while this one
-            ; was working are impatience, not new requests: the
-            ; menu is closing.  (Field trace: a queued Drop Ball
-            ; ran after the drop and searched 5s for a menu that
-            ; was gone, then showed "not found".)
-            if (PendingOcrAction = actionId) {
-                PendingOcrAction := ""
-                OcrTrace("  extra " . actionId . " tap made during this press dropped")
-            }
-        } else {
-            LastActionId := actionId
-            LastClickX := cx
-            LastClickY := cy
-        }
-        SetTimer, ParkTick, -1200
-    } else {
-        dispName := OcrActionName.HasKey(actionId) ? OcrActionName[actionId] : actionId
-        OcrTrace("  NOT FOUND (" . LastLatticeNote . ")")
-        ShowGsproTip(dispName . " - not found on screen", 1800)
-        OcrDumpMiss("SmartClick " . actionId . " (" . LastLatticeNote . ")", scan)
-    }
-    } catch appErr {
-        LogAppError("SmartClick", appErr)
-    }
-    OcrBusy := false
-}
-
-; Repeat click on a cached spot: cursor is already hovering it
-; (hover requirement long satisfied), so a short settle + click.
-DpiRepeatClick(x, y) {
-    CoordMode, Mouse, Screen
-    MouseMove, %x%, %y%, 0
-    Sleep, 60
-    Click
-    Sleep, 120
-}
-
-
+; Fuzzy word match and OCR text normalising (kept from the older
+; relief menu's reading, removed in v5.3.0; the relief list uses them).
 ; ============================================================
 ;  MENU LATTICE  (no click without verified geometry)
 ;
@@ -4120,669 +3871,6 @@ FuzzyIs(t, needle) {
         return true
     tol := StrLen(nn) >= 8 ? 2 : 1
     return (LevDist(ll, nn) <= tol)
-}
-
-FindFirstFuzzy(scan, needle) {
-    for i, ln in scan.lines {
-        if (FuzzyIs(ln.text, needle))
-            return {found: true, x: ln.x, y: ln.y, w: ln.w, h: ln.h, text: ln.text}
-    }
-    return {found: false}
-}
-
-FindAllFuzzy(scan, needle) {
-    out := []
-    for i, ln in scan.lines {
-        if (FuzzyIs(ln.text, needle))
-            out.Push({found: true, x: ln.x, y: ln.y, w: ln.w, h: ln.h, text: ln.text})
-    }
-    return out
-}
-
-; Pick, for each anchor word, the candidate line nearest the
-; menu column.  A stray match elsewhere on screen (the HUD's
-; "SHOT OPTIONS", a hallucinated line over grass) can never
-; displace the real button: the column is set by the words
-; that matched exactly once, and ambiguous words snap to it.
-PickAnchors(scan) {
-    words := {0: "options", 1: "move forward", 3: "move back", 4: "next option", 5: "mulligan"}
-    cands := {}
-    refXs := []
-    for slot, nd in words {
-        c := FindAllFuzzy(scan, nd)
-        if (c.MaxIndex() = "")
-            continue
-        cands[slot] := c
-        if (c.MaxIndex() = 1)
-            refXs.Push(c[1].x + c[1].w // 2)
-    }
-    refX := ""
-    if (refXs.MaxIndex() != "") {
-        Loop, % refXs.MaxIndex() - 1 {
-            i := A_Index + 1
-            j := i
-            while (j > 1 && refXs[j-1] > refXs[j]) {
-                tmp := refXs[j-1]
-                refXs[j-1] := refXs[j]
-                refXs[j] := tmp
-                j--
-            }
-        }
-        refX := refXs[(refXs.MaxIndex() + 1) // 2]
-    }
-    anch := {}
-    for slot, c in cands {
-        if (c.MaxIndex() = 1 || refX = "") {
-            anch[slot] := c[1]
-            continue
-        }
-        bestD := 999999
-        for i, cd in c {
-            d := Abs((cd.x + cd.w // 2) - refX)
-            if (d < bestD) {
-                bestD := d
-                anch[slot] := cd
-            }
-        }
-    }
-    ; Size sanity: anchors are the same font; drop any line whose
-    ; height is wildly off the median (junk lines from textures).
-    hs := []
-    for slot, a in anch
-        hs.Push(a.h)
-    if (hs.MaxIndex() >= 3) {
-        Loop, % hs.MaxIndex() - 1 {
-            i := A_Index + 1
-            j := i
-            while (j > 1 && hs[j-1] > hs[j]) {
-                tmp := hs[j-1]
-                hs[j-1] := hs[j]
-                hs[j] := tmp
-                j--
-            }
-        }
-        medH := hs[(hs.MaxIndex() + 1) // 2]
-        for slot, a in anch {
-            if (a.h < medH * 0.5 || a.h > medH * 2.0)
-                anch.Delete(slot)
-        }
-    }
-    return anch
-}
-
-FindMenuLattice(scan) {
-    global LastLatticeNote
-    lat := {found: false}
-    ; Anchors: slot 0 = the "Options X / 3" counter (always
-    ; present, one pitch above Move Forward - with mulligans OFF
-    ; the menu has no Mulligan button, and this anchor is what
-    ; keeps redundancy in that four-button stack), slot 1 Move
-    ; Forward, 3 Move Back, 4 Next Option, 5 Mulligan.
-    anch := PickAnchors(scan)
-    cnt := 0
-    for slot, a in anch
-        cnt += 1
-    LastLatticeNote := "anchors=" . cnt
-    if (cnt < 3)
-        return lat
-    ; One shared column
-    xs := []
-    sumW := 0
-    for sIdx, a in anch {
-        xs.Push(a.x + a.w // 2)
-        sumW += a.w
-    }
-    wavg := sumW / cnt
-    Loop, % xs.MaxIndex() - 1 {
-        i := A_Index + 1
-        j := i
-        while (j > 1 && xs[j-1] > xs[j]) {
-            tmp := xs[j-1]
-            xs[j-1] := xs[j]
-            xs[j] := tmp
-            j--
-        }
-    }
-    colX := xs[(xs.MaxIndex() + 1) // 2]
-    ; An anchor word read OFF the menu column (the HUD's "SHOT
-    ; OPTIONS" while the menu's own "Options 3/3" misread) is not
-    ; part of the menu: drop it and judge the stack on the rest.
-    ; Fewer than 3 in-column anchors is still a refusal.
-    offCol := []
-    for sIdx, a in anch {
-        if (Abs((a.x + a.w // 2) - colX) > wavg * 0.6)
-            offCol.Push(sIdx)
-    }
-    for i, sIdx in offCol
-        anch.Delete(sIdx)
-    if (offCol.MaxIndex() != "") {
-        cnt := 0
-        sumW := 0
-        for sIdx, a in anch {
-            cnt += 1
-            sumW += a.w
-        }
-        if (cnt < 3) {
-            LastLatticeNote .= " colfail"
-            return lat
-        }
-        wavg := sumW / cnt
-    }
-    ; One consistent pitch across known anchors
-    order := []
-    Loop, 6 {
-        if (anch.HasKey(A_Index - 1))
-            order.Push(A_Index - 1)
-    }
-    pitches := []
-    sumP := 0
-    Loop, % order.MaxIndex() - 1 {
-        a := order[A_Index]
-        b := order[A_Index + 1]
-        pv := ((anch[b].y + anch[b].h / 2) - (anch[a].y + anch[a].h / 2)) / (b - a)
-        pitches.Push(pv)
-        sumP += pv
-    }
-    pitch := sumP / pitches.MaxIndex()
-    if (pitch <= 0) {
-        LastLatticeNote .= " pitchfail"
-        return lat
-    }
-    for i, pv in pitches {
-        if (Abs(pv - pitch) > pitch * 0.2) {
-            LastLatticeNote .= " pitchfail"
-            return lat
-        }
-    }
-    sumH := 0
-    for sIdx, a in anch
-        sumH += a.h
-    havg := sumH / cnt
-    if (pitch < havg * 0.7 || pitch > havg * 4.5) {
-        LastLatticeNote .= " pitchrange"
-        return lat
-    }
-    ; Slot positions from least-squares base
-    base := 0
-    for sIdx, a in anch
-        base += (a.y + a.h / 2) - sIdx * pitch
-    base := base / cnt
-    slotY := []
-    Loop, 5
-        slotY.Push(Round(base + A_Index * pitch))
-    ; Slot-2 line, when its text was readable
-    s2 := {found: false}
-    for i, ln in scan.lines {
-        lcx := ln.x + ln.w // 2
-        lcy := ln.y + ln.h // 2
-        if (Abs(lcx - colX) <= wavg * 0.8 && Abs(lcy - slotY[2]) <= pitch * 0.35) {
-            s2 := {found: true, x: ln.x, y: ln.y, w: ln.w, h: ln.h, text: ln.text}
-            break
-        }
-    }
-    lat.found := true
-    lat.colX := Round(colX)
-    lat.havg := havg
-    lat.wavg := wavg
-    lat.pitch := pitch
-    lat.slotY := slotY
-    lat.anch := anch
-    lat.s2 := s2
-    an := ""
-    for sIdx, a in anch
-        an .= (an = "" ? "" : " ") . sIdx . ":" . Round(a.y + a.h / 2)
-    LastLatticeNote := "anchors=" . cnt . " [" . an . "] pitch=" . Round(pitch) . " col=" . Round(colX)
-    return lat
-}
-
-; OB dialog: Mulligan and Rehit side by side on ONE row - its
-; own two-word lattice.  The relief menu can never satisfy it
-; (there Mulligan sits three slots BELOW the rehit slot).
-FindObPair(scan) {
-    for i, ln in scan.lines {
-        if (!FuzzyIs(ln.text, "rehit"))
-            continue
-        rcy := ln.y + ln.h / 2
-        for j, ln2 in scan.lines {
-            if (j = i)
-                continue
-            if (!FuzzyIs(ln2.text, "mulligan"))
-                continue
-            hMax := ln.h > ln2.h ? ln.h : ln2.h
-            if (Abs((ln2.y + ln2.h / 2) - rcy) < hMax * 0.8
-                && Abs((ln2.x + ln2.w // 2) - (ln.x + ln.w // 2)) > ln.w) {
-                return {found: true, x: ln.x, y: ln.y, w: ln.w, h: ln.h, text: ln.text}
-            }
-        }
-    }
-    return {found: false}
-}
-
-; The line (if any) sitting at a lattice slot position.
-LineAtSlot(scan, lat, slotIdx) {
-    for i, ln in scan.lines {
-        lcx := ln.x + ln.w // 2
-        lcy := ln.y + ln.h // 2
-        if (Abs(lcx - lat.colX) <= lat.wavg * 0.8 && Abs(lcy - lat.slotY[slotIdx]) <= lat.pitch * 0.35)
-            return {found: true, x: ln.x, y: ln.y, w: ln.w, h: ln.h, text: ln.text}
-    }
-    return {found: false}
-}
-
-; Does this text read as one of the menu's stack words?
-IsStackWord(t) {
-    return (FuzzyIs(t, "move forward") || FuzzyIs(t, "move back") || FuzzyIs(t, "next option")
-         || FuzzyIs(t, "mulligan") || FuzzyIs(t, "drop ball") || FuzzyIs(t, "rehit"))
-}
-
-; OB dialog by its TITLE: "You have hit OB!" directly above a
-; Rehit button.  Covers both variants - with Mulligan (mulligans
-; on) and Rehit-only (mulligans off).
-FindObTitleRehit(scan) {
-    for i, ln in scan.lines {
-        tn := OcrNorm(ln.text)
-        if (!(FuzzyIs(ln.text, "you have hit ob") || InStr(tn, "hitob")))
-            continue
-        tcx := ln.x + ln.w // 2
-        tcy := ln.y + ln.h / 2
-        for j, ln2 in scan.lines {
-            if (j = i || !FuzzyIs(ln2.text, "rehit"))
-                continue
-            rcy := ln2.y + ln2.h / 2
-            rcx := ln2.x + ln2.w // 2
-            if (rcy > tcy && (rcy - tcy) < ln.h * 8 && Abs(rcx - tcx) < ln.w)
-                return {found: true, x: ln2.x, y: ln2.y, w: ln2.w, h: ln2.h, text: ln2.text}
-        }
-    }
-    return {found: false}
-}
-
-; Resolve an action to an authorized click point.  Returns
-; true and sets cx/cy; sets LastResolveBand (the vertical
-; tolerance used by the background verify).
-ResolveOcrTarget(actionId, scan, ByRef cx, ByRef cy) {
-    global LastResolveBand, LastLatticeNote, LastRef
-    LastRef := {kind: ""}
-    target := 0
-    if (actionId = "MoveForward")
-        target := 1
-    else if (actionId = "DropRehit")
-        target := 2
-    else if (actionId = "MoveBack")
-        target := 3
-    else if (actionId = "NextOption")
-        target := 4
-    if (target) {
-        lat := FindMenuLattice(scan)
-        if (!lat.found)
-            return false
-        LastResolveBand := Round(lat.pitch)
-        if (target = 2) {
-            ; The combined Drop Ball / Rehit button: click the
-            ; slot whichever word it shows - even unreadable,
-            ; the lattice proves which button it is.
-            if (lat.s2.found) {
-                cx := lat.s2.x + lat.s2.w // 2
-                cy := lat.s2.y + lat.s2.h // 2
-            } else {
-                cx := lat.colX
-                cy := lat.slotY[2]
-            }
-            LastRef := MenuRef(lat, 2)
-            return true
-        }
-        if (lat.anch.HasKey(target)) {
-            a := lat.anch[target]
-            cx := a.x + a.w // 2
-            cy := a.y + a.h // 2
-            LastRef := MenuRef(lat, target)
-            return true
-        }
-        ; Inferred position: refuse if a DIFFERENT stack word is
-        ; readable at that spot (geometry/word mismatch = the
-        ; one-button-off failure).  Only an unreadable or empty
-        ; slot may be clicked by inference.
-        atSlot := LineAtSlot(scan, lat, target)
-        if (atSlot.found && IsStackWord(atSlot.text)) {
-            LastLatticeNote .= " slotmismatch"
-            return false
-        }
-        cx := lat.colX
-        cy := lat.slotY[target]
-        LastRef := MenuRef(lat, target)
-        return true
-    }
-    ; actionId = "Rehit": the OB dialog (by title, or by the
-    ; Mulligan pair), or the relief menu's slot 2 showing Rehit.
-    pr := FindObTitleRehit(scan)
-    if (!pr.found)
-        pr := FindObPair(scan)
-    if (pr.found) {
-        LastResolveBand := Round(pr.h * 2)
-        cx := pr.x + pr.w // 2
-        cy := pr.y + pr.h // 2
-        LastRef := {kind: "ob", rx: cx, ry: cy, w: pr.w, h: pr.h}
-        LastLatticeNote := "OB dialog"
-        return true
-    }
-    lat := FindMenuLattice(scan)
-    if (lat.found && lat.s2.found && FuzzyIs(lat.s2.text, "rehit")) {
-        LastResolveBand := Round(lat.pitch)
-        cx := lat.s2.x + lat.s2.w // 2
-        cy := lat.s2.y + lat.s2.h // 2
-        LastRef := MenuRef(lat, 2)
-        return true
-    }
-    return false
-}
-
-; Geometry of a verified relief menu, for agreement checks, the
-; small confirm read, and learning the locked spots.
-MenuRef(lat, target) {
-    return {kind: "menu", rx: lat.colX, ry: lat.slotY[target], colX: lat.colX
-        , slotY: lat.slotY, pitch: lat.pitch, wavg: lat.wavg, havg: lat.havg
-        , anch: lat.anch, s2: lat.s2}
-}
-
-; ============================================================
-;  LOCKED SMART CLICK SPOTS  (v5.0.6)
-;
-;  The first Smart Click on a PC that two agreeing screen reads
-;  verify saves where every relief-menu button sits (and the OB
-;  dialog's Rehit), keyed to the GSPro window's exact position
-;  and size, in settings.ini [SmartSpots].  From then on a press
-;  reads ONLY that button's small area - tens of milliseconds
-;  instead of two full-window reads - confirms the button's own
-;  word is there at the saved size (a menu still sliding in is
-;  neither in place nor full size), and clicks.  Anything else -
-;  menu not up yet, a different layout - falls back to the full
-;  read, which re-learns.  A different GSPro window size or
-;  position (new resolution) never uses old spots: they are
-;  re-learned on the next press automatically.  Tray menu: Reset
-;  Smart Click spots forces a fresh learn.
-; ============================================================
-SpotKeys() {
-    return ["MoveForward", "DropRehit", "MoveBack", "NextOption", "ObRehit"]
-}
-
-LoadSpots() {
-    global ConfigFile, SpotWin, Spots
-    Spots := {}
-    SpotWin := ""
-    IniRead, sw, %ConfigFile%, SmartSpots, Win, %A_Space%
-    sw := Trim(sw)
-    if (!RegExMatch(sw, "^-?\d+,-?\d+,\d+,\d+$"))
-        return
-    SpotWin := sw
-    for i, k in SpotKeys() {
-        IniRead, v, %ConfigFile%, SmartSpots, %k%, %A_Space%
-        p := StrSplit(Trim(v), ",")
-        if (p.MaxIndex() >= 4 && p[3] > 0 && p[4] > 0)
-            Spots[k] := {x: p[1] + 0, y: p[2] + 0, w: p[3] + 0, h: p[4] + 0, inferred: (p[5] = "1" ? 1 : 0)}
-    }
-}
-
-SaveSpots() {
-    global ConfigFile, SpotWin, Spots
-    try {
-        IniWrite, %SpotWin%, %ConfigFile%, SmartSpots, Win
-        for i, k in SpotKeys() {
-            v := ""
-            if (Spots.HasKey(k))
-                v := Spots[k].x . "," . Spots[k].y . "," . Spots[k].w . "," . Spots[k].h . "," . Spots[k].inferred
-            IniWrite, %v%, %ConfigFile%, SmartSpots, %k%
-        }
-    } catch spErr {
-        LogAppError("SaveSpots", spErr)
-    }
-}
-
-; Are this PC's locked spots valid for the GSPro window as it is
-; right now?  (Cheap: a window lookup, no screen read.)
-SpotsValidNow() {
-    global GSProWinNeedle, GSProWinExclude, SpotWin
-    if (SpotWin = "")
-        return false
-    wr := ClientRectByTitle(GSProWinNeedle, GSProWinExclude)
-    if (!wr.found)
-        return false
-    return ((wr.x . "," . wr.y . "," . wr.w . "," . wr.h) = SpotWin)
-}
-
-; Save the spots from the frame just verified (LastRef).
-LearnSpots(winKey) {
-    global Spots, SpotWin, LastRef
-    if (winKey = "" || !IsObject(LastRef) || LastRef.kind = "")
-        return
-    if (SpotWin != winKey) {
-        Spots := {}
-        SpotWin := winKey
-    }
-    if (LastRef.kind = "menu") {
-        keys := {1: "MoveForward", 2: "DropRehit", 3: "MoveBack", 4: "NextOption"}
-        for slot, key in keys {
-            a := ""
-            if (slot = 2) {
-                if (LastRef.s2.found)
-                    a := LastRef.s2
-            } else if (LastRef.anch.HasKey(slot)) {
-                a := LastRef.anch[slot]
-            }
-            if (IsObject(a))
-                Spots[key] := {x: a.x + a.w // 2, y: a.y + a.h // 2, w: a.w, h: a.h, inferred: 0}
-            else
-                Spots[key] := {x: LastRef.colX, y: LastRef.slotY[slot], w: Round(LastRef.wavg), h: Round(LastRef.havg), inferred: 1}
-        }
-        OcrTrace("  spots locked for this PC: menu at col " . LastRef.colX . ", pitch " . Round(LastRef.pitch))
-    } else if (LastRef.kind = "ob") {
-        Spots["ObRehit"] := {x: LastRef.rx, y: LastRef.ry, w: LastRef.w, h: LastRef.h, inferred: 0}
-        OcrTrace("  spot locked for this PC: OB Rehit at " . LastRef.rx . "," . LastRef.ry)
-    }
-    SaveSpots()
-}
-
-; Confirm a locked spot with a small read of the button's own
-; area.  The word must be the right one, centered where it was
-; learned, at the learned size - a menu still sliding in is not
-; there yet and a menu zooming in is too small, so neither is
-; ever clicked; the read simply repeats (up to `tries` times,
-; ~0.1s apart) until the menu holds still.
-;
-; The second button changes its word with the option shown -
-; Drop Ball, Rehit, Go to DZ (water drop zone, field photo
-; 4 Oct) - so Drop Ball / Rehit is confirmed by the two buttons
-; that never change, Move Forward above it and Move Back below
-; it, both in their locked places; then the second button is
-; clicked whatever it says.
-SpotFastResolve(actionId, ByRef cx, ByRef cy, tries := 12) {
-    global Spots, LastResolveBand
-    ; The menu's text heights (words with and without descenders)
-    ; - a size check that does not depend on which word a button
-    ; shows.
-    hMin := 0
-    hMax := 0
-    for i, k in ["MoveForward", "DropRehit", "MoveBack", "NextOption"] {
-        if (Spots.HasKey(k) && !Spots[k].inferred) {
-            hv := Spots[k].h
-            if (hMin = 0 || hv < hMin)
-                hMin := hv
-            if (hv > hMax)
-                hMax := hv
-        }
-    }
-    cands := []
-    if (actionId = "MoveForward")
-        cands.Push(["MoveForward", ["move forward"]])
-    else if (actionId = "MoveBack")
-        cands.Push(["MoveBack", ["move back"]])
-    else if (actionId = "NextOption")
-        cands.Push(["NextOption", ["next option"]])
-    else if (actionId = "DropRehit")
-        cands.Push(["DropRehit", ["drop ball", "rehit", "go to dz"]])
-    else if (actionId = "Rehit") {
-        cands.Push(["ObRehit", ["rehit"]])
-        cands.Push(["DropRehit", ["rehit"]])
-    }
-    useFrame := (actionId = "DropRehit" && Spots.HasKey("MoveForward")
-        && Spots.HasKey("MoveBack") && Spots.HasKey("DropRehit"))
-    have := useFrame
-    for i, c in cands {
-        if (Spots.HasKey(c[1]))
-            have := true
-    }
-    if (!have)
-        return false
-    Loop, %tries% {
-        tryN := A_Index
-        if (useFrame) {
-            if (SpotSlot2Confirm(cx, cy, hMin, hMax)) {
-                LastResolveBand := Round(Spots["DropRehit"].h * 2)
-                OcrTrace("  locked spot DropRehit confirmed by Move Forward + Move Back, read " . tryN)
-                return true
-            }
-        } else {
-            for i, c in cands {
-                if (!Spots.HasKey(c[1]))
-                    continue
-                sp := Spots[c[1]]
-                isMenu := (c[1] != "ObRehit")
-                hx := sp.w // 2 + sp.h * 2
-                hy := Round(sp.h * 1.3)
-                o := OcrRegion(sp.x - hx, sp.y - hy, hx * 2, hy * 2)
-                for j, ln in o.lines {
-                    hit := false
-                    for k, nd in c[2] {
-                        if (FuzzyIs(ln.text, nd))
-                            hit := true
-                    }
-                    if (!hit || !SpotLineOk(ln, sp, isMenu, hMin, hMax))
-                        continue
-                    cx := ln.x + ln.w // 2
-                    cy := ln.y + ln.h // 2
-                    LastResolveBand := Round(sp.h * 2)
-                    OcrTrace("  locked spot " . c[1] . " confirmed |" . ln.text . "| read " . tryN)
-                    ; A spot learned by inference (its word did not
-                    ; read that time) takes the real box the first
-                    ; time the word is seen.
-                    if (sp.inferred) {
-                        Spots[c[1]] := {x: cx, y: cy, w: ln.w, h: ln.h, inferred: 0}
-                        SaveSpots()
-                    }
-                    return true
-                }
-            }
-        }
-        if (tryN < tries)
-            Sleep, 50
-    }
-    return false
-}
-
-; Is this OCR line the locked button, settled: in its place and
-; at its size?  Menu buttons are sized against the menu's own
-; text-height range (Drop Ball has a descender, Rehit does not).
-; The OB dialog's Rehit button wobbles sideways (field trace:
-; 1788 -> 1817 -> 1788), so its sideways tolerance follows the
-; word's width.
-SpotLineOk(ln, sp, isMenu, hMin, hMax) {
-    lx := ln.x + ln.w / 2
-    ly := ln.y + ln.h / 2
-    tolY := sp.h * 0.25
-    if (isMenu && hMax > hMin && (hMax - hMin) / 2 + 4 > tolY)
-        tolY := (hMax - hMin) / 2 + 4
-    if (!isMenu)
-        tolY := sp.h * 0.4
-    if (tolY < 5)
-        tolY := 5
-    tolX := sp.h * 0.6
-    if (!isMenu && sp.w * 0.4 > tolX)
-        tolX := sp.w * 0.4
-    if (tolX < 8)
-        tolX := 8
-    if (Abs(ly - sp.y) > tolY || Abs(lx - sp.x) > tolX)
-        return false
-    if (isMenu && hMin > 0)
-        return (ln.h >= hMin * 0.8 && ln.h <= hMax * 1.2)
-    return (ln.h >= sp.h * 0.72 && ln.h <= sp.h * 1.3)
-}
-
-; Drop Ball / Rehit / Go to DZ: one small read covering Move
-; Forward, the second button and Move Back.  Both fixed words
-; must sit in their locked places at menu size; then the second
-; button is clicked - at its word if one reads there, else at
-; its locked spot.
-SpotSlot2Confirm(ByRef cx, ByRef cy, hMin, hMax) {
-    global Spots
-    mf := Spots["MoveForward"]
-    mb := Spots["MoveBack"]
-    s2 := Spots["DropRehit"]
-    hx := s2.w // 2 + s2.h * 2
-    if (mf.w // 2 + mf.h > hx)
-        hx := mf.w // 2 + mf.h
-    if (mb.w // 2 + mb.h > hx)
-        hx := mb.w // 2 + mb.h
-    y1 := Round(mf.y - mf.h * 1.3)
-    y2 := Round(mb.y + mb.h * 1.3)
-    if (y2 - y1 < 20)
-        return false
-    o := OcrRegion(s2.x - hx, y1, hx * 2, y2 - y1)
-    okF := false
-    okB := false
-    best := ""
-    for i, ln in o.lines {
-        if (FuzzyIs(ln.text, "move forward")) {
-            if (SpotLineOk(ln, mf, true, hMin, hMax))
-                okF := true
-            continue
-        }
-        if (FuzzyIs(ln.text, "move back")) {
-            if (SpotLineOk(ln, mb, true, hMin, hMax))
-                okB := true
-            continue
-        }
-        if (FuzzyIs(ln.text, "next option") || FuzzyIs(ln.text, "mulligan"))
-            continue
-        lcy := ln.y + ln.h / 2
-        lcx := ln.x + ln.w / 2
-        if (Abs(lcy - s2.y) <= s2.h * 0.6 && Abs(lcx - s2.x) <= s2.w)
-            best := ln
-    }
-    if (!okF || !okB)
-        return false
-    if (IsObject(best)) {
-        cx := best.x + best.w // 2
-        cy := best.y + best.h // 2
-    } else {
-        cx := s2.x
-        cy := s2.y
-    }
-    return true
-}
-
-; Confirming read for the learn path: just the menu's area
-; (around a tenth of a 1440p window), padded so a menu that is
-; still settling stays inside it.
-ScanMenuArea(ref, win) {
-    r := {found: true, lines: [], text: "", lc: "", win: win}
-    x1 := Round(ref.colX - ref.wavg * 0.6 - ref.pitch * 2)
-    x2 := Round(ref.colX + ref.wavg * 0.6 + ref.pitch * 2)
-    y1 := Round(ref.slotY[1] - ref.pitch * 2.3)
-    y2 := Round(ref.slotY[4] + ref.pitch * 2.3)
-    if (x1 < win.x)
-        x1 := win.x
-    if (y1 < win.y)
-        y1 := win.y
-    if (x2 > win.x + win.w)
-        x2 := win.x + win.w
-    if (y2 > win.y + win.h)
-        y2 := win.y + win.h
-    if (x2 - x1 < 20 || y2 - y1 < 20)
-        return r
-    o := OcrRegion(x1, y1, x2 - x1, y2 - y1)
-    r.lines := o.lines
-    r.text := o.text
-    r.lc := LowerStr(o.text)
-    return r
 }
 
 ; Normalize OCR text for matching: lowercase, strip everything
@@ -6581,7 +5669,6 @@ UpdateMainStatus() {
 ;  INIT  -  call order matters
 ; ============================================================
 LoadSettings()
-LoadSpots()
 RefreshAutoStartPath()
 ScanProfileList()
 SeedPresetProfiles()
@@ -6599,7 +5686,6 @@ Menu, Tray, Add, Toggle Mapping,   ToggleFromTray
 Menu, Tray, Add,
 Menu, Tray, Add, Open Settings Folder, OpenSettingsFolder
 Menu, Tray, Add, OCR Test (dump screen text), TrayOcrDump
-Menu, Tray, Add, Reset Smart Click spots, ResetSmartSpots
 Menu, Tray, Add, Key Test (last keys received), KeyTestShow
 Menu, Tray, Add,
 Menu, Tray, Add, Exit,             ExitLabel
@@ -6684,12 +5770,11 @@ Gui, Main:Add, Text, x25 y688 w510, Files are saved at:
 Gui, Main:Font, s9 cWhite Normal, Consolas
 Gui, Main:Add, Text, x25 y707 w510 h34, %ConfigDir%
 Gui, Main:Font, s9 c000000 Normal, Segoe UI
-Gui, Main:Add, Button, x25 y750 w95 h29 gOnOpenFolder, Open Folder
-Gui, Main:Add, Button, x128 y750 w188 h29 gResetSmartSpots, Reset Smart Click Spots
-Gui, Main:Add, Button, x324 y750 w91 h29 gTrayOcrDump, OCR Test
-Gui, Main:Add, Button, x423 y750 w112 h29 gShowHelp, Help / Guide
+Gui, Main:Add, Button, x25 y750 w150 h29 gOnOpenFolder, Open Folder
+Gui, Main:Add, Button, x185 y750 w150 h29 gTrayOcrDump, OCR Test
+Gui, Main:Add, Button, x345 y750 w190 h29 gShowHelp, Help / Guide
 Gui, Main:Font, s9 cAAAAAA Normal, Segoe UI
-Gui, Main:Add, Text, x25 y788 w345 h30, Reset Smart Click Spots re-learns click positions only.
+Gui, Main:Add, Text, x25 y788 w345 h30, OCR Test saves what Windows reads on the GSPro screen (for support).
 Gui, Main:Font, s9 c000000 Normal, Segoe UI
 Gui, Main:Add, Button, x385 y786 w150 h27 gShowFactoryReset, Factory Reset...
 Gui, Main:Font, s9 cAAAAAA Normal, Segoe UI
@@ -7246,108 +6331,15 @@ ClearOcrTip:
     ToolTip
 Return
 
-; Background fade-proof verify for menu-closing smart clicks:
-; runs AFTER the busy lock is released so rapid follow-up
-; presses are never swallowed.  A swallowed click leaves the
-; button in place indefinitely; a closing fade is gone well
-; before the second look - only a persistent button earns the
-; single retry.
-OcrVerifyTick:
-    if (VerifyActionId = "")
-        Return
-    OcrStaleCheck()
-    if (OcrBusy) {
-        SetTimer, OcrVerifyTick, -300
-        Return
-    }
-    OcrLockTake()
-    vAgain := false
-    try {
-        vx := 0
-        vy := 0
-        if (SpotsValidNow()) {
-            vHit := SpotFastResolve(VerifyActionId, vx, vy, 1)
-        } else {
-            vScan := ScanWinClient(GSProWinNeedle, GSProWinExclude)
-            vHit := ResolveOcrTarget(VerifyActionId, vScan, vx, vy)
-        }
-        if (vHit && Abs(vy - VerifyY) < VerifyBandPx)
-            vAgain := true
-    } catch appErr {
-        LogAppError("ClickVerify", appErr)
-    }
-    OcrBusy := false
-    ; The lock is released between the two looks, so a press in
-    ; the meantime is never kept waiting behind this check (and a
-    ; press cancels the pending re-click outright).
-    if (vAgain)
-        SetTimer, OcrVerifyTick2, -450
-    else
-        VerifyActionId := ""
-Return
-
-OcrVerifyTick2:
-    if (VerifyActionId = "")
-        Return
-    OcrStaleCheck()
-    if (OcrBusy) {
-        SetTimer, OcrVerifyTick2, -200
-        Return
-    }
-    OcrLockTake()
-    try {
-        vx := 0
-        vy := 0
-        if (SpotsValidNow()) {
-            vHit := SpotFastResolve(VerifyActionId, vx, vy, 1)
-        } else {
-            vScan2 := ScanWinClient(GSProWinNeedle, GSProWinExclude)
-            vHit := ResolveOcrTarget(VerifyActionId, vScan2, vx, vy)
-        }
-        if (vHit && Abs(vy - VerifyY) < VerifyBandPx) {
-            OcrTrace("  verify: " . VerifyActionId . " still on screen - clicked again at " . vx . "," . vy)
-            DpiClickAt(vx, vy)
-            ParkMouse()
-        }
-    } catch appErr {
-        LogAppError("ClickVerify", appErr)
-    }
-    VerifyActionId := ""
-    OcrBusy := false
-Return
-
 ; FN-hold prefetch: one background scan into the shared cache.
 OcrPrefetch:
     ; GSPro 4's relief panel first: one small read of its corner,
     ; so the arrow that follows knows which screen is up.
+    ; (v5.3.0: no full-screen prefetch for the older menu any more)
     if (ReliefPrefetch())
         Return
-    ; Locked spots confirm with their own small read - a full
-    ; prefetch would only hold the lock the press needs.
-    if (SpotsValidNow())
-        Return
-    OcrStaleCheck()
-    if (OcrBusy) {
-        if (FnIsDown)
-            SetTimer, OcrPrefetch, -300   ; keep the FN-held chain alive
-        Return
-    }
-    OcrLockTake()
-    try {
-        pfScan := ScanWinClient(GSProWinNeedle, GSProWinExclude)
-        if (pfScan.found) {
-            LastScanObj := pfScan
-            LastScanTick := A_TickCount
-        }
-    } catch appErr {
-        LogAppError("Prefetch", appErr)
-    }
-    OcrBusy := false
-    ; Keep the cache warm for as long as FN stays held, so a
-    ; player who reads the menu for a while never waits on a
-    ; scan when the arrow finally lands.
-    if (FnIsDown)
-        SetTimer, OcrPrefetch, -1500
+    if (OcrBusy && FnIsDown)
+        SetTimer, OcrPrefetch, -300   ; keep the FN-held chain alive
 Return
 
 ; Deferred Smart Click: fires the queued press as soon as the
@@ -7575,39 +6567,6 @@ KeyTestShow:
     KeyHistory
 Return
 
-; Forget this PC's locked Smart Click spots; the next press
-; re-learns them with two full screen reads.
-ResetSmartSpots:
-    ; Drop every cached/repeated click as well as saved spots.
-    ; Otherwise the repeat fast path can still use the old point
-    ; for up to four seconds after a reset.
-    if (OcrBusy || FnIsDown) {
-        MsgBox, 64, Smart Click Busy, Release FN and let the current screen read finish, then reset the Smart Click spots.
-        Return
-    }
-    SetTimer, OcrPrefetch, Off
-    SetTimer, OcrDeferred, Off
-    SetTimer, OcrVerifyTick, Off
-    SetTimer, OcrVerifyTick2, Off
-    SetTimer, ParkTick, Off
-    PendingOcrAction := ""
-    PendingOcrSince := 0
-    VerifyActionId := ""
-    LastActionId := ""
-    LastClickX := 0
-    LastClickY := 0
-    LastFireTick := 0
-    LastScanObj := ""
-    LastScanTick := 0
-    LastRef := {}
-    Spots := {}
-    SpotWin := ""
-    ReliefLast := ""
-    ReliefExpectSel := 0
-    SaveSpots()
-    TrayTip, BA Remapper, Smart Click spots cleared. The next Smart Click reads the screen and learns again. Profiles and settings are kept., 5, 1
-Return
-
 ; One-time OCR engine warm-up (first call pays ~1s engine
 ; init; do it in the background at launch, not on the first
 ; real button press at the tee).
@@ -7782,10 +6741,6 @@ OnOpenFolder:
     Run, %ConfigDir%
 Return
 
-OnCleanup:
-    Gosub, ResetSmartSpots
-Return
-
 MainGuiSize:
 BuilderGuiSize:
 CfgGuiSize:
@@ -7909,7 +6864,7 @@ Pause::return
 ; ============================================================
 ShowQuickStart:
     Gui, Main:+OwnDialogs
-    MsgBox, 64, BA Remapper - Quick Start, 1. Select Basic Secondary for the yellow functions printed on your box.`n`n2. Button Mapping turns ON by itself each time BA Remapper opens (the status above shows it).`n`n3. Tap a button for its white function. Hold Reset Aim (A) and press another button for its yellow function. FN + either club button gives Clear View (B).`n`n4. Want a different function? Choose Customize a Copy, open the Builder, click a button, choose its tap and FN actions, and Save. Test mode in the Builder shows what each button does. Export / Import copies a layout to another PC.`n`n5. Optional: use Current Profile at Windows Startup and check Start with Windows.`n`n6. For scramble play, check Auto-Pick Scramble Shot, choose a delay (start with 15 seconds), and check Show chosen card highlight and countdown. Return to GSPro: the green outline shows the planned pick. You can still use any GSPro Select (older GSPro: USE) button yourself.`n`nSmart Click used a wrong spot? Release FN, then use Reset Smart Click Spots. The next press reads the screen and learns again; your profiles stay.`n`nCtrl+F12 turns button mapping on/off. Scramble Auto-Pick has its own checkbox. Exit fully quits; closing the window keeps the app in the tray.
+    MsgBox, 64, BA Remapper - Quick Start, 1. Select Basic Secondary for the yellow functions printed on your box.`n`n2. Button Mapping turns ON by itself each time BA Remapper opens (the status above shows it).`n`n3. Tap a button for its white function. Hold Reset Aim (A) and press another button for its yellow function. FN + either club button gives Clear View (B).`n`n4. Want a different function? Choose Customize a Copy, open the Builder, click a button, choose its tap and FN actions, and Save. Test mode in the Builder shows what each button does. Export / Import copies a layout to another PC.`n`n5. Optional: use Current Profile at Windows Startup and check Start with Windows.`n`n6. For scramble play, check Auto-Pick Scramble Shot, choose a delay (start with 15 seconds), and check Show chosen card highlight and countdown. Return to GSPro: the green outline shows the planned pick. You can still use any GSPro Select (older GSPro: USE) button yourself.`n`nOn GSPro 4's water / OB relief list and the scramble cards the cheat sheet comes up by itself and the buttons work without FN.`n`nCtrl+F12 turns button mapping on/off. Scramble Auto-Pick has its own checkbox. Exit fully quits; closing the window keeps the app in the tray.
 Return
 
 ShowHelp:
@@ -7942,23 +6897,12 @@ ShowHelp:
     SECONDARY FUNCTIONS (set in Builder)
     GSPro Hotkey: FN + button sends a keyboard key
       (includes Select Shot 1-4 for scrambles)
-    Smart Click (OCR): FN + button READS THE SCREEN, finds
-      the GSPro menu button by its text, and clicks it.
-      No setup, works at any resolution.  Actions: Move
-      Forward, Move Back, Next Option, Drop Ball / Rehit
-      (also "Go to DZ" in a water drop zone), OB Rehit.
-      Needs Windows 10 or 11.
-      The first press on a PC learns where the menu buttons
-      sit and LOCKS them in - every press after that is
-      fast.  Changed the resolution?  It re-learns by itself
-      on the next press (or tray menu: Reset Smart Click
-      spots).
+    Smart Click (OCR): for GSPro 4's relief list - the box
+      reads the list and presses GSPro's own keys.  Actions:
+      Move Forward, Move Back, Next Option, Drop Ball / Rehit
+      OB Rehit.  Needs Windows 10 or 11 and GSPro 4.
     Taught Screen Click: FN + button clicks a fixed spot
       you captured (the old way - still available).
-    Speed: keep FN held and tap the button repeatedly -
-      consecutive presses of the same Smart Click fire
-      instantly (Next Option a few times in a row, or
-      walking the ball with Move Forward / Move Back).
     GSPro 4 relief list (RELIEF OPTIONS / YOUR OPTIONS at
       the top left): the same buttons press GSPro's own
       keys - OB Rehit = Rehit's number + Enter, Drop Ball /
@@ -8078,13 +7022,6 @@ ShowHelp:
     Same as Windows startup: Boot Profile, mapping ON, tray
     only.  Opened by you from the desktop or Start menu, the
     window shows - also with mapping ON.
-
-    RESET SMART CLICK SPOTS
-    If a Smart Click used a wrong spot, release FN and choose
-    Reset Smart Click Spots. This clears the learned positions
-    and temporary click caches. The next press re-reads the
-    screen and learns again. Profiles, startup and other
-    settings are kept. It does not erase Taught Screen Clicks.
 
     FACTORY RESET / REMOVAL
     Factory Reset is a separate, advanced action that removes

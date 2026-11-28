@@ -32,9 +32,8 @@ FN + Aim Down:             Move Back
 FN + Aim Left:             Next Option
 FN + Aim Right:            Drop Ball / Rehit
 
-The relief menu must be visible for its Smart Click actions. The first
-successful use reads and learns the menu; later presses verify smaller
-areas at the learned spots for faster response.
+These Smart Click actions work on GSPro 4's relief list (5.3.0 is for
+GSPro 4; the older GSPro relief menu is no longer read).
 
 GSPro 4 shows water and OB relief as a numbered list at the top left
 (RELIEF OPTIONS or YOUR OPTIONS). The same buttons work there:
@@ -105,7 +104,7 @@ Choose Customize a Copy, then Open Button Builder and click a button:
               (click the box and press the key, with Ctrl / Alt / Shift).
               A * on a Builder button means a custom tap.
   Hold FN:    GSPro Hotkey (list, or Custom key or combo...)
-              Smart Click (relief menu, and for GSPro 4's relief list:
+              Smart Click (GSPro 4's relief list:
                 Choice 1 / 2 / 3 + Enter, Lateral Drop / Flag Line /
                 Mulligan + Enter, Rotate Left / Right, Zoom In / Out,
                 Recenter)
@@ -198,9 +197,9 @@ Double-click the green BA tray icon to open the window.
 
 6. IF SOMETHING LOOKS WRONG
 
-Wrong learned Smart Click: release FN and choose Reset Smart Click
-Spots. The next use reads and learns again. Profiles, preferences and
-Taught Screen Click positions stay. Factory Reset is a separate action.
+A relief button did nothing: the GSPro 4 relief list must be on screen
+(top left). Use OCR Test on the main window and send the saved file
+to BA Custom Products if it still does nothing.
 
 No highlight: check both scramble checkboxes, make GSPro active and
 ensure at least two USE cards are visible. The panel can briefly hide
