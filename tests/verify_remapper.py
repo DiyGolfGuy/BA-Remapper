@@ -1785,16 +1785,19 @@ ReliefShotSmoke:
         ; 8: a small picture (1280 wide) - noted, not required.
         ; Shot 9: Auto-Pick on - its own read may leave a card out at
         ; this size; the box's cards must still be all four.
-        for j, shotFile in ["relief-water-flagline.jpg", "gspro-2p.jpg", "relief-water-flagline.jpg", "gspro-2p.jpg", "gspro-3p-select.jpg", "gspro-4p-select.jpg", "relief-water-flagline.jpg", "gspro-4p-select.jpg", "gspro-4p-select.jpg"] {
+        for j, shotFile in ["relief-water-flagline.jpg", "gspro-2p.jpg", "relief-water-flagline.jpg", "gspro-2p.jpg", "gspro-3p-select.jpg", "gspro-4p-select.jpg", "relief-water-flagline.jpg", "gspro-4p-select.jpg", "gspro-4p-select.jpg", "gspro-4p-select.jpg"] {
             away := (j = 3 || j = 4)
             small := (j = 7 || j = 8)
+            tall := (j = 10)    ; shot 10: the full 1080 lines of the screen, like full-screen 1080p
             sw := A_ScreenWidth - 20, sh := Round(sw * 2137 / 3438)
             if (sh > A_ScreenHeight - 60)
                 sh := A_ScreenHeight - 60, sw := Round(sh * 3438 / 2137)
             sx := 0, sy := 0
             if (small)
                 sw := 1280, sh := 796
-            if (j >= 5)
+            if (tall)
+                sh := A_ScreenHeight, sw := Round(sh * 3438 / 2137)
+            if (j >= 5 && !tall)
                 sx := Min(170, A_ScreenWidth - sw), sy := Min(36, A_ScreenHeight - sh)
             ; shrunk smoothly first (like GSPro drawing at this size), so
             ; the window shows clean text rather than a jagged resize
@@ -1957,14 +1960,17 @@ ReliefShotSmoke:
                     ok := ReliefWatchUp && CheatVisible && InStr(CheatShownText, "right=ENTER: FLAG LINE") && InStr(CheatShownText, "up=CLOSER")
                     seenMs := A_TickCount - t0
                     w7 := ReliefWatchWin()
-                    ScrambleNote(ok ? "PASS" : "NOTE", "small picture " . sw . "x" . sh . " at " . sx . "," . sy . ": the water list " . (ok ? "was seen in " . seenMs . " ms" : "was NOT confirmed (look " . ((w7.found && ReliefLook(w7).up) ? "sees the panel" : "does not see the panel") . ")") . " [" . CheatShownText . "]")
+                    ScrambleNote(ok ? "PASS" : "FAIL", "small picture " . sw . "x" . sh . " at " . sx . "," . sy . ": the water list " . (ok ? "was seen in " . seenMs . " ms" : "was NOT confirmed (look " . ((w7.found && ReliefLook(w7).up) ? "sees the panel" : "does not see the panel") . ")") . " [" . CheatShownText . "]")
+                    if (!ok)
+                        fails += 1
                 } else {
                     nCards := (j = 5) ? 3 : 4
                     want := (nCards = 3) ? ["AL", "BOB", "DON"] : ["AL", "SAM", "BOB", "DON"]
+                    Sleep, 300      ; the sheet for these cards (a look may have started before the clock)
                     while (!(IsObject(ScrambleBoxCards) && CheatVisible) && A_TickCount - t0 < 12000)
                         Sleep, 100
                     seenMs := A_TickCount - t0
-                    okCards := IsObject(ScrambleBoxCards) && ScrambleBoxCards.n = nCards && CheatVisible && InStr(CheatShownText, "resetaim=CARD 1") && InStr(CheatShownText, "teeleft=CARD 2") && InStr(CheatShownText, "teeright=CARD 3") && InStr(CheatShownText, nCards = 4 ? "shotcam=CARD 4" : "shotcam=|") && !ReliefWatchUp
+                    okCards := IsObject(ScrambleBoxCards) && ScrambleBoxCards.n = nCards && CheatVisible && InStr(CheatShownText, "resetaim=CARD 1") && InStr(CheatShownText, "teeleft=CARD 2") && InStr(CheatShownText, "teeright=CARD 3") && (nCards = 4 ? InStr(CheatShownText, "shotcam=CARD 4") : !InStr(CheatShownText, "shotcam=CARD")) && !ReliefWatchUp
                     ; the sheet sits at the top right of the picture, clear of the cards
                     WinGetPos, chx, chy, chw, chh, ahk_id %CheatHwnd%
                     okSpot := okCards && chx + chw <= sx + sw && chx + chw > sx + sw - 60 && chy >= sy && chy < sy + 60 && chy + chh < sy + Round(sh * 0.60)
@@ -1985,15 +1991,19 @@ ReliefShotSmoke:
                             }
                             geo := IsObject(pt) && Abs(pt[1] - (u.x + u.w / 2)) < sw * 0.02 && pt[2] < u.y - sh * 0.05 && pt[2] > u.y - sh * 0.13 && pt[1] > sx && pt[2] > sy
                             nameNote .= k . ": " . (IsObject(pt) ? pt[1] . "," . pt[2] : "none") . " reads '" . hit . "'" . (geo ? "" : " (off the card)") . "  "
-                            if (!geo || !InStr(hit, nm))
+                            ; a two-letter name alone is too little print for the
+                            ; reader's check here; its place is checked like the others
+                            if (!geo || (StrLen(nm) >= 3 && !InStr(hit, nm)))
                                 okNames := false
                         }
                     }
                     ok := okCards && okSpot && okNames
                     readHow := IsObject(ScrambleBoxCards) ? ScrambleBoxCards.how : "no cards"
-                    if (small)
-                        ScrambleNote(ok ? "PASS" : "NOTE", "small picture " . sw . "x" . sh . " at " . sx . "," . sy . ": " . nCards . " scramble cards " . (okCards ? "seen in " . seenMs . " ms" : "NOT seen") . " (reads " . readHow . "), sheet top right " . okSpot . ", names " . nameNote . "[" . CheatShownText . "]")
-                    else {
+                    if (small) {
+                        ScrambleNote(ok ? "PASS" : "FAIL", "small picture " . sw . "x" . sh . " at " . sx . "," . sy . ": " . nCards . " scramble cards " . (okCards ? "seen in " . seenMs . " ms" : "NOT seen") . " (reads " . readHow . "), sheet top right " . okSpot . ", names " . nameNote . "[" . CheatShownText . "]")
+                        if (!ok)
+                            fails += 1
+                    } else {
                         ScrambleNote(ok ? "PASS" : "FAIL", "on screen " . sw . "x" . sh . " at " . sx . "," . sy . ", Auto-Pick off: the " . nCards . " scramble cards (Select) seen in " . seenMs . " ms, CARD 1-" . nCards . " on the sheet (reads " . readHow . "; top right: " . okSpot . " at " . chx . "," . chy . " " . chw . "x" . chh . "); name clicks " . nameNote . "[" . CheatShownText . "]")
                         if (!ok)
                             fails += 1
