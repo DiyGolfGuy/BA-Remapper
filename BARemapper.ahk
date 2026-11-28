@@ -2586,9 +2586,9 @@ ReliefOnlyAction(actionId) {
 ;  pixels of GSPro's panel corner in one go - no OCR, no text.
 ;  GSPro 4's relief panel is a solid dark navy block (R11 G17 B31)
 ;  with its cards on it; a round has little of that colour there
-;  (Bruce's water and OB screenshots: 22-45% of the look, also with
+;  (Bruce's water and OB screenshots: 21-56% of the look, also with
 ;  the UI 20% smaller or bigger or 15% darker or brighter; his round
-;  screenshots: 10% at most).  Seen twice in a row -> ONE OCR read
+;  screenshots: 9% at most).  Seen twice in a row -> ONE OCR read
 ;  of the panel (ReliefProbe - the same read an FN press makes)
 ;  confirms the list.  Then the cheat sheet comes up by itself and
 ;  the box's relief buttons work without FN.  The panel gone (two
@@ -2620,52 +2620,76 @@ ReliefWatchWin() {
     return {found: true, hwnd: h, x: NumGet(pt, 0, "Int"), y: NumGet(pt, 4, "Int"), w: cw, h: ch}
 }
 
-; One look at the panel corner: share of panel-navy, card-navy and
-; highlight-blue pixels in 64 x 24 samples of the area 0.50 heights
-; wide from the left edge, 0.06 to 0.30 heights down.  up = the
-; relief panel is there.  srcDC (tests): a DC holding a screenshot.
-; The colour families are wide on purpose (any brightness, HDR, a
-; UI 20% bigger or smaller than Bruce's screens): Bruce's relief
-; screens give 22-45% navy, his round screens at most 10%; one OCR
-; read decides anyway.
-ReliefLook(win, srcDC := 0) {
-    GW := 64, GH := 24
-    rx := win.x, ry := win.y + Round(win.h * 0.06)
-    rw := Min(Round(win.h * 0.50), win.w), rh := Round(win.h * 0.24)
-    res := {panel: 0, card: 0, blue: 0, up: false}
-    if (rw < 8 || rh < 8)
-        return res
+; A few one-pixel rows of the screen (or srcDC) copied 1:1 into a
+; small memory picture: x0..x0+w, one row per screen y in ys.  1:1
+; copies only - a shrinking copy straight from the screen was
+; measured at 0.8 s on the test PC.  {bits, w, rows} + handles;
+; ScreenRowsFree releases them.
+ScreenRows(srcDC, x0, w, ys) {
+    n := ys.MaxIndex()
+    VarSetCapacity(bi, 40, 0)
+    NumPut(40, bi, 0, "UInt"), NumPut(w, bi, 4, "Int"), NumPut(-n, bi, 8, "Int")
+    NumPut(1, bi, 12, "UShort"), NumPut(32, bi, 14, "UShort")
+    bits := 0
     screenDC := 0
     if (!srcDC)
         srcDC := screenDC := DllCall("GetDC", "Ptr", 0, "Ptr")
-    VarSetCapacity(bi, 40, 0)
-    NumPut(40, bi, 0, "UInt"), NumPut(GW, bi, 4, "Int"), NumPut(-GH, bi, 8, "Int")
-    NumPut(1, bi, 12, "UShort"), NumPut(32, bi, 14, "UShort")
-    bits := 0
     mdc := DllCall("CreateCompatibleDC", "Ptr", srcDC, "Ptr")
     dib := DllCall("CreateDIBSection", "Ptr", mdc, "Ptr", &bi, "UInt", 0, "Ptr*", bits, "Ptr", 0, "UInt", 0, "Ptr")
     old := DllCall("SelectObject", "Ptr", mdc, "Ptr", dib, "Ptr")
-    DllCall("SetStretchBltMode", "Ptr", mdc, "Int", 3)   ; COLORONCOLOR: real pixels, never blended
-    ok := DllCall("StretchBlt", "Ptr", mdc, "Int", 0, "Int", 0, "Int", GW, "Int", GH, "Ptr", srcDC, "Int", rx, "Int", ry, "Int", rw, "Int", rh, "UInt", 0x00CC0020)
-    panel := 0, card := 0, blue := 0
-    if (ok && bits) {
-        Loop, % GW * GH {
-            c := NumGet(bits + 0, (A_Index - 1) * 4, "UInt")
-            b := c & 0xFF, g := (c >> 8) & 0xFF, r := (c >> 16) & 0xFF
-            if (r <= 50 && g <= 50 && b <= 50 && b >= 18 && b - r >= 10 && b - g >= 6)
-                panel += 1      ; the panel's dark navy (R11 G17 B31)
-            else if (r >= 8 && r <= 48 && g >= 16 && g <= 60 && b >= 34 && b <= 90 && b - r >= 16 && b - g >= 10)
-                card += 1       ; a card (R24 G33 B53)
-            else if (b - r >= 50 && b > 70 && g > 30)
-                blue += 1       ; the highlighted card
-        }
+    ok := (dib && bits)
+    for i, y in ys {
+        if (ok && !DllCall("BitBlt", "Ptr", mdc, "Int", 0, "Int", i - 1, "Int", w, "Int", 1, "Ptr", srcDC, "Int", x0, "Int", y, "UInt", 0x00CC0020))
+            ok := false
     }
-    DllCall("SelectObject", "Ptr", mdc, "Ptr", old, "Ptr")
-    DllCall("DeleteObject", "Ptr", dib)
-    DllCall("DeleteDC", "Ptr", mdc)
     if (screenDC)
         DllCall("ReleaseDC", "Ptr", 0, "Ptr", screenDC)
-    n := GW * GH
+    return {ok: ok, bits: bits, w: w, rows: n, mdc: mdc, dib: dib, old: old}
+}
+
+ScreenRowsFree(o) {
+    DllCall("SelectObject", "Ptr", o.mdc, "Ptr", o.old, "Ptr")
+    DllCall("DeleteObject", "Ptr", o.dib)
+    DllCall("DeleteDC", "Ptr", o.mdc)
+}
+
+; One look at the panel corner: share of panel-navy, card-navy and
+; highlight-blue pixels in 64 samples on each of 6 rows (0.08 to 0.28
+; heights down) of the area 0.50 heights wide from the left edge.
+; up = the relief panel is there.  srcDC (tests): a DC holding a
+; screenshot.  The colour families are wide on purpose (any
+; brightness, HDR, a UI 20% bigger or smaller than Bruce's screens):
+; his relief screens give 21-56% navy, his round screens at most 9%;
+; one OCR read decides anyway.
+ReliefLook(win, srcDC := 0) {
+    res := {panel: 0, card: 0, blue: 0, up: false}
+    w := Min(Round(win.h * 0.50), win.w)
+    if (w < 64 || win.h < 100)
+        return res
+    ys := []
+    for i, f in [0.08, 0.12, 0.16, 0.20, 0.24, 0.28]
+        ys.Push(win.y + Round(win.h * f))
+    o := ScreenRows(srcDC, win.x, w, ys)
+    panel := 0, card := 0, blue := 0, n := 0
+    if (o.ok) {
+        Loop, % o.rows {
+            row := (A_Index - 1) * w * 4
+            Loop, 64 {
+                c := NumGet(o.bits + 0, row + Floor((A_Index - 0.5) * w / 64) * 4, "UInt")
+                b := c & 0xFF, g := (c >> 8) & 0xFF, r := (c >> 16) & 0xFF
+                n += 1
+                if (r <= 50 && g <= 50 && b <= 50 && b >= 18 && b - r >= 10 && b - g >= 6)
+                    panel += 1      ; the panel's dark navy (R11 G17 B31)
+                else if (r >= 8 && r <= 48 && g >= 16 && g <= 60 && b >= 34 && b <= 90 && b - r >= 16 && b - g >= 10)
+                    card += 1       ; a card (R24 G33 B53)
+                else if (b - r >= 50 && b > 70 && g > 30)
+                    blue += 1       ; the highlighted card
+            }
+        }
+    }
+    ScreenRowsFree(o)
+    if (!n)
+        return res
     res.panel := panel / n, res.card := card / n, res.blue := blue / n
     res.up := (res.panel >= 0.06 && res.panel + res.card + res.blue >= 0.18)
     return res
@@ -3027,47 +3051,34 @@ ScrambleBoxWatchStep(win) {
     }
 }
 
-; The chosen scramble card's colours in the card strip (0.50 to 0.88
-; heights down, the middle 70% across), 80 x 24 samples.
-; srcDC (tests): a DC holding a screenshot.
+; The chosen scramble card's colours in the card strip: 80 samples
+; on each of 7 rows, 0.56 to 0.86 heights down, across the middle 70%.
+; Bruce's 2/3/4-player screens: 1.4-7.9% card navy (UI 20% smaller
+; or bigger, 15% darker or brighter); his relief screens: 0.2% at
+; most.  srcDC (tests): a DC holding a screenshot.
 ScrambleBoxLook(win, srcDC := 0) {
-    GW := 80, GH := 24
-    rx := win.x + Round(win.w * 0.15), ry := win.y + Round(win.h * 0.50)
-    rw := Round(win.w * 0.70), rh := Round(win.h * 0.38)
-    if (rw < 8 || rh < 8)
+    w := Round(win.w * 0.70)
+    if (w < 80 || win.h < 100)
         return false
-    screenDC := 0
-    if (!srcDC)
-        srcDC := screenDC := DllCall("GetDC", "Ptr", 0, "Ptr")
-    VarSetCapacity(bi, 40, 0)
-    NumPut(40, bi, 0, "UInt"), NumPut(GW, bi, 4, "Int"), NumPut(-GH, bi, 8, "Int")
-    NumPut(1, bi, 12, "UShort"), NumPut(32, bi, 14, "UShort")
-    bits := 0
-    mdc := DllCall("CreateCompatibleDC", "Ptr", srcDC, "Ptr")
-    dib := DllCall("CreateDIBSection", "Ptr", mdc, "Ptr", &bi, "UInt", 0, "Ptr*", bits, "Ptr", 0, "UInt", 0, "Ptr")
-    old := DllCall("SelectObject", "Ptr", mdc, "Ptr", dib, "Ptr")
-    DllCall("SetStretchBltMode", "Ptr", mdc, "Int", 3)
-    ok := DllCall("StretchBlt", "Ptr", mdc, "Int", 0, "Int", 0, "Int", GW, "Int", GH, "Ptr", srcDC, "Int", rx, "Int", ry, "Int", rw, "Int", rh, "UInt", 0x00CC0020)
-    navy := 0, btn := 0
-    if (ok && bits) {
-        Loop, % GW * GH {
-            c := NumGet(bits + 0, (A_Index - 1) * 4, "UInt")
-            b := c & 0xFF, g := (c >> 8) & 0xFF, r := (c >> 16) & 0xFF
-            if (r <= 20 && g >= 26 && g <= 56 && b >= 40 && b <= 80 && b - g >= 8 && g - r >= 18)
-                navy += 1       ; the chosen card's teal-navy (R2 G39 B58)
-            else if (r <= 60 && g >= 95 && g <= 160 && b >= 160 && b - r >= 120)
-                btn += 1        ; its USE / Select button (R27 G128 B198)
+    ys := []
+    for i, f in [0.56, 0.61, 0.66, 0.71, 0.76, 0.81, 0.86]
+        ys.Push(win.y + Round(win.h * f))
+    o := ScreenRows(srcDC, win.x + Round(win.w * 0.15), w, ys)
+    navy := 0, n := 0
+    if (o.ok) {
+        Loop, % o.rows {
+            row := (A_Index - 1) * w * 4
+            Loop, 80 {
+                c := NumGet(o.bits + 0, row + Floor((A_Index - 0.5) * w / 80) * 4, "UInt")
+                b := c & 0xFF, g := (c >> 8) & 0xFF, r := (c >> 16) & 0xFF
+                n += 1
+                if (r <= 20 && g >= 26 && g <= 56 && b >= 40 && b <= 80 && b - g >= 8 && g - r >= 18)
+                    navy += 1       ; the chosen card's teal-navy (R2 G39 B58)
+            }
         }
     }
-    DllCall("SelectObject", "Ptr", mdc, "Ptr", old, "Ptr")
-    DllCall("DeleteObject", "Ptr", dib)
-    DllCall("DeleteDC", "Ptr", mdc)
-    if (screenDC)
-        DllCall("ReleaseDC", "Ptr", 0, "Ptr", screenDC)
-    n := GW * GH
-    ; Bruce's 2/3/4-player screens: 1.6-3.4% card navy (UI 20% smaller
-    ; or bigger, 15% darker or brighter); relief screens: 0.1% at most.
-    return (navy / n >= 0.010)
+    ScreenRowsFree(o)
+    return (n && navy / n >= 0.007)
 }
 
 ; The sheet's labels on the scramble screen: the bottom row's cards,

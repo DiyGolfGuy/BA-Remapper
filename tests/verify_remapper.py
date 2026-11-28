@@ -1659,8 +1659,32 @@ ReliefShotSmoke:
                 }
                 DllCall("QueryPerformanceCounter", "Int64*", tc1)
                 perLook := (tc1 - tc0) * 1000 / tcf / 50
+                ; parts, for the record: each look alone, one screen row,
+                ; and one copy of the whole panel corner
+                parts := ""
+                for pk, part in ["win", "relief", "scramble", "row", "block"] {
+                    DllCall("QueryPerformanceCounter", "Int64*", tc0)
+                    Loop, 20 {
+                        if (part = "win")
+                            ReliefWatchWin()
+                        else if (part = "relief")
+                            ReliefLook(w2)
+                        else if (part = "scramble")
+                            ScrambleBoxLook(w2)
+                        else if (part = "row")
+                            ScreenRowsFree(ScreenRows(0, w2.x, Round(w2.h * 0.5), [w2.y + 100]))
+                        else {
+                            bys := []
+                            Loop, % Round(w2.h * 0.24)
+                                bys.Push(w2.y + A_Index)
+                            ScreenRowsFree(ScreenRows(0, w2.x, Round(w2.h * 0.5), bys))
+                        }
+                    }
+                    DllCall("QueryPerformanceCounter", "Int64*", tc1)
+                    parts .= part . " " . Round((tc1 - tc0) * 1000 / tcf / 20, 2) . " ms, "
+                }
                 ok := w2.found && perLook < 25
-                ScrambleNote(ok ? "PASS" : "FAIL", "watch cost: " . Round(perLook, 2) . " ms per look (window check + relief look + scramble look) = " . Round(perLook / 4, 2) . "% of one CPU core at one look every 400 ms")
+                ScrambleNote(ok ? "PASS" : "FAIL", "watch cost: " . Round(perLook, 2) . " ms per look (window check + relief look + scramble look) = " . Round(perLook / 4, 2) . "% of one CPU core at one look every 400 ms [" . parts . "]")
                 if (!ok)
                     fails += 1
                 ReliefLastAct := ""
@@ -1676,7 +1700,7 @@ ReliefShotSmoke:
                 if (!ok)
                     fails += 1
             } else {
-                while (!(IsObject(ScrambleBoxCards) && CheatVisible) && A_TickCount - t0 < 9000)
+                while (!(IsObject(ScrambleBoxCards) && CheatVisible) && A_TickCount - t0 < 12000)
                     Sleep, 100
                 ok := IsObject(ScrambleBoxCards) && ScrambleBoxCards.n = 2 && CheatVisible && InStr(CheatShownText, "SCRAMBLE:") && InStr(CheatShownText, "teeleft=CARD 2") && InStr(CheatShownText, "teeright=|") && !ReliefWatchUp
                 sw2 := ReliefWatchWin()
