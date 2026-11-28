@@ -105,6 +105,10 @@ page): Remapper brings the GSPro window back to the front first. Only
 the window in front matters, not where the mouse is.
 The relief list and scramble cards work the same way: the sheet still
 comes up by itself, and the first press does that screen's job.
+How Remapper knows GSPro: by its window - the one with GSPro in its
+title (the biggest, if there are several). It does not go by screen
+number or by where the mouse is. A browser tab, the GSPro Discord, a
+folder or a note with GSPro in its name is not taken for the game.
 Windows cannot tell the box from a keyboard, so with mapping ON the
 letters the box uses (Y U O I K A C V J, the arrows, Ctrl+M) also jump
 to GSPro when typed on a keyboard in another program. To type in

@@ -1773,7 +1773,7 @@ ReliefShotSmoke:
         ; a screenshot in a window named like GSPro.
         LoadProfile("Basic Secondary")
         RemapActive := true, ReliefAutoSheet := true, ReliefNoFn := true, ScrambleAutoPick := false
-        ScrambleNote(A_ScreenHeight >= 1000 ? "PASS" : "FAIL", "on screen: test screen " . A_ScreenWidth . "x" . A_ScreenHeight . " (needs 1080 lines, like a bay)")
+        ScrambleNote(A_ScreenHeight >= 1000 ? "PASS" : "FAIL", "on screen: test screen " . A_ScreenWidth . "x" . A_ScreenHeight . " at " . Round(A_ScreenDPI * 100 / 96) . "% Windows scale (needs 1080 lines, like a bay)")
         if (A_ScreenHeight < 1000)
             fails += 1
         ; Shots 3 and 4 (v5.3.0): the same two screens with another
@@ -2431,12 +2431,50 @@ def runtime_checks(source, ahk):
 
 
 
+def screen_watch_only(source, ahk):
+    """The on-screen screen-watch checks alone (ReliefShotSmoke), for a
+    second run at another Windows display scale."""
+    assert os.name == "nt", "AutoHotkey runtime checks require Windows"
+    with tempfile.TemporaryDirectory(prefix="BA-Remapper-scale-") as directory:
+        work = Path(directory)
+        shutil.copytree(ROOT / "assets", work / "assets")
+        isolated = source.replace('ConfigDir    := DocsRoot . "\\BA Custom Products\\Remapper"', 'ConfigDir    := A_ScriptDir . "\\data"')
+        isolated = isolated.replace('TriggerFile  := A_Temp . "\\baremapper_show.tmp"', 'TriggerFile  := A_ScriptDir . "\\show.tmp"')
+        isolated = isolated.replace("BARemapper_BACustomProducts_SingleInstance", "BARemapper_Regression_" + work.name)
+        isolated = isolated.replace("\nMigrateLegacyFiles()\n", "\n; migration disabled in isolated test\n")
+        isolated = isolated.replace("\nRefreshAutoStartPath()\n", "\n; startup repair disabled in isolated test\n")
+        marker = "SetTimer, OcrWarmup, -3000\nReturn"
+        assert marker in isolated
+        candidate = isolated.replace(marker, "SetTimer, ReliefShotSmoke, -50\nReturn", 1)
+        script = work / "ReliefShotSmoke.ahk"
+        script.write_text(candidate + "\n" + SMOKE + "\n" + SCRAMBLE + "\n" + REALSHOT + "\n" + RELIEF, encoding="utf-8-sig")
+        try:
+            check = subprocess.run([str(ahk), "/ErrorStdOut", str(script), str(ROOT / "tests" / "fixtures" / "gspro")], capture_output=True, text=True, timeout=300)
+            returncode, output = check.returncode, check.stdout + check.stderr
+        except subprocess.TimeoutExpired:
+            returncode, output = -1, "timed out"
+        notes = (work / "scramble-checks.txt").read_text(encoding="utf-8-sig") if (work / "scramble-checks.txt").exists() else "No notes recorded"
+        shown = [line for line in notes.splitlines() if line.startswith("FAIL") or any(word in line for word in ("on screen", "watch cost", "another program", "small picture", "Auto-Pick ON", "screen gone"))]
+        for line in shown:
+            print("SCALE RUN " + line)
+        report = (work / "result.txt").read_text() if (work / "result.txt").exists() else "No result"
+        assert returncode == 0 and report.startswith("PASS:"), "Scale run: " + report + output
+        print("PASS: the on-screen screen-watch checks passed at this Windows display scale")
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--baseline", type=Path)
     parser.add_argument("--ahk", type=Path)
+    parser.add_argument("--screen-watch-only", action="store_true")
     args = parser.parse_args()
     source = (ROOT / "BARemapper.ahk").read_text(encoding="utf-8-sig")
+    if args.screen_watch_only:
+        for stream in (sys.stdout, sys.stderr):
+            if hasattr(stream, "reconfigure"):
+                stream.reconfigure(encoding="utf-8", errors="replace")
+        screen_watch_only(source, args.ahk.resolve())
+        return
     baseline = args.baseline.read_text(encoding="utf-8-sig") if args.baseline else subprocess.check_output(["git", "show", BASE + ":BARemapper.ahk"], cwd=ROOT).decode("utf-8-sig")
     # The scramble checks print feet/inch marks (curly quotes, primes) that
     # the Windows console code page cannot encode.
