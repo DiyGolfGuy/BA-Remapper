@@ -633,6 +633,18 @@ UiSmoke:
         SendLevel, 0
         Sleep, 900
         Assert(MulliganPressTick > mulBefore && WinActive("GSPro BA Remapper regression target"), "Ctrl+M with GSPro open behind another program goes to GSPro (brought to the front); nothing more without the relief list")
+        ; v5.3.0: a plain box tap with another program in front: GSPro
+        ; comes to the front first and the key lands there (U alone
+        ; between the F3 / F4 markers in the key target's log).
+        SendSecondaryKey("{F3}")
+        WinActivate, ahk_exe notepad.exe
+        WinWaitActive, ahk_exe notepad.exe, , 3
+        awayFront := WinActive("ahk_exe notepad.exe") ? true : false
+        HandleBoxKeyDown("u")      ; tap Putt with Notepad in front
+        HandleBoxKeyUp("u")
+        Sleep, 250
+        Assert(awayFront && WinActive("GSPro BA Remapper regression target"), "A box tap with another program in front brings GSPro to the front first (Notepad was in front: " . awayFront . ")")
+        SendSecondaryKey("{F4}")
         WinKill, ahk_exe notepad.exe   ; Ctrl+M typed a line break: no save prompt
         WinWaitClose, ahk_exe notepad.exe, , 5
         ; Builder test mode: box presses show what they do, nothing is sent.
@@ -2028,6 +2040,10 @@ def runtime_checks(source, ahk):
         take = downs[downs.index(0x75) + 1:downs.index(0x76)]
         assert take == [0x31], f"Scramble screen: AIM right sent the card's number 1 and nothing else, got {take}"
         print("PASS: scramble cards from the box: Tee Left / Reset Aim tap picked, AIM right sent 1; no A, V or arrow leaked")
+        assert 0x72 in downs and 0x73 in downs, f"F3 / F4 markers around the tap with another program in front: {downs}"
+        away = downs[downs.index(0x72) + 1:downs.index(0x73)]
+        assert away == [0x55], f"Putt tapped with another program in front: U reached GSPro and nothing else, got {away}"
+        print("PASS: a box tap with another program in front: GSPro was brought to the front and got the key (U)")
         relief_downs = [key for _, message, key in rows if message in (0x100, 0x104) and key in (0x32, 0x33, 0x0D, 0x34, 0x71, 0x58)]
         assert relief_downs[:6] == [0x32, 0x33, 0x0D, 0x34, 0x71, 0x58], f"Panel keys 2, 3, Enter; sequence 4, F2; custom tap X: {relief_downs}"
         assert not any(key in (0x59, 0x56, 0x4F) for _, _, key in rows), f"Heat Map / Tee Right / Flyover leaked their printed keys: {rows}"
