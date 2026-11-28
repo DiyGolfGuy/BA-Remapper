@@ -48,8 +48,18 @@ def static_checks(source, baseline):
     # DpiRepeatClick) and Reset Smart Click Spots were removed on purpose.
     for gone in ["RunOcrAction(", "FindMenuLattice(", "LearnSpots(", "SpotFastResolve(", "ResetSmartSpots"]:
         assert gone not in source.replace(";    before (RunOcrAction unchanged).", ""), f"Removed GSPro 3 code still present: {gone}"
+    # v5.3.0 (Bruce, 2026-11-27: "how does the software know what gspro
+    # is? all the time every time"): GsproWinRect leaves out look-alike
+    # titles (a browser tab, Discord, a folder, a note); nothing else in
+    # it changed.
+    look_alike = ("        ; v5.3.0: another program can carry the word too (a GSPro\n"
+                  "        ; video in a browser, the GSPro Discord, a folder): not the game.\n"
+                  "        if (GsproLookAlike(id))\n            continue\n")
+    assert function(source, "GsproWinRect").count(look_alike) == 1, "GsproWinRect skips look-alike titles"
+    assert function(source, "GsproWinRect").replace(look_alike, "") == function(baseline, "GsproWinRect"), "Unexpected core change: GsproWinRect"
+    assert 'if (pn = "GSPro.exe")\n        return false' in function(source, "GsproLookAlike"), "GSPro.exe itself is never a look-alike"
     unchanged = [
-        "DpiClickAt", "GsproWinRect",
+        "DpiClickAt",
         "ClientRectByTitle", "ScrambleDecide", "ScrambleSendPick",
         "ScrambleVoteLeader", "ScrambleCountRead",
         "ScrambleVoteSummary", "ScrambleKeepRead",
@@ -132,7 +142,7 @@ def static_checks(source, baseline):
     assert 'SetKeyDelay, 15, 60' in function(source, "SendSecondaryKey")
     assert 'SendEvent, %keys%' in function(source, "SendSecondaryKey")
     assert 'gOnCleanup,' not in source
-    print(f"PASS: {len(unchanged)} core functions, diagnostics, hotkeys and exit preserved; preview hooks do not change voting, deadlines, cancellation or shot-key delivery")
+    print(f"PASS: {len(unchanged) + 1} core functions, diagnostics, hotkeys and exit preserved; preview hooks do not change voting, deadlines, cancellation or shot-key delivery")
 
 
 SINK = r'''
@@ -647,6 +657,31 @@ UiSmoke:
         SendSecondaryKey("{F4}")
         WinKill, ahk_exe notepad.exe   ; Ctrl+M typed a line break: no save prompt
         WinWaitClose, ahk_exe notepad.exe, , 5
+        ; v5.3.0 ("how does the software know what gspro is? all the time
+        ; every time"): another program's window with GSPro in its title is
+        ; not the game.  A note named "GSPro notes" in Notepad, maximized
+        ; (bigger than the game window) and in front: the game is still the
+        ; GSPro window, and a box tap goes there (U alone between F4 / F5).
+        FileAppend, a look-alike window title`n, %A_ScriptDir%\GSPro notes.txt
+        Run, notepad.exe "%A_ScriptDir%\GSPro notes.txt", %A_WinDir%
+        WinWait, GSPro notes ahk_exe notepad.exe, , 10
+        likeHwnd := WinExist("GSPro notes ahk_exe notepad.exe")
+        WinMaximize, ahk_id %likeHwnd%
+        WinActivate, ahk_id %likeHwnd%
+        WinWaitActive, ahk_id %likeHwnd%, , 3
+        WinGetTitle, likeTitle, ahk_id %likeHwnd%
+        sinkHwnd := WinExist("GSPro BA Remapper regression target")
+        likeGame := GsproWinRect(GSProWinNeedle, GSProWinExclude)
+        WinGetPos, , , likeW, likeH, ahk_id %likeHwnd%
+        Assert(likeHwnd && InStr(likeTitle, "GSPro") && GsproLookAlike(likeHwnd) && !GsproIsGame(likeHwnd) && GsproIsGame(sinkHwnd) && !GsproLookAlike(sinkHwnd), "A Notepad window titled '" . likeTitle . "' (" . likeW . " x " . likeH . ") is a look-alike, not the game " . WinNote(likeHwnd, false))
+        Assert(WinActive("ahk_id " . likeHwnd) && !GsproIsFront() && likeGame.found && likeGame.hwnd = sinkHwnd && likeW * likeH > likeGame.w * likeGame.h, "With the bigger look-alike in front, the game is still the GSPro window (found: " . likeGame.title . ")")
+        HandleBoxKeyDown("u")      ; tap Putt with the look-alike in front
+        HandleBoxKeyUp("u")
+        Sleep, 250
+        Assert(WinActive("ahk_id " . sinkHwnd), "A box tap with a look-alike 'GSPro' window in front goes to the real GSPro window")
+        SendSecondaryKey("{F5}")
+        WinKill, ahk_id %likeHwnd%
+        WinWaitClose, ahk_id %likeHwnd%, , 5
         ; Builder test mode: box presses show what they do, nothing is sent.
         Gosub, ShowBuilder
         GuiControl, Builder:, BuilderTest, 1
@@ -1744,11 +1779,20 @@ ReliefShotSmoke:
         ; Shots 3 and 4 (v5.3.0): the same two screens with another
         ; program clicked last - a video on a second screen - while
         ; GSPro's picture stays uncovered.
-        for j, shotFile in ["relief-water-flagline.jpg", "gspro-2p.jpg", "relief-water-flagline.jpg", "gspro-2p.jpg"] {
-            away := (j > 2)
+        ; Shots 5 and 6: the 3- and 4-player cards (GSPro 4's word,
+        ; Select), the window not at the screen's corner; every card's
+        ; name click checked against where the name is.  Shots 7 and
+        ; 8: a small picture (1280 wide) - noted, not required.
+        for j, shotFile in ["relief-water-flagline.jpg", "gspro-2p.jpg", "relief-water-flagline.jpg", "gspro-2p.jpg", "gspro-3p-select.jpg", "gspro-4p-select.jpg", "relief-water-flagline.jpg", "gspro-4p-select.jpg"] {
+            away := (j = 3 || j = 4)
             sw := A_ScreenWidth - 20, sh := Round(sw * 2137 / 3438)
             if (sh > A_ScreenHeight - 60)
                 sh := A_ScreenHeight - 60, sw := Round(sh * 3438 / 2137)
+            sx := 0, sy := 0
+            if (j >= 7)
+                sw := 1280, sh := 796
+            if (j >= 5)
+                sx := Min(170, A_ScreenWidth - sw), sy := Min(36, A_ScreenHeight - sh)
             ; shrunk smoothly first (like GSPro drawing at this size), so
             ; the window shows clean text rather than a jagged resize
             src := LoadPicture(dir . "\" . shotFile)
@@ -1756,11 +1800,19 @@ ReliefShotSmoke:
             DllCall("GetObject", "Ptr", src, "Int", A_PtrSize = 8 ? 32 : 24, "Ptr", &bm)
             showBmp := ShotScaled(src, NumGet(bm, 4, "Int"), NumGet(bm, 8, "Int"), sw, sh)
             DllCall("DeleteObject", "Ptr", src)
-            Gui, Shot:New, -Caption +ToolWindow +HwndShotHwnd, GSPro screen watch test
+            Gui, Shot:New, -Caption +ToolWindow -DPIScale +HwndShotHwnd, GSPro screen watch test
             Gui, Shot:Margin, 0, 0
             Gui, Shot:Add, Picture, x0 y0 w%sw% h%sh%, HBITMAP:%showBmp%
             if (away) {
-                Run, notepad.exe, %A_WinDir%
+                ; shot 3: the other program is a look-alike - a note
+                ; named GSPro - which must not be taken for the game
+                if (j = 3) {
+                    if (!FileExist(A_ScriptDir . "\GSPro notes.txt"))
+                        FileAppend, a look-alike window title`n, %A_ScriptDir%\GSPro notes.txt
+                    Run, notepad.exe "%A_ScriptDir%\GSPro notes.txt", %A_WinDir%
+                } else {
+                    Run, notepad.exe, %A_WinDir%
+                }
                 WinWait, ahk_exe notepad.exe, , 10
                 WinRestore, ahk_exe notepad.exe
                 WinMove, ahk_exe notepad.exe, , % A_ScreenWidth - 420, 0, 400, 240
@@ -1768,7 +1820,7 @@ ReliefShotSmoke:
                 WinActivate, ahk_exe notepad.exe
                 WinWaitActive, ahk_exe notepad.exe, , 3
             } else {
-                Gui, Shot:Show, x0 y0 w%sw% h%sh%
+                Gui, Shot:Show, x%sx% y%sy% w%sw% h%sh%
                 WinActivate, ahk_id %ShotHwnd%
                 WinWaitActive, ahk_id %ShotHwnd%, , 3
             }
@@ -1786,11 +1838,12 @@ ReliefShotSmoke:
                 seenMs := A_TickCount - t0
                 npFront := WinActive("ahk_exe notepad.exe") ? 1 : 0
                 w3 := ReliefWatchWin()
+                WinGetTitle, npTitle, ahk_exe notepad.exe
                 if (j = 3)
-                    ok := npFront && ReliefWatchUp && CheatVisible && InStr(CheatShownText, "NO FN NEEDED") && InStr(CheatShownText, "right=ENTER: FLAG LINE") && w3.found && !w3.front
+                    ok := npFront && InStr(npTitle, "GSPro") && ReliefWatchUp && CheatVisible && InStr(CheatShownText, "NO FN NEEDED") && InStr(CheatShownText, "right=ENTER: FLAG LINE") && w3.found && !w3.front && w3.hwnd = ShotHwnd
                 else
-                    ok := npFront && IsObject(ScrambleBoxCards) && ScrambleBoxCards.n = 2 && CheatVisible && InStr(CheatShownText, "SCRAMBLE:") && InStr(CheatShownText, "teeleft=CARD 2") && w3.found && !w3.front
-                ScrambleNote(ok ? "PASS" : "FAIL", "another program in front, GSPro uncovered: the " . (j = 3 ? "water list" : "2 scramble cards") . " seen in " . seenMs . " ms and the sheet came up by itself (Notepad still in front: " . npFront . ", watch " . (w3.found ? (w3.front ? "front" : "not in front") : "no window") . ") [" . CheatShownText . "]")
+                    ok := npFront && IsObject(ScrambleBoxCards) && ScrambleBoxCards.n = 2 && CheatVisible && InStr(CheatShownText, "SCRAMBLE:") && InStr(CheatShownText, "teeleft=CARD 2") && w3.found && !w3.front && w3.hwnd = ShotHwnd
+                ScrambleNote(ok ? "PASS" : "FAIL", "another program in front" . (j = 3 ? " (titled '" . npTitle . "', not taken for the game)" : "") . ", GSPro uncovered: the " . (j = 3 ? "water list" : "2 scramble cards") . " seen in " . seenMs . " ms and the sheet came up by itself (Notepad still in front: " . npFront . ", watch " . (w3.found ? (w3.front ? "front" : "not in front") : "no window") . ") [" . CheatShownText . "]")
                 if (!ok)
                     fails += 1
                 if (j = 3) {
@@ -1851,6 +1904,55 @@ ReliefShotSmoke:
                     fails += 1
                 WinKill, ahk_exe notepad.exe
                 WinWaitClose, ahk_exe notepad.exe, , 5
+            } else if (j >= 5) {
+                small := (j >= 7)
+                if (j = 7) {
+                    while (!(ReliefWatchUp && CheatVisible) && A_TickCount - t0 < 9000)
+                        Sleep, 100
+                    ok := ReliefWatchUp && CheatVisible && InStr(CheatShownText, "right=ENTER: FLAG LINE") && InStr(CheatShownText, "up=CLOSER")
+                    seenMs := A_TickCount - t0
+                    w7 := ReliefWatchWin()
+                    ScrambleNote(ok ? "PASS" : "NOTE", "small picture " . sw . "x" . sh . " at " . sx . "," . sy . ": the water list " . (ok ? "was seen in " . seenMs . " ms" : "was NOT confirmed (look " . ((w7.found && ReliefLook(w7).up) ? "sees the panel" : "does not see the panel") . ")") . " [" . CheatShownText . "]")
+                } else {
+                    nCards := (j = 5) ? 3 : 4
+                    want := (nCards = 3) ? ["AL", "BOB", "DON"] : ["AL", "SAM", "BOB", "DON"]
+                    while (!(IsObject(ScrambleBoxCards) && CheatVisible) && A_TickCount - t0 < 12000)
+                        Sleep, 100
+                    seenMs := A_TickCount - t0
+                    okCards := IsObject(ScrambleBoxCards) && ScrambleBoxCards.n = nCards && CheatVisible && InStr(CheatShownText, "resetaim=CARD 1") && InStr(CheatShownText, "teeleft=CARD 2") && InStr(CheatShownText, "teeright=CARD 3") && InStr(CheatShownText, nCards = 4 ? "shotcam=CARD 4" : "shotcam=|") && !ReliefWatchUp
+                    ; the sheet sits at the top right of the picture, clear of the cards
+                    WinGetPos, chx, chy, chw, chh, ahk_id %CheatHwnd%
+                    okSpot := okCards && chx + chw <= sx + sw && chx + chw > sx + sw - 60 && chy >= sy && chy < sy + 60 && chy + chh < sy + Round(sh * 0.60)
+                    ; each card's click lands on that player's name: over
+                    ; its Select word, above it, and the reader finds the name there
+                    nameNote := "", okNames := okCards
+                    if (okCards) {
+                        c := ScrambleBoxCards
+                        for k, nm in want {
+                            pt := ScrambleNamePoint(c, k)
+                            u := c.uses[k]
+                            hit := ""
+                            if (IsObject(pt)) {
+                                OcrLockTake()
+                                o := OcrRegionScaled(pt[1] - Round(sh * 0.07), pt[2] - Round(sh * 0.022), Round(sh * 0.14), Round(sh * 0.044), 3)
+                                OcrBusy := false
+                                hit := Trim(RegExReplace(o.text, "\s+", " "))
+                            }
+                            geo := IsObject(pt) && Abs(pt[1] - (u.x + u.w / 2)) < sw * 0.02 && pt[2] < u.y - sh * 0.05 && pt[2] > u.y - sh * 0.13 && pt[1] > sx && pt[2] > sy
+                            nameNote .= k . ": " . (IsObject(pt) ? pt[1] . "," . pt[2] : "none") . " reads '" . hit . "'" . (geo ? "" : " (off the card)") . "  "
+                            if (!geo || !InStr(hit, nm))
+                                okNames := false
+                        }
+                    }
+                    ok := okCards && okSpot && okNames
+                    if (small)
+                        ScrambleNote(ok ? "PASS" : "NOTE", "small picture " . sw . "x" . sh . " at " . sx . "," . sy . ": " . nCards . " scramble cards " . (okCards ? "seen in " . seenMs . " ms" : "NOT seen") . ", sheet top right " . okSpot . ", names " . nameNote . "[" . CheatShownText . "]")
+                    else {
+                        ScrambleNote(ok ? "PASS" : "FAIL", "on screen " . sw . "x" . sh . " at " . sx . "," . sy . ", Auto-Pick off: the " . nCards . " scramble cards (Select) seen in " . seenMs . " ms, CARD 1-" . nCards . " on the sheet (top right: " . okSpot . " at " . chx . "," . chy . " " . chw . "x" . chh . "); name clicks " . nameNote . "[" . CheatShownText . "]")
+                        if (!ok)
+                            fails += 1
+                    }
+                }
             } else if (j = 1) {
                 while (!(ReliefWatchUp && CheatVisible) && A_TickCount - t0 < 9000)
                     Sleep, 100
@@ -2134,6 +2236,10 @@ def runtime_checks(source, ahk):
         away = downs[downs.index(0x72) + 1:downs.index(0x73)]
         assert away == [0x55], f"Putt tapped with another program in front: U reached GSPro and nothing else, got {away}"
         print("PASS: a box tap with another program in front: GSPro was brought to the front and got the key (U)")
+        assert 0x74 in downs, f"F5 marker after the tap with a look-alike title in front: {downs}"
+        like = downs[downs.index(0x73) + 1:downs.index(0x74)]
+        assert like == [0x55], f"Putt tapped with a look-alike 'GSPro' title in front: U reached the real GSPro window and nothing else, got {like}"
+        print("PASS: a look-alike window title (a note named GSPro, maximized, in front) is not taken for the game: the tap reached the real GSPro window")
         relief_downs = [key for _, message, key in rows if message in (0x100, 0x104) and key in (0x32, 0x33, 0x0D, 0x34, 0x71, 0x58)]
         assert relief_downs[:6] == [0x32, 0x33, 0x0D, 0x34, 0x71, 0x58], f"Panel keys 2, 3, Enter; sequence 4, F2; custom tap X: {relief_downs}"
         assert not any(key in (0x59, 0x56, 0x4F) for _, _, key in rows), f"Heat Map / Tee Right / Flyover leaked their printed keys: {rows}"

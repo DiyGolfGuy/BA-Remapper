@@ -41,6 +41,9 @@ DllCall("SetProcessDPIAware")
 ;    also after a click on another screen (a video on screen 2): the
 ;    sheet still comes up by itself and the first box press brings
 ;    GSPro forward and does that screen's job.  Same look, same pace.
+;  - Which window is GSPro: the title rule as before, but a browser
+;    tab, the GSPro Discord, a folder or a note with "GSPro" in its
+;    title is never taken for the game (GsproLookAlike).
 ;
 ;  CHANGES IN v5.2.2  (Bruce, Nov 24 2026)
 ;  - Mulligan button on GSPro 4's water relief list: it highlighted
@@ -2570,8 +2573,7 @@ GsproToFront() {
     global GSProWinNeedle, GSProWinExclude
     h := DllCall("GetForegroundWindow", "Ptr")
     if (h) {
-        WinGetTitle, ft, ahk_id %h%
-        if (InStr(ft, GSProWinNeedle) && !(GSProWinExclude != "" && InStr(ft, GSProWinExclude)))
+        if (GsproIsGame(h))
             return true
         WinGet, fpid, PID, ahk_id %h%
         if (fpid = DllCall("GetCurrentProcessId"))
@@ -2590,7 +2592,11 @@ GsproToFront() {
     t0 := A_TickCount
     while (!WinActive("ahk_id " . g) && A_TickCount - t0 < 600)
         Sleep, 20
-    return WinActive("ahk_id " . g) ? true : false
+    ok := WinActive("ahk_id " . g) ? true : false
+    ; for support: which window was taken as the game (the other
+    ; program's title is not written down)
+    OcrTrace("box press: GSPro " . (ok ? "brought to the front" : "did not come to the front") . " - " . WinNote(g) . "; in front was " . (h ? WinNote(h, false) : "nothing"))
+    return ok
 }
 
 ; Frame-polled game input can miss an instantaneous SendInput
@@ -2748,11 +2754,9 @@ ReliefWatchWin() {
     return win
 }
 
-; A window titled like the GSPro game (not its configuration window).
+; The GSPro game window (see WHICH WINDOW IS GSPRO).
 WatchIsGame(h) {
-    global GSProWinNeedle, GSProWinExclude
-    WinGetTitle, at, ahk_id %h%
-    return (at != "" && InStr(at, GSProWinNeedle) && !(GSProWinExclude != "" && InStr(at, GSProWinExclude)))
+    return GsproIsGame(h)
 }
 
 ; A window's picture (client area) on the screen: {found, hwnd, x, y,
@@ -2937,6 +2941,11 @@ ScreenWatchStep() {
         ReliefWatchSet(false)
         ScrambleBoxCards := ""
         return
+    }
+    static notedWin := ""
+    if (notedWin != win.hwnd . "|" . win.w . "x" . win.h) {
+        notedWin := win.hwnd . "|" . win.w . "x" . win.h
+        OcrTrace("screen watch: GSPro window " . WinNote(win.hwnd) . ", picture " . win.w . " x " . win.h . " at " . win.x . ", " . win.y . (win.front ? "" : " (another program in front)"))
     }
     WatchSeenHwnd := win.hwnd, WatchSeenTick := A_TickCount
     ReliefWatchLook(win)
@@ -4192,6 +4201,10 @@ GsproWinRect(include, exclude := "") {
             continue
         if (exclude != "" && InStr(tl, excL))
             continue
+        ; v5.3.0: another program can carry the word too (a GSPro
+        ; video in a browser, the GSPro Discord, a folder): not the game.
+        if (GsproLookAlike(id))
+            continue
         WinGetPos, wx, wy, ww, wh, ahk_id %id%
         if (ww <= 0 || wh <= 0)
             continue
@@ -4207,6 +4220,51 @@ GsproWinRect(include, exclude := "") {
         }
     }
     return best
+}
+
+; ------------------------------------------------------------
+;  WHICH WINDOW IS GSPRO  (v5.3.0, Bruce 2026-11-27: "how does the
+;  software know what gspro is? all the time every time")
+;
+;  The game is known by its window title: it has "GSPro" in it and
+;  is not the Configuration window; of several, the largest (the
+;  rule since v5.0 - no screen number, no mouse position).  Other
+;  programs can carry that word too: a YouTube tab or forum page
+;  about GSPro, the GSPro Discord, a folder or a note named GSPro.
+;  Those are never the game: the windows of a web browser or a
+;  browser-built app (Discord, Teams ...), File Explorer, Notepad
+;  and Windows Store apps are left out - unless the program is
+;  GSPro.exe itself, which is never left out.
+; ------------------------------------------------------------
+GsproLookAlike(h) {
+    static classes := {"Chrome_WidgetWin_1": 1, "MozillaWindowClass": 1, "CabinetWClass": 1, "ExploreWClass": 1, "ApplicationFrameWindow": 1, "Notepad": 1}
+    static exes := {"chrome.exe": 1, "msedge.exe": 1, "firefox.exe": 1, "brave.exe": 1, "opera.exe": 1, "vivaldi.exe": 1, "discord.exe": 1, "explorer.exe": 1, "notepad.exe": 1, "applicationframehost.exe": 1}
+    WinGet, pn, ProcessName, ahk_id %h%
+    if (pn = "GSPro.exe")
+        return false
+    WinGetClass, cls, ahk_id %h%
+    return (classes.HasKey(cls) || (pn != "" && exes.HasKey(LowerStr(pn)))) ? true : false
+}
+
+; Is this window the GSPro game?  (Title rule, look-alikes left out.)
+GsproIsGame(h) {
+    global GSProWinNeedle, GSProWinExclude
+    if (!h)
+        return false
+    WinGetTitle, t, ahk_id %h%
+    if (t = "" || !InStr(t, GSProWinNeedle) || (GSProWinExclude != "" && InStr(t, GSProWinExclude)))
+        return false
+    return !GsproLookAlike(h)
+}
+
+; A window for the trace: title [window class, program file].
+WinNote(h, withTitle := true) {
+    WinGetClass, c, ahk_id %h%
+    WinGet, p, ProcessName, ahk_id %h%
+    t := ""
+    if (withTitle)
+        WinGetTitle, t, ahk_id %h%
+    return (withTitle ? SubStr(t, 1, 40) . " " : "") . "[" . c . ", " . p . "]"
 }
 
 ; Client-area rect of a window: excludes the title bar, borders
@@ -6637,9 +6695,7 @@ Return
 ; the front before it presses anything.  Never from the Remapper's
 ; own windows.
 GsproIsFront() {
-    global GSProWinNeedle, GSProWinExclude
-    WinGetTitle, ft, A
-    return (ft != "" && InStr(ft, GSProWinNeedle) && !(GSProWinExclude != "" && InStr(ft, GSProWinExclude)))
+    return GsproIsGame(WinExist("A"))
 }
 
 MulliganToGspro() {
@@ -6649,9 +6705,7 @@ MulliganToGspro() {
 
 MulliganWatchWanted() {
     global GSProWinNeedle, GSProWinExclude
-    WinGetTitle, t, A
-    t := LowerStr(t)
-    if (InStr(t, LowerStr(GSProWinNeedle)) && !(GSProWinExclude != "" && InStr(t, LowerStr(GSProWinExclude))))
+    if (GsproIsGame(WinExist("A")))
         return true
     WinGet, apid, PID, A
     if (apid = DllCall("GetCurrentProcessId"))
