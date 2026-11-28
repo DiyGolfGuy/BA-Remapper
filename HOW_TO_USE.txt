@@ -74,6 +74,8 @@ How Remapper knows the screen: a quick look at a few pixels of the
 GSPro picture (no screen reading) about three times a second while GSPro
 is in front; one Windows OCR read confirms it when the list or the cards
 appear. It works at any resolution, Windows scale and screen count.
+Each time the scramble cards are read, Remapper also remembers what
+your GSPro draws there, so it spots them quicker and more surely.
 Main window settings:
   Show it by itself on the relief list and scramble cards
   On those screens the buttons work without FN
