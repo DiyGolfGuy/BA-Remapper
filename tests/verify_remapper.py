@@ -163,6 +163,7 @@ UiSmoke:
     SetTimer, CdTick, Off
     SetTimer, OcrWarmup, Off
     SetTimer, ScreenWatchTick, Off
+    ScreenWatchOn := false
     try {
         Assert(LaunchHow = "show" && RemapActive, "Opened with /show turns mapping on")
         Assert(DllCall("IsWindowVisible", "Ptr", MainHwnd), "Opened with /show shows the window")
@@ -911,6 +912,7 @@ ScrambleSmoke:
     SetTimer, CdTick, Off
     SetTimer, OcrWarmup, Off
     SetTimer, ScreenWatchTick, Off
+    ScreenWatchOn := false
     fails := 0
     try {
         q := Chr(34)
@@ -1163,6 +1165,7 @@ PreviewSmoke:
     SetTimer, CdTick, Off
     SetTimer, OcrWarmup, Off
     SetTimer, ScreenWatchTick, Off
+    ScreenWatchOn := false
     try {
         ; Geometry uses physical coordinates at 1x/2x and negative
         ; desktop origins, for every card in 2/3/4-player groups.
@@ -1383,6 +1386,7 @@ RealShotSmoke:
     SetTimer, CdTick, Off
     SetTimer, OcrWarmup, Off
     SetTimer, ScreenWatchTick, Off
+    ScreenWatchOn := false
     fails := 0
     try {
         dir := A_Args[1]
@@ -1481,6 +1485,7 @@ ReliefShotSmoke:
     SetTimer, CdTick, Off
     SetTimer, OcrWarmup, Off
     SetTimer, ScreenWatchTick, Off
+    ScreenWatchOn := false
     fails := 0
     try {
         dir := A_Args[1]
@@ -1621,6 +1626,59 @@ ReliefShotSmoke:
             }
             DllCall("DeleteObject", "Ptr", src)
         }
+        ; Any scenery: the relief panel cut from the water screenshot and
+        ; laid over fairway, a 4-player scramble screen and OB sand; the
+        ; scramble cards cut from the 3-player screenshot and laid over
+        ; water and sand; and both again under a white grid drawn right
+        ; across the picture (worse than the green's moving grid lines).
+        scen := {}
+        for i, f in ["relief-water-flagline.jpg", "relief-ob-rehit.jpg", "relief-water-lateral.jpg", "gspro-2p.jpg", "gspro-3p.jpg", "gspro-4p-select.jpg"] {
+            src := LoadPicture(dir . "\" . f)
+            VarSetCapacity(bm, 32, 0)
+            DllCall("GetObject", "Ptr", src, "Int", A_PtrSize = 8 ? 32 : 24, "Ptr", &bm)
+            scen[f] := ShotScaled(src, NumGet(bm, 4, "Int"), NumGet(bm, 8, "Int"), 1920, 1196)
+            DllCall("DeleteObject", "Ptr", src)
+        }
+        swin := {found: true, x: 0, y: 0, w: 1920, h: 1196}
+        cases := [["relief", "relief-water-flagline.jpg", "gspro-2p.jpg"], ["relief", "relief-water-flagline.jpg", "gspro-4p-select.jpg"], ["relief", "relief-water-flagline.jpg", "relief-ob-rehit.jpg"]
+            , ["relief", "relief-ob-rehit.jpg", "gspro-3p.jpg"], ["cards", "gspro-3p.jpg", "relief-water-lateral.jpg"], ["cards", "gspro-3p.jpg", "relief-ob-rehit.jpg"], ["cards", "gspro-4p-select.jpg", "relief-water-lateral.jpg"]]
+        for i, cs in cases {
+            for g, grid in [0, 1] {
+                ddc := DllCall("CreateCompatibleDC", "Ptr", 0, "Ptr"), sdc := DllCall("CreateCompatibleDC", "Ptr", 0, "Ptr")
+                scr0 := DllCall("GetDC", "Ptr", 0, "Ptr")
+                work := DllCall("CreateCompatibleBitmap", "Ptr", scr0, "Int", 1920, "Int", 1196, "Ptr")
+                DllCall("ReleaseDC", "Ptr", 0, "Ptr", scr0)
+                od := DllCall("SelectObject", "Ptr", ddc, "Ptr", work, "Ptr")
+                os := DllCall("SelectObject", "Ptr", sdc, "Ptr", scen[cs[3]], "Ptr")
+                DllCall("BitBlt", "Ptr", ddc, "Int", 0, "Int", 0, "Int", 1920, "Int", 1196, "Ptr", sdc, "Int", 0, "Int", 0, "UInt", 0x00CC0020)
+                DllCall("SelectObject", "Ptr", sdc, "Ptr", scen[cs[2]], "Ptr")
+                if (cs[1] = "relief")
+                    px0 := 0, py0 := Round(1196 * 0.115), pw0 := Round(1196 * 0.38), ph0 := Round(1196 * 0.29)
+                else
+                    px0 := Round(1920 * 0.25), py0 := Round(1196 * 0.60), pw0 := Round(1920 * 0.50), ph0 := Round(1196 * 0.20)
+                DllCall("BitBlt", "Ptr", ddc, "Int", px0, "Int", py0, "Int", pw0, "Int", ph0, "Ptr", sdc, "Int", px0, "Int", py0, "UInt", 0x00CC0020)
+                if (grid) {
+                    gx := 0
+                    while (gx < 1920) {
+                        DllCall("PatBlt", "Ptr", ddc, "Int", gx, "Int", 0, "Int", 1, "Int", 1196, "UInt", 0x00FF0062)
+                        gx += 17
+                    }
+                    gy := 0
+                    while (gy < 1196) {
+                        DllCall("PatBlt", "Ptr", ddc, "Int", 0, "Int", gy, "Int", 1920, "Int", 1, "UInt", 0x00FF0062)
+                        gy += 17
+                    }
+                }
+                seen := (cs[1] = "relief") ? (ReliefLook(swin, ddc).up ? 1 : 0) : (ScrambleBoxLook(swin, ddc) ? 1 : 0)
+                DllCall("SelectObject", "Ptr", sdc, "Ptr", os, "Ptr"), DllCall("SelectObject", "Ptr", ddc, "Ptr", od, "Ptr")
+                DllCall("DeleteDC", "Ptr", sdc), DllCall("DeleteDC", "Ptr", ddc), DllCall("DeleteObject", "Ptr", work)
+                ScrambleNote(seen ? "PASS" : "FAIL", "any scenery: " . (cs[1] = "relief" ? "relief panel" : "scramble cards") . " from " . cs[2] . " over " . cs[3] . (grid ? " under a white grid" : "") . ": " . (seen ? "seen" : "NOT seen"))
+                if (!seen)
+                    fails += 1
+            }
+        }
+        for f, hb in scen
+            DllCall("DeleteObject", "Ptr", hb)
         ; Learned cards on the real 2-player screenshot at 1920 wide: the
         ; read's buttons teach the spots; the look then sees these cards
         ; and not the relief screen; the name spot sits on the card.
@@ -1685,6 +1743,7 @@ ReliefShotSmoke:
             Gui, Shot:Show, x0 y0 w%sw% h%sh%
             WinActivate, ahk_id %ShotHwnd%
             WinWaitActive, ahk_id %ShotHwnd%, , 3
+            ScreenWatchOn := true
             SetTimer, ScreenWatchTick, 400
             t0 := A_TickCount
             if (j = 1) {
@@ -1780,6 +1839,7 @@ ReliefShotSmoke:
                 fails += 1
         }
         SetTimer, ScreenWatchTick, Off
+        ScreenWatchOn := false
         FileAppend, % (fails ? "FAIL: " . fails . " relief checks failed" : "PASS: GSPro 4 relief screens read and planned") . "`n", % A_ScriptDir . "\result.txt"
         ExitApp, % fails ? 1 : 0
     } catch failure {

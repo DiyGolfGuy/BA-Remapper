@@ -707,6 +707,11 @@ ReliefWatchUp := false       ; relief watch: the list is on screen (panel colour
 ReliefWatchHits := 0         ; looks in a row that saw the panel
 ReliefWatchMiss := 0         ; looks in a row that did not
 ReliefWatchRetry := 0        ; an OCR read found no list: next read not before this tick
+ScreenWatchOn := true        ; the screen watch timer runs (tests switch it off)
+ScreenWatchFast := 0         ; quick looks left after a press (see ScreenWatchHurry)
+ScrambleAutoSeenId := ""     ; Auto-Pick's cards the cheap look has seen ...
+ScrambleAutoGoneId := ""     ; ... and then saw gone (picked by mouse): sheet and frame go at once
+ScrambleAutoMiss := 0
 ScreenJobHeld := {}          ; buttons pressed for a screen job, held down (one press per push)
 ReliefWatchWait := 0         ; back-off after a look the OCR read did not confirm
 ScrambleBoxWait := 0
@@ -2815,6 +2820,15 @@ ReliefLook(win, srcDC := 0) {
     return res
 }
 
+; A press just changed the screen: look quickly for the next 1.5 s.
+ScreenWatchHurry() {
+    global ScreenWatchFast, ScreenWatchOn
+    if (!ScreenWatchOn)
+        return
+    ScreenWatchFast := 10
+    SetTimer, ScreenWatchTick, 150
+}
+
 ; The screen watch timer (ScreenWatchTick, every 400 ms).
 ScreenWatchStep() {
     global RemapActive, ReliefAutoSheet, ReliefNoFn, ReliefWatchHits, ScrambleBoxCards, CheatVisible, FnIsDown
@@ -2839,6 +2853,26 @@ ScreenWatchStep() {
     if (IsObject(lc) && lc.auto && ScrambleLearnedId != lc.id) {
         ScrambleLearnedId := lc.id
         ScrambleLearn(lc, win)
+    }
+    ; Auto-Pick reads every 2 s; when the cards are taken with the
+    ; mouse, the cheap look sees them go sooner.  Only for cards the
+    ; look has itself seen (so a GSPro look it cannot see is never
+    ; hidden by it): two looks without them and the sheet, the frame
+    ; and the countdown go; Auto-Pick's next read decides the rest.
+    global ScrambleAutoSeenId, ScrambleAutoGoneId, ScrambleAutoMiss, ScramblePreviewRead
+    if (IsObject(lc) && lc.auto && !CheatCovers(win.x + Round(win.w * 0.15), win.y + Round(win.h * 0.50), Round(win.w * 0.70), Round(win.h * 0.38))) {
+        if (ScrambleBoxLook(win)) {
+            ScrambleAutoSeenId := lc.id
+            ScrambleAutoMiss := 0
+        } else if (ScrambleAutoSeenId = lc.id) {
+            ScrambleAutoMiss += 1
+            if (ScrambleAutoMiss >= 2) {
+                ScrambleAutoGoneId := lc.id
+                ScramblePreviewRead := ""
+                ScrambleHidePreview()
+                OcrTrace("scramble: cards gone (picked by hand) - sheet and frame hidden")
+            }
+        }
     }
     if (CheatAutoWanted() && !CheatVisible && !FnIsDown)
         CheatAutoShow()
@@ -3014,7 +3048,8 @@ ScrambleBoxCardsNow() {
         return ""
     if (ScrambleAutoPick) {
         u := ScrambleLastUses
-        if (ScrambleArmedTick > 0 && !ScrambleCoolDown && ScrambleMissTicks = 0 && IsObject(u) && u.MaxIndex() >= 2)
+        global ScrambleAutoGoneId
+        if (ScrambleArmedTick > 0 && !ScrambleCoolDown && ScrambleMissTicks = 0 && IsObject(u) && u.MaxIndex() >= 2 && ScrambleAutoGoneId != "a" . ScrambleArmedTick)
             return {uses: u, n: Min(u.MaxIndex(), 4), hwnd: ScrambleLastHwnd, auto: true, id: "a" . ScrambleArmedTick}
         return ""
     }
@@ -3109,7 +3144,13 @@ ScrambleBoxConfirm(c) {
     found := 0
     OcrLockTake()
     try {
-        for i, f in (hh < 24 ? [2, 3] : [1, 2]) {
+        ; The animated green grid can spoil one frame (as it did for
+        ; Auto-Pick): two sizes, then both again a moment later.
+        for i, f in (hh < 24 ? [2, 3, 0, 2, 3] : [1, 2, 0, 1, 2]) {
+            if (!f) {
+                Sleep, 150
+                continue
+            }
             o := (f > 1) ? OcrRegionScaled(rx, ry, rw, rh, f) : OcrRegion(rx, ry, rw, rh)
             found := ScrambleButtons({lines: o.lines}).MaxIndex()
             if (found)
@@ -3170,6 +3211,10 @@ ScrambleBoxTake(k, c) {
         ScrambleBoxRetry := A_TickCount + 3000   ; the cards are going away
     }
     ScrambleBoxPick := 0
+    global FnIsDown
+    if (!FnIsDown)
+        CheatHide()
+    ScreenWatchHurry()
     OcrTrace("scramble: card " . k . " taken on the box (AIM right)")
 }
 
@@ -3934,6 +3979,7 @@ ReliefRun(actionId, rel) {
             break
     }
     ReliefLastActTick := A_TickCount
+    ScreenWatchHurry()
     if (closes) {
         ReliefLast := ""
         ReliefExpectSel := 0
@@ -6591,6 +6637,7 @@ MulliganSend(keys) {
             break
     }
     ReliefLastActTick := A_TickCount
+    ScreenWatchHurry()
     ReliefLast := ""
     ReliefExpectSel := 0
 }
@@ -7257,6 +7304,13 @@ ScreenWatchTick:
         ScreenWatchStep()
     } catch appErr {
         LogAppError("ScreenWatch", appErr)
+    }
+    ; Right after a choice was taken the screen is about to close:
+    ; look every 150 ms for a moment (two looks without it and the
+    ; sheet is gone), then back to the easy pace.
+    if (ScreenWatchFast > 0) {
+        ScreenWatchFast -= 1
+        SetTimer, ScreenWatchTick, % ScreenWatchFast > 0 ? 150 : 400
     }
 Return
 
