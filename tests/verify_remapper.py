@@ -487,12 +487,13 @@ UiSmoke:
         ; ---- v5.3.0: the screen watch's sheets (no screen reads here) ----
         ; Relief list confirmed by the watch: relief buttons need no FN,
         ; Clear View stays on FN (grey), FN prints as FN.
+        fakeRel.at := A_TickCount   ; a fresh read (the sheet uses reads under 4 s old)
         ReliefLast := fakeRel, ReliefExpectSel := 2, ReliefExpectTick := A_TickCount
         ReliefWatchUp := true, ReliefNoFn := true
         wl := {}
         for i, l in CheatSheetLabels(CheatModel(), CheatReliefState())
             wl[l.id] := l
-        Assert(wl.right.text = "ENTER: FLAG LINE" && !wl.right.dim && wl.up.text = "CLOSER" && wl.down.text = "FURTHER BACK" && wl.clubup.text = "FN: CLEAR VIEW" && wl.clubup.dim && wl.resetaim.text = "FN" && wl.teeleft.text = "REHIT + ENTER", "Relief list without FN: ENTER: FLAG LINE, CLOSER / FURTHER BACK, FN: CLEAR VIEW in grey, FN")
+        Assert(wl.right.text = "ENTER: FLAG LINE" && !wl.right.dim && wl.up.text = "CLOSER" && wl.down.text = "FURTHER BACK" && wl.clubup.text = "FN: CLEAR VIEW" && wl.clubup.dim && wl.resetaim.text = "FN" && wl.teeleft.text = "REHIT + ENTER", "Relief list without FN: ENTER: FLAG LINE, CLOSER / FURTHER BACK, FN: CLEAR VIEW in grey, FN [" . wl.right.text . "|" . wl.up.text . "|" . wl.clubup.text . "|" . wl.resetaim.text . "]")
         Assert(ReliefNoFnAction("DropRehit") && ReliefNoFnAction("ReliefZoomIn") && !ReliefNoFnAction(""), "Relief jobs are the ones that switch")
         ReliefWatchUp := false, ReliefLast := "", ReliefExpectSel := 0
         ; Scramble cards (Auto-Pick off, as the screen watch reads them):
