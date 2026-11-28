@@ -2240,14 +2240,14 @@ ShapePicture(part, src, SW, SH, tw, th, us) {
     if (part = "relief") {
         ; the panel with a little of what is around it: 0 to 0.40
         ; heights across, 0.10 to 0.47 heights down
-        sx := 0, sy := Round(SH * 0.10), sW := Round(SH * 0.40), sH := Round(SH * 0.37)
-        dx := 0, dy := Round(sy * k)
+        cropX := 0, cropY := Round(SH * 0.10), cropW := Round(SH * 0.40), cropH := Round(SH * 0.37)
+        dx := 0, dy := Round(cropY * k)
     } else {
         ; the cards: the middle 44% of the width, 0.60 to 0.82 heights down
-        sx := Round(SW * 0.28), sy := Round(SH * 0.60), sW := Round(SW * 0.44), sH := Round(SH * 0.22)
-        dx := Round((tw - sW * k) / 2), dy := th - Round((SH - sy) * k)
+        cropX := Round(SW * 0.28), cropY := Round(SH * 0.60), cropW := Round(SW * 0.44), cropH := Round(SH * 0.22)
+        dx := Round((tw - cropW * k) / 2), dy := th - Round((SH - cropY) * k)
     }
-    DllCall("StretchBlt", "Ptr", ddc, "Int", dx, "Int", dy, "Int", Round(sW * k), "Int", Round(sH * k), "Ptr", sdc, "Int", sx, "Int", sy, "Int", sW, "Int", sH, "UInt", 0x00CC0020)
+    DllCall("StretchBlt", "Ptr", ddc, "Int", dx, "Int", dy, "Int", Round(cropW * k), "Int", Round(cropH * k), "Ptr", sdc, "Int", cropX, "Int", cropY, "Int", cropW, "Int", cropH, "UInt", 0x00CC0020)
     DllCall("SelectObject", "Ptr", sdc, "Ptr", os, "Ptr")
     DllCall("SelectObject", "Ptr", ddc, "Ptr", od, "Ptr")
     DllCall("DeleteDC", "Ptr", sdc)

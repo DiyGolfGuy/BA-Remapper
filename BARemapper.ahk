@@ -3817,10 +3817,20 @@ ReliefRead(win, reader := "") {
     r := ReliefRegion(win)
     ; The titles are about 1.5% of the picture's height: read them at
     ; 30 px or more (v5.3.0: 3x under 950 px - at 1280 x 800 a 2x read
-    ; lost the second word of FLAG LINE - and 4x under 640 px).
-    sc := (win.h >= 1300) ? 1 : (win.h >= 950) ? 2 : (win.h >= 640) ? 3 : 4
+    ; lost the second word of FLAG LINE).
+    sc := (win.h >= 1300) ? 1 : (win.h >= 950) ? 2 : 3
     o := ReliefReadPart(r, sc, reader)
     rel := ReliefParse(o.lines)
+    ; Nothing read although the panel's colours are there (a very small
+    ; picture: 1024 x 637 in the Windows tests): once more, one step
+    ; larger.  Not when the panel is not on screen - an FN press during
+    ; play costs one read, as before.
+    if (!rel.found && sc < 4 && (IsObject(reader) || ReliefLook(win).up)) {
+        oB := ReliefReadPart(r, sc + 1, reader)
+        relB := ReliefParse(oB.lines)
+        if (relB.found)
+            rel := relB, o := oB, sc += 1
+    }
     ; Small print (a picture between sizes, or a shape on which GSPro
     ; draws the panel smaller): titles read at under 34 px are read once
     ; more, one step larger; that read counts unless it finds fewer
