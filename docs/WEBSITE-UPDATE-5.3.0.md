@@ -59,6 +59,14 @@ Add:
 - *Does watching the screen slow the PC down?* It checks a few pixels about three times a second while GSPro is in front, and reads the screen with Windows OCR only when the list or the cards appear. Nothing is uploaded.
 - *Can I turn it off?* Yes, two checkboxes on the main window: the sheet coming up by itself, and the buttons working without FN.
 
+## Sharing (Bruce, 2026-11-27)
+
+No tip or donation ask for BA Remapper: it needs a BA control box, so its users are already customers. Instead, ask them to pass it on. The program's main window now has one quiet link, "Know another sim golfer? Share bacustomproducts.com", which opens the site's home page. On the BA Remapper page, a short line near the download fits the same idea, for example:
+
+> Free with every BA control box. Know another sim golfer? Send them this page.
+
+If the page has share buttons or a copy-link button, put them next to that line. (Tips or support payments for Bruce's other software, such as BayLauncher, are a separate topic he is handling in another chat.)
+
 ## GitHub repository description
 
 Bruce sets this on GitHub himself (Settings, About, the gear icon). Suggested text (under 350 characters):

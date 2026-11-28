@@ -6,6 +6,9 @@
 
 BA Remapper is the companion app for the BA Custom Products wireless control box. Out of the box, every button sends its printed GSPro hotkey with no software at all. BA Remapper adds the FN secondary layer (the yellow print) with an on-screen cheat sheet that shows a picture of your box, support for GSPro 4's relief list (the buttons work there without FN, and a one-press Mulligan when mulligans are on), scramble card picking from the box, on-screen Smart Clicks powered by built-in Windows OCR, your own custom layouts, and an automatic scramble shot picker. Free with your box; installs like any normal Windows program (a portable version is available too).
 
+
+**Like it? Tell another sim golfer.** BA Remapper is free with every BA Custom Products control box; the boxes are at [bacustomproducts.com](https://www.bacustomproducts.com/). Sharing the site with a friend or your league is the best way to support it.
+
 ---
 
 ## Install

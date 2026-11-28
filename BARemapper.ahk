@@ -5942,10 +5942,15 @@ Gui, Main:Add, Text, x20 y826 w520 h32 Center, With mapping ON the box always go
 Gui, Main:Font, s10 c000000 Normal, Segoe UI
 Gui, Main:Add, Button, x125 y866 w150 h35 gMinimizeMain, Minimize to Tray
 Gui, Main:Add, Button, x285 y866 w150 h35 gDoFullExit, Exit
+; v5.3.0 (Bruce): no tip jar here - the box is the product.  One quiet
+; line to pass it on; it only opens the website in the browser.
+Gui, Main:Font, s9 c7FB8FF Underline, Segoe UI
+Gui, Main:Add, Text, x20 y910 w520 Center gOnShareLink, Know another sim golfer?  Share bacustomproducts.com
+Gui, Main:Font, s10 c000000 Normal, Segoe UI
 RefreshProfileActions()
 UpdateMainStatus()
 LoadWindowPos(wx, wy)
-ShowSettingsWindow("Main", MainHwnd, 560, 918, launchHidden, wx, wy)
+ShowSettingsWindow("Main", MainHwnd, 560, 940, launchHidden, wx, wy)
 
 ; ============================================================
 ;  STARTUP-LAUNCH FLOW
@@ -6314,6 +6319,10 @@ Return
 
 ; v5.3.0: the sheet comes up by itself on the relief list and the
 ; scramble cards; the buttons work there without FN.
+OnShareLink:
+    Run, https://www.bacustomproducts.com/
+Return
+
 OnReliefSheetToggle:
     Gui, Main:Submit, NoHide
     ReliefAutoSheet := ReliefSheetCheck ? true : false
