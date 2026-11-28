@@ -1,39 +1,26 @@
-# BA Remapper 5.2.2
+# BA Remapper 5.3.0
 
-A fix for the Mulligan button on GSPro 4's **water** relief list.
+The cheat sheet is now a picture of your control box, it comes up by itself on GSPro 4's relief list and the scramble cards, and on those screens the buttons work without holding FN.
 
-## What was wrong
+## What's new
 
-With mulligans on, pressing the box's Mulligan button on the water relief list highlighted Mulligan (choice 4) but did not press Enter, until the highlight had been moved off Mulligan or the map moved around. On out of bounds it worked.
-
-Your log (ocr_trace.txt) showed why: on water, every miss read "3 choices: LATERAL DROP, FLAG LINE, REHIT". The 4th card, MULLIGAN, was not read while it was the highlighted card; with another card highlighted the same screen read all four. The highlighted card's white number on its blue circle is read as part of its line, which starts that line to the left of the other titles, and 5.2.1 set such a line aside as not belonging to the list. With Mulligan missing it did the safe thing: Ctrl+M only. On out of bounds Mulligan is card 2 of two, where the same shift was tolerated.
-
-## What 5.2.2 does
-
-- A choice whose line starts with its number circle is placed in the list's column correctly, so the highlighted card always counts, whichever it is.
-- A title one card-spacing below the last card counts as the next choice even if its detail line was not read.
-- A choice's title is taken from the capital words at the start of its line, so GSPro's callout or a map label beside the list can't hide it, and the list's own column is used when they sit next to it.
-- If the list is seen without Mulligan, it reads again (up to three reads, 0.35 s apart) while GSPro finishes moving the map.
-- When Mulligan is already highlighted (GSPro does that on Ctrl+M), it presses **Enter** only, the TAKE MULLIGAN step; otherwise Mulligan's number first, then Enter.
-- Ctrl+M is also watched when GSPro is open behind another program; GSPro is brought to the front before anything is pressed.
-- With mulligans off, or with no relief list on screen, nothing changes: Ctrl+M only, never Enter on its own.
-- ocr_trace.txt now records the lines it read whenever Mulligan is not found.
+- **A picture of your box.** The cheat sheet shows the V2.5 control box from above, round buttons and all, with each button's job printed in yellow under it. It is drawn by Windows' own graphics engine, sharp at any size, resolution, Windows scale or number of screens. Size and Place works as before.
+- **It knows the screen.** When GSPro 4's water or out-of-bounds relief list comes up, or the scramble shot cards, the sheet appears by itself and says what each button does on that screen. When the screen closes it goes away and every button is back to normal.
+- **No FN needed on the relief list.** Aim Right takes the highlighted choice (press it again to confirm a Lateral Drop or Flag Line drop), Aim Left goes to the next choice, Tee Left rehits, Aim Up / Down move a Flag Line drop closer / further back. FN still works there, and FN + Club is still Clear View everywhere.
+- **Scramble cards from the box.** The bottom row picks a card: Reset Aim (a quick tap) card 1, Tee Left card 2, Tee Right card 3, Shot Cam card 4. Remapper frames it and clicks the player's name, so GSPro shows where that ball is; press another to compare. Aim Right takes the picked card. With Auto-Pick on, the countdown keeps running and takes the card you picked at zero. The sheet shows CARD 1-4 along the bottom row and TAKE CARD on Aim Right.
+- **Every screen size and shape.** On anything smaller than 4K the relief list and the scramble cards are read enlarged, so every choice and every card is found; on a wide screen the read grows with the panel. Checked on pictures from 1024 x 637 to 3840 x 2160 and shapes from 5:4 to 32:9 (built from your real screenshots), at 100% and 150% Windows scale.
+- **Auto-Pick sees every card on screens under 4K.** There one read could leave out the highlighted card, so Auto-Pick could take the second-best shot, or not start on a 2-player scramble. It now reads the cards once more, enlarged, when a card may be missing. On 4K the cards are read as before.
+- **Light on the PC.** While the GSPro picture is on screen, Remapper looks at a few pixels of it about three times a second (no screen reading). Windows OCR reads the screen once, when the list or the cards appear. Nothing is uploaded.
+- **GSPro 4 only, Basic Secondary first.** The older GSPro relief menu's reading and the Reset Smart Click Spots button are gone (everyone is on GSPro 4). A new install starts on Basic Secondary; a PC still on the empty "Default" profile from an older version moves to Basic Secondary once (any other profile is kept as it is).
+- **Only what works on that screen.** The sheet shows just the jobs for the screen that is up: relief jobs on the relief list, CARD 1-4 and TAKE CARD on the scramble cards, and Clear View (plus anything you add) when you hold FN during play.
+- **The box always goes to GSPro.** Clicked a video or a stats page on another screen? The next box press brings GSPro back to the front first, then presses. The relief list and scramble cards work the same: the sheet still comes up by itself and the first press does that screen's job. A browser tab, Discord or a folder with GSPro in its title is not mistaken for the game. To type in another program, turn mapping off with Ctrl+F12.
+- **Builder on the box picture.** Click a round button on the picture to set its jobs. Every GSPro hotkey is in the list with its name.
+- **Two new settings** on the main window, both on: *Show it by itself on the relief list (water / OB) and scramble cards* and *On those screens the buttons work without FN*.
 
 ## How this was checked
 
-- The case from your log, as line-by-line reads: the highlighted Mulligan card's line starting with its number - read as choice 4 (5.2.1 dropped it), also with its detail line missing; a map label under the list is not taken as a choice.
-- Windows CI on test screens built from your real water screenshot with GSPro's Mulligan callout beside the list (including its last line on Mulligan's title row) and a map label under the panel: four choices every time; the Mulligan button gives Enter (Mulligan highlighted) or "4, Enter".
-- All earlier checks (your real screenshots, FN and held-B delivery, cheat sheet, scramble, startup, installer) still pass.
-- Not tested by the AI: the bay itself. Please try it on the same water hole.
-
-5.2.1 brought the one-press Mulligan button and the FN cheat sheet that follows the relief list; 5.2.0 brought custom layouts and the FN cheat sheet with Size and Place. All of it is unchanged.
-
-## Update/install
-
-Exit the running app from its tray menu. Download and extract **BARemapper_Setup_v5.2.2.zip**, then run Setup over the installed version. Profiles, settings and the cheat sheet's size and spot are kept. On a PC where BayLauncher opens the Remapper, untick "Start BA Remapper with Windows" in Setup. The portable alternative is **BARemapper_v5.2.2_portable.zip**. **SHA256SUMS.txt** lists download checksums.
-
-[Illustrated guide](https://github.com/DiyGolfGuy/BA-Remapper/blob/main/docs/scramble-preview.md) · [Full how-to](https://github.com/DiyGolfGuy/BA-Remapper/blob/main/HOW_TO_USE.txt)
-
----
-
-Built and released with [Claude Code](https://claude.com/claude-code) for BA Custom Products.
+- Windows CI: the drawn sheet captured from the screen and checked; the labels for every screen; the keys each press sends, recorded by a separate program; the pixel looks on your real relief and scramble screenshots at full size and 1920 wide.
+- The whole screen watch on a 1920 x 1080 test screen, with your water screenshot and a 2-player scramble screenshot shown in a window named like GSPro: the water list was spotted and confirmed in 1.1 s and the sheet came up with the Flag Line labels; Aim Right without FN took the choice; the list was read again after Enter; the scramble cards were found in 1.6 s (Auto-Pick off) with CARD 1 / CARD 2 / TAKE CARD; closing either screen put everything back to normal.
+- The watch's cost, measured on the test PC: about 3 ms of CPU per look, under 1% of one core.
+- All earlier checks (your real screenshots, FN and held-B delivery, Mulligan, scramble Auto-Pick, startup, installer upgrade) still pass.
+- Not tested by the AI: your bay, the box itself, a live round, and GSPro 4's real scramble screen (the scramble test screens are from before GSPro 4, with the button word changed to Select). Please try the water hole, an OB, and a scramble.

@@ -1,8 +1,9 @@
 ﻿#NoEnv
 ;@Ahk2Exe-SetName BA Remapper
 ;@Ahk2Exe-SetDescription BA Custom Products Control Box Remapper
-;@Ahk2Exe-SetCompanyName BA Custom Products
-;@Ahk2Exe-SetVersion 5.2.2
+;@Ahk2Exe-SetCompanyName BA Custom Products LLC
+;@Ahk2Exe-SetCopyright (c) 2026 BA Custom Products LLC
+;@Ahk2Exe-SetVersion 5.3.0
 ;@Ahk2Exe-SetOrigFilename BARemapper.exe
 ;@Ahk2Exe-SetMainIcon BARemapper.ico
 #SingleInstance Off
@@ -18,8 +19,31 @@ CoordMode, Mouse, Screen
 DllCall("SetProcessDPIAware")
 
 ; ============================================================
-;  BA CUSTOM PRODUCTS - CONTROL BOX REMAPPER v5.2.2
+;  BA CUSTOM PRODUCTS - CONTROL BOX REMAPPER v5.3.0
 ;  bacustomproducts@gmail.com   GitHub: DiyGolfGuy
+;
+;  CHANGES IN v5.3.0  (Bruce, Nov 27 2026)
+;  - The cheat sheet is a real picture of the V2.5 box (top-down,
+;    made from Bruce's product photo, round buttons) drawn with GDI+
+;    (built into Windows) with the yellow print on it, sharp at any
+;    size, resolution, Windows scale or number of screens.
+;  - Screen watch: a cheap pixel look (no OCR) finds GSPro 4's relief
+;    list (water / OB) and the scramble cards; one OCR read confirms.
+;    The sheet then comes up by itself and says what each button does
+;    on that screen, and the buttons work there without FN.  FN stays
+;    for Clear View and every job that is not on that screen.
+;  - Scramble cards from the box: Reset Aim (tap) / Tee Left / Tee
+;    Right / Shot Cam pick card 1-4 (frame + a click on the player's
+;    name so GSPro shows the ball), AIM right takes it.  Auto-Pick
+;    keeps counting; a box pick is the card it takes at zero.
+;  - Main window: two new settings for the screen watch.
+;  - The watch follows GSPro's picture whenever nothing covers it,
+;    also after a click on another screen (a video on screen 2): the
+;    sheet still comes up by itself and the first box press brings
+;    GSPro forward and does that screen's job.  Same look, same pace.
+;  - Which window is GSPro: the title rule as before, but a browser
+;    tab, the GSPro Discord, a folder or a note with "GSPro" in its
+;    title is never taken for the game (GsproLookAlike).
 ;
 ;  CHANGES IN v5.2.2  (Bruce, Nov 24 2026)
 ;  - Mulligan button on GSPro 4's water relief list: it highlighted
@@ -372,7 +396,7 @@ DllCall("SetProcessDPIAware")
 ; ============================================================
 ;  CONSTANTS / PATHS
 ; ============================================================
-AppVersion := "5.2.2"
+AppVersion := "5.3.0"
 MainWinTitle    := "BA Custom Control Box Remapper"
 BuilderWinTitle := "BA Custom Control Box - Button Builder"
 HelpWinTitle    := "BA Custom Control Box - Help"
@@ -448,12 +472,17 @@ GSProActions := "None|"
     . "U - Putt Toggle|V - Tee Right|W - Minimap Zoom In|"
     . "Y - Heat Map|Z - 3D Grass Toggle|"
     . "1 - Select Shot 1|2 - Select Shot 2|3 - Select Shot 3|4 - Select Shot 4|"
+    . "5 - Camera Go To Ball|6 - Camera Fly To Ball|"
+    . "8 - Go To Ball (practice)|9 - Previous Hole (practice)|0 - Next Hole (practice)|"
     . "F1 - Clear Tracer|F3 - Aimpoint|F5 - Free Look|"
-    . "Tab - Shortcuts|Ctrl+M - Mulligan|Space - Fast Forward|"
+    . "F8 - Console (short)|F9 - Console (tall)|F11 - Fullscreen|"
+    . "Tab - Shortcuts / Keyboard|Ctrl+M - Mulligan|Space - Fast Forward|"
+    . "Esc - Show UI|- (Minus) - Sound Off|= (Equals / Plus) - Sound On|"
+    . "E - Rotate Map (relief list)|"
     . "Up Arrow|Down Arrow|Left Arrow|Right Arrow|"
-    . "Enter|Escape|Backspace|"
-    . "E|M|X|- (Minus)|= (Equals / Plus)|"
-    . "F2|F4|F6|F7|F8|F9|F10|F11|F12|"
+    . "Enter|Backspace|"
+    . "M|X|"
+    . "F2|F4|F6|F7|F10|F12|"
     . "Home|End|Page Up|Page Down|Insert|Delete"
 GSProCustomEntry := "Custom key or combo..."
 
@@ -486,10 +515,18 @@ GSProKeyMap["1 - Select Shot 1"]     := "1"
 GSProKeyMap["2 - Select Shot 2"]     := "2"
 GSProKeyMap["3 - Select Shot 3"]     := "3"
 GSProKeyMap["4 - Select Shot 4"]     := "4"
+GSProKeyMap["5 - Camera Go To Ball"] := "5"
+GSProKeyMap["6 - Camera Fly To Ball"] := "6"
+GSProKeyMap["8 - Go To Ball (practice)"] := "8"
+GSProKeyMap["9 - Previous Hole (practice)"] := "9"
+GSProKeyMap["0 - Next Hole (practice)"] := "0"
+GSProKeyMap["F8 - Console (short)"]  := "{F8}"
+GSProKeyMap["F9 - Console (tall)"]   := "{F9}"
+GSProKeyMap["F11 - Fullscreen"]      := "{F11}"
 GSProKeyMap["F1 - Clear Tracer"]     := "{F1}"
 GSProKeyMap["F3 - Aimpoint"]         := "{F3}"
 GSProKeyMap["F5 - Free Look"]        := "{F5}"
-GSProKeyMap["Tab - Shortcuts"]       := "{Tab}"
+GSProKeyMap["Tab - Shortcuts / Keyboard"] := "{Tab}"
 GSProKeyMap["Ctrl+M - Mulligan"]     := "^m"
 GSProKeyMap["Space - Fast Forward"]  := "{Space}"
 GSProKeyMap["Up Arrow"]              := "{Up}"
@@ -497,14 +534,14 @@ GSProKeyMap["Down Arrow"]            := "{Down}"
 GSProKeyMap["Left Arrow"]            := "{Left}"
 GSProKeyMap["Right Arrow"]           := "{Right}"
 GSProKeyMap["Enter"]                 := "{Enter}"
-GSProKeyMap["Escape"]                := "{Escape}"
+GSProKeyMap["Esc - Show UI"]         := "{Escape}"
 GSProKeyMap["Backspace"]             := "{Backspace}"
-GSProKeyMap["E"]                     := "e"
+GSProKeyMap["E - Rotate Map (relief list)"] := "e"
 GSProKeyMap["M"]                     := "m"
 GSProKeyMap["X"]                     := "x"
-GSProKeyMap["- (Minus)"]             := "-"
-GSProKeyMap["= (Equals / Plus)"]     := "="
-for i, fk in ["F2","F4","F6","F7","F8","F9","F10","F11","F12"]
+GSProKeyMap["- (Minus) - Sound Off"] := "-"
+GSProKeyMap["= (Equals / Plus) - Sound On"] := "="
+for i, fk in ["F2","F4","F6","F7","F10","F12"]
     GSProKeyMap[fk] := "{" . fk . "}"
 GSProKeyMap["Home"]                  := "{Home}"
 GSProKeyMap["End"]                   := "{End}"
@@ -599,8 +636,8 @@ FnChoiceMap["Shot Cam (J)"]    := "shotcam"
 RemapActive := false
 SwapIK      := false
 
-ActiveProfile  := "Default"
-StartupProfile := "Default"
+ActiveProfile  := "Basic Secondary"   ; v5.3.0: a new install starts on the box print
+StartupProfile := "Basic Secondary"
 ProfileList    := []
 
 ; Per-profile data loaded into these
@@ -669,6 +706,50 @@ CheatVisible := false
 CheatExcluded := true
 CheatShownFor := 0
 CheatHwnd := 0
+CheatAuto := false           ; the sheet on screen came up by itself on the relief list (v5.3.0)
+CheatWinAdjust := -1         ; the sheet's window: -1 none, 0 over GSPro, 1 Size and Place
+CheatShownText := ""         ; what the sheet on screen says (title | chip | print), for the trace and tests
+CheatTickLast := 0           ; when the sheet's own timer last ran (the screen watch restarts it if it stopped)
+ReliefAutoSheet := true      ; v5.3.0: show the sheet by itself on GSPro 4's relief list (settings.ini [App] ReliefSheet)
+ReliefNoFn := true           ; ... and its relief buttons work there without FN (settings.ini [App] ReliefNoFn)
+ReliefWatchUp := false       ; relief watch: the list is on screen (panel colours seen + one OCR read)
+ReliefWatchHits := 0         ; looks in a row that saw the panel
+ReliefWatchMiss := 0         ; looks in a row that did not
+ReliefWatchRetry := 0        ; an OCR read found no list: next read not before this tick
+ScreenWatchOn := true        ; the screen watch timer runs (tests switch it off)
+WatchGameHwnd := 0           ; the GSPro game window while another program is in front ...
+WatchGameSeek := 0           ; ... looked up again not before this tick
+WatchSeenHwnd := 0           ; the game window the screen watch saw uncovered ...
+WatchSeenTick := 0           ; ... and when (GsproShown)
+ScreenWatchFast := 0         ; quick looks left after a press (see ScreenWatchHurry)
+ScrambleFullFor := 0         ; Auto-Pick, small pictures: the cards (armed tick) whose full count is known ...
+ScrambleFullN := 0           ; ... that count (ScrambleRecoverCards)
+ScrambleSmallRetry := 0      ; ... and no enlarged read before this tick (a stray button word)
+ScrambleBoxBest := ""        ; Auto-Pick on: the fullest read of the cards on screen {id, uses, lines}
+ScrambleBoxDeepId := ""      ; ... and the cards the box has read enlarged itself (small pictures)
+ScrambleAutoSeenId := ""     ; Auto-Pick's cards the cheap look has seen ...
+ScrambleAutoGoneId := ""     ; ... and then saw gone (picked by mouse): sheet and frame go at once
+ScrambleAutoMiss := 0
+ScreenJobHeld := {}          ; buttons pressed for a screen job, held down (one press per push)
+ReliefWatchWait := 0         ; back-off after a look the OCR read did not confirm
+ScrambleBoxWait := 0
+ScrambleBoxTick := false     ; the scramble look runs every other watch tick
+ScrambleLearned := {}        ; what this PC's GSPro draws at the cards' buttons, per card count (settings.ini [Scramble])
+ScrambleLearnedId := ""
+ScrambleLastLines := ""      ; Auto-Pick's last read of the cards (for the name spots)
+ScrambleBoxCards := ""        ; v5.3.0 Auto-Pick off: the scramble cards the screen watch read
+ScrambleBoxPick := 0         ; card picked on the box (1-4) ...
+ScrambleBoxFor := ""         ; ... for these cards (ScrambleBoxCardsNow().id)
+ScrambleBoxHits := 0
+ScrambleBoxMiss := 0
+ScrambleBoxRetry := 0
+ScrambleBoxPending := 0      ; AIM right waiting for Auto-Pick's read in flight
+ScrambleBoxBoost := ""       ; vote key the box choice was added to
+ScrambleBoxOkTick := 0       ; last small read that proved the cards are up ...
+ScrambleBoxOkId := ""        ; ... and for which cards
+GdipToken := 0               ; GDI+ (built into Windows) for the sheet's picture
+BoxPicPath := ConfigDir . "\box-v25.jpg"
+BoxPicBmp := 0
 BuilderTestMode := false
 TestFnDown := false
 TestFnUsed := false
@@ -723,6 +804,7 @@ launchHidden := (LaunchHow = "startup" || LaunchHow = "program")
 ;  FILESYSTEM SETUP - happens before anything else reads/writes
 ; ============================================================
 InitConfigPaths()
+BoxPicInstall()
 
 ; Unconditional launch log - answers "did Windows even run us
 ; at boot" from a file instead of a guess.  Newest entries at
@@ -1204,7 +1286,13 @@ CheatReliefState() {
     rel := ReliefLast
     if (!IsObject(rel) || !rel.found || (A_TickCount - rel.at) >= 4000)
         return {on: false, sel: 0, key: "off"}
-    sel := ReliefSelected(rel)
+    ; v5.3.0: the sheet asks several times a second while the list is
+    ; up - one copy of the cards' corner instead of a screen read per
+    ; sample point keeps that light
+    blk := ReliefCardsBlock(rel)
+    sel := IsObject(blk) ? ReliefSelected(rel, Func("ScreenBlockPixel").Bind(blk)) : ReliefSelected(rel)
+    if (IsObject(blk))
+        ScreenRowsFree(blk)
     if (ReliefExpectSel && (A_TickCount - ReliefExpectTick) < 700)
         sel := ReliefExpectSel
     names := ""
@@ -1219,6 +1307,12 @@ ReliefShortName(t) {
     StringUpper, t, t
     if (FuzzyIs(t, "lateral drop"))
         return "LATERAL"
+    ; v5.3.0: a known choice is printed by its name, also when the
+    ; reader got a letter wrong on a very small picture ("FUG LINE").
+    for i, name in ["FLAG LINE", "REHIT", "MULLIGAN"] {
+        if (FuzzyIs(t, name))
+            return name
+    }
     return t
 }
 
@@ -1255,123 +1349,151 @@ CheatArea(allowScreen := false) {
 ; on any screen resolution.
 CheatGeom(win) {
     global CheatSizePct, CheatPosX, CheatPosY
-    ; 940 x 640 layout units: the Builder's 900-wide box plus 20 on
-    ; each side so the outer yellow print is never cut off.  Size in
-    ; physical pixels (like the scramble panel), at least 300 px and
-    ; never more than fits.
-    pw := Round(Min(Max(win.w * CheatSizePct / 100, 300), win.w - 40, (win.h - 40) * 940 / 640))
+    ; v5.3.0: 940 x 710 units - a title line over the box picture
+    ; (1.45 wide to 1 high), 16 around.  Size in physical pixels
+    ; (like the scramble panel), at least 300 px and never more than
+    ; fits.  Everything else follows the width, so the sheet looks
+    ; the same on any screen, resolution or Windows scale.
+    pw := Round(Min(Max(win.w * CheatSizePct / 100, 300), win.w - 40, (win.h - 40) * 940 / 710))
     sc := pw / 940
     pad := Round(16 * sc)
-    head := Round(44 * sc)
-    ph := head + Round(570 * sc) + pad
+    head := Round(52 * sc)
+    bw := pw - 2 * pad
+    bh := Round(bw / 1.45)
+    ph := pad + head + bh + pad
     freeW := Max(0, win.w - pw - 2 * pad)
     freeH := Max(0, win.h - ph - 2 * pad)
     x := win.x + pad + Round(freeW * CheatPosX / 1000)
     y := win.y + pad + Round(freeH * CheatPosY / 1000)
-    return {pw: pw, ph: ph, sc: sc, pad: pad, head: head, x: x, y: y, freeW: freeW, freeH: freeH}
+    return {pw: pw, ph: ph, sc: sc, pad: pad, head: head, bw: bw, bh: bh, x: x, y: y, freeW: freeW, freeH: freeH}
+}
+
+; What the sheet prints for each button: [{id, text, dim, fn}].
+; Only what the buttons can do on the screen that is up right now
+; (Bruce, 2026-11-27: "the options are only what they can do on that
+; specific screen at that time"):
+;  - GSPro 4's relief list: the relief jobs (and Mulligan when it is a
+;    choice), nothing else; the FN ring only when FN is still needed.
+;  - anywhere else (FN held in play): the FN jobs that work in play -
+;    Clear View, a custom key, a key sequence, a screen click - and not
+;    the relief jobs, which only do something on the relief list.
+CheatSheetLabels(model, st) {
+    global SecType, SecValue
+    noFn := st.on && ReliefNoFnActive()
+    out := []
+    for i, m in model {
+        t := "", isFn := m.fn
+        relJob := (SecType[m.id] = "ocr" && ReliefNoFnAction(SecValue[m.id]))
+        if (m.fn) {
+            t := noFn ? "" : "FN - HOLD"
+            isFn := !noFn
+        } else if (st.on) {
+            if (m.id = "mulligan" || relJob)
+                t := RegExReplace(m.yellow, " \((F|B)\)$")   ; GSPro's own bar names the keys
+        } else if (!relJob && m.id != "mulligan") {
+            t := m.yellow
+        }
+        out.Push({id: m.id, text: t, dim: false, fn: isFn})
+    }
+    return out
 }
 
 ; adjust = Size and place mode: drawn over GSPro even when it is
 ; not the active window (or over the screen with GSPro closed), not
 ; click-through so it can be dragged, with a green outline.
+;
+; Drawing and hiding are each done in one piece (v5.3.0): no timer
+; or key press can cut in between their steps.  A hide that landed
+; in the middle of a redraw left the sheet on screen with nothing
+; watching it (seen once in the Windows tests, when a window covered
+; the game just as the sheet was being redrawn).
 CheatDraw(adjust := false) {
-    global ActiveProfile, CheatVisible, CheatExcluded, CheatShownFor, ReliefLast
-    global CheatPanelW, CheatPanelH, CheatHwnd, CheatAdjHwnd, CheatShownKey
+    wasCritical := A_IsCritical
+    Critical, On
+    CheatDrawNow(adjust)
+    Critical, % wasCritical ? wasCritical : "Off"
+}
+
+CheatDrawNow(adjust := false) {
+    global ActiveProfile, CheatVisible, CheatExcluded, CheatShownFor, FnIsDown, CheatAuto
+    global CheatPanelW, CheatPanelH, CheatHwnd, CheatAdjHwnd, CheatShownKey, CheatWinAdjust, CheatShownText
     win := CheatArea(adjust)
-    if (!win.found || (!adjust && !WinActive("ahk_id " . win.hwnd))) {
+    if (!win.found || (!adjust && !GsproShown(win.hwnd))) {
         CheatHide(adjust)
         return
     }
+    global ReliefNoFn
     st := CheatReliefState()
+    scr := (!adjust && ReliefNoFn && !st.on) ? ScrambleBoxCardsNow() : ""
     model := CheatModel(st)
+    labels := IsObject(scr) ? CheatScrambleLabels(model, scr) : CheatSheetLabels(model, st)
     any := false
-    for i, m in model {
-        if (!m.fn && m.yellow != "")
+    for i, l in labels {
+        if (!l.fn && l.text != "")
             any := true
     }
     if (!any && !adjust) {
         CheatHide()
         return
     }
-    relief := st.on
-    CheatShownKey := st.key
+    CheatShownKey := IsObject(scr) ? "s|" . scr.id . "|" . ScrambleBoxTakeCard(scr) : st.key
+    chip := "", chipColor := 0
     if (adjust) {
-        ; Same window as the scramble overlay minus click-through
-        ; (WS_EX_TRANSPARENT), so it takes the mouse for dragging;
-        ; still never takes focus from GSPro.
-        Gui, Cheat:New, +AlwaysOnTop -Caption +ToolWindow -DPIScale +E0x08080000 +Hwndah
-        Gui, Cheat:Color, 1C1C1C
-        DllCall("SetLayeredWindowAttributes", "Ptr", ah, "UInt", 0, "UChar", 255, "UInt", 2)
-        DllCall("SetWindowDisplayAffinity", "Ptr", ah, "UInt", 0x11)
-        overlay := {hwnd: ah, excluded: true}
-    } else {
-        overlay := ScramblePreviewWindow("Cheat", "1C1C1C")
-    }
-    CheatExcluded := overlay.excluded
-    CheatShownFor := win.hwnd
-    g := CheatGeom(win)
-    pw := g.pw, ph := g.ph, sc := g.sc, pad := g.pad, head := g.head
-    ox := 20
-    px2pt := 72 / A_ScreenDPI
-    namePt := Max(6, Round(13 * sc)) * px2pt * 96 / 72
-    ; One long word (MULLIGAN) gets a smaller size so it is never
-    ; broken in the middle of the word.
-    longPt := Max(6, Round(10.5 * sc)) * px2pt * 96 / 72
-    yelPt := Max(6, Round(15 * sc)) * px2pt * 96 / 72
-    yelSmallPt := Max(6, Round(13 * sc)) * px2pt * 96 / 72
-    headPt := Max(7, Round(18 * sc)) * px2pt * 96 / 72
-    Gui, Cheat:Margin, 0, 0
-    title := "HOLD FN + BUTTON  -  " . ActiveProfile
-    if (relief)
-        title := "HOLD FN + BUTTON  -  RELIEF LIST" . ((st.sel && st.rel.opts.HasKey(st.sel)) ? ":  " . st.sel . " " . ReliefShortName(st.rel.opts[st.sel].text) . " PICKED" : "")
-    if (adjust)
         title := "DRAG TO PLACE  -  " . ActiveProfile
-    Gui, Cheat:Font, s%headPt% cFFFFFF Bold, Segoe UI
-    tw := pw - pad * 2
-    Gui, Cheat:Add, Text, x%pad% y%pad% w%tw% BackgroundTrans, %title%
-    ; Panel print
-    Gui, Cheat:Font, s%namePt% cFFFFFF Bold, Segoe UI
-    for i, t in [["BA CUSTOM PRODUCTS", 270, 162, 320], ["CLUB", 127, 262, 150], ["AIM", 610, 262, 150], ["TEE POS", 425, 430, 120]] {
-        lx := pad + Round((t[2] + ox) * sc), ly := head + Round(t[3] * sc), lw := Round(t[4] * sc)
-        Gui, Cheat:Add, Text, x%lx% y%ly% w%lw% Center BackgroundTrans c8A8F96, % t[1]
+    } else if (IsObject(scr)) {
+        k := ScrambleBoxPickNow(scr)
+        title := "SCRAMBLE:  " . (k ? "CARD " . k . " PICKED" : "PICK A CARD")
+        chip := "NO FN NEEDED", chipColor := 0xFF2ECC71
+    } else if (st.on) {
+        title := "RELIEF LIST" . ((st.sel && st.rel.opts.HasKey(st.sel)) ? ":  " . st.sel . " " . ReliefShortName(st.rel.opts[st.sel].text) . " PICKED" : "")
+        if (ReliefNoFnActive())
+            chip := "NO FN NEEDED", chipColor := 0xFF2ECC71
+        else
+            chip := "HOLD FN", chipColor := 0xFFFFD400
+    } else {
+        title := "HOLD FN + BUTTON  -  " . ActiveProfile
     }
-    bs := Round(85 * sc)
-    for i, m in model {
-        bx := pad + Round((m.x + ox) * sc), by := head + Round(m.y * sc)
-        color := m.fn ? "FFD400" : "3A3F47"
-        Gui, Cheat:Add, Progress, x%bx% y%by% w%bs% h%bs% Background%color% Disabled -Theme
-        nPt := (!InStr(m.name, " ") && StrLen(m.name) > 7) ? longPt : namePt
-        Gui, Cheat:Font, s%nPt% Bold, Segoe UI
-        nameColor := m.fn ? "111111" : "FFFFFF"
-        ; Printed name inside the button, wrapped to its width
-        ny := by + Round(bs * (m.fn ? 0.08 : 0.2)), nh := bs - (ny - by)
-        Gui, Cheat:Add, Text, x%bx% y%ny% w%bs% h%nh% Center BackgroundTrans c%nameColor%, % (m.fn ? "FN`n" : "") . m.name
-        if (m.yellow != "") {
-            ; One line (0x200 = SS_CENTERIMAGE, never wraps into the
-            ; button below), wide enough for custom names, kept inside
-            ; the panel.
-            yw := Round(250 * sc), yh := Round(24 * sc), yy := by + bs + Round(3 * sc)
-            yx := Max(Round(pad / 2), Min(bx + (bs - yw) // 2, pw - Round(pad / 2) - yw))
-            yPt := (StrLen(m.yellow) > 15) ? yelSmallPt : yelPt
-            Gui, Cheat:Font, s%yPt% cFFD400 Bold, Segoe UI
-            Gui, Cheat:Add, Text, x%yx% y%yy% w%yw% h%yh% Center +0x200 BackgroundTrans, % m.yellow
-        }
+    ; One window, painted again in place: no flicker when the relief
+    ; choice changes.  A new one only when the kind changes.
+    kind := adjust ? 1 : 0
+    if (CheatWinAdjust != kind || !CheatHwnd || !DllCall("IsWindow", "Ptr", CheatHwnd)) {
+        if (CheatWinAdjust != -1)
+            Gui, Cheat:Destroy
+        ; Click-through (0x20) and never activated (0x08000000), over
+        ; GSPro but not owned by it (see ScramblePreviewWindow); Size
+        ; and Place takes the mouse so the sheet can be dragged.
+        ex := adjust ? "+E0x08080000" : "+E0x08080020"
+        Gui, Cheat:New, +AlwaysOnTop -Caption +ToolWindow -DPIScale %ex% +Hwndch
+        ; Left out of screen captures, so the OCR reads see GSPro under it.
+        DllCall("SetWindowDisplayAffinity", "Ptr", ch, "UInt", 0x11)
+        affinity := 0
+        DllCall("GetWindowDisplayAffinity", "Ptr", ch, "UInt*", affinity)
+        CheatExcluded := (affinity = 0x11)
+        CheatHwnd := ch
+        CheatWinAdjust := kind
     }
-    if (adjust) {
-        ; green outline: this is the sheet being placed
-        bw := Max(3, Round(6 * sc))
-        Gui, Cheat:Add, Progress, x0 y0 w%pw% h%bw% Background2ECC71 Disabled -Theme
-        by2 := ph - bw
-        Gui, Cheat:Add, Progress, x0 y%by2% w%pw% h%bw% Background2ECC71 Disabled -Theme
-        Gui, Cheat:Add, Progress, x0 y0 w%bw% h%ph% Background2ECC71 Disabled -Theme
-        bx2 := pw - bw
-        Gui, Cheat:Add, Progress, x%bx2% y0 w%bw% h%ph% Background2ECC71 Disabled -Theme
+    g := CheatGeom(win)
+    ; Scramble screen: the sheet goes to the top right, clear of the
+    ; cards (Bruce, 2026-11-27).  Everywhere else it is where Size and
+    ; Place put it; the size is the chosen one on every screen.
+    if (IsObject(scr)) {
+        g.x := win.x + win.w - g.pw - g.pad
+        g.y := win.y + g.pad
     }
-    cx := g.x, cy := g.y
-    Gui, Cheat:Show, x%cx% y%cy% w%pw% h%ph% NoActivate
-    CheatPanelW := pw, CheatPanelH := ph
-    CheatHwnd := overlay.hwnd
+    if (!CheatVisible || !DllCall("IsWindowVisible", "Ptr", CheatHwnd)) {
+        cx := g.x, cy := g.y, cw := g.pw, chh := g.ph
+        Gui, Cheat:Show, x%cx% y%cy% w%cw% h%chh% NoActivate
+    }
+    spec := {title: title, chip: chip, chipColor: chipColor, labels: labels, adjust: adjust}
+    painted := CheatPaint(CheatHwnd, g.x, g.y, g, spec)
+    shown := title . "|" . chip
+    for i, l in labels
+        shown .= "|" . l.id . "=" . l.text
+    CheatShownText := shown . (painted ? "" : "|(plain)")
+    CheatShownFor := win.hwnd
+    CheatPanelW := g.pw, CheatPanelH := g.ph
     CheatVisible := true
+    CheatAuto := !FnIsDown && !adjust
     ; Size and Place: its control box stays above the sheet, so the
     ; sheet can be dragged anywhere without covering the buttons.
     if (adjust && CheatAdjHwnd)
@@ -1381,14 +1503,294 @@ CheatDraw(adjust := false) {
 ; force: also hides the sheet being placed (Size and place mode);
 ; FN release, mapping off and OCR reads leave that one alone.
 CheatHide(force := false) {
-    global CheatVisible, CheatAdjusting
+    wasCritical := A_IsCritical
+    Critical, On
+    CheatHideNow(force)
+    Critical, % wasCritical ? wasCritical : "Off"
+}
+
+CheatHideNow(force := false) {
+    global CheatVisible, CheatAdjusting, CheatWinAdjust, CheatAuto, CheatShownText
     if (CheatAdjusting && !force)
         return
     SetTimer, CheatShow, Off
     SetTimer, CheatTick, Off
-    if (CheatVisible)
+    if (CheatVisible || CheatWinAdjust != -1)
         Gui, Cheat:Destroy
     CheatVisible := false
+    CheatWinAdjust := -1
+    CheatAuto := false
+    CheatShownText := ""
+}
+
+; ------------------------------------------------------------
+;  Drawing the sheet (v5.3.0).  The whole sheet is one picture made
+;  with GDI+, the drawing engine built into Windows, and handed to
+;  a layered window (UpdateLayeredWindow): a real picture of the box
+;  with smooth round buttons and the yellow print on it, sharp at
+;  any size.  No add-ons, nothing to install.  The box picture is
+;  carried inside the program (BoxPicInstall).  If it cannot be
+;  used, the same sheet is drawn on a plain navy box.
+; ------------------------------------------------------------
+
+; v5.3.0: the control-box picture the sheet shows - a top-down V2.5
+; made from Bruce's product photo.  Written next to the settings at
+; every start, so the sheet never depends on another file.
+BoxPicInstall() {
+    global BoxPicPath
+    FileInstall, assets\box-v25.jpg, %BoxPicPath%, 1
+    if (!FileExist(BoxPicPath)) {
+        ; settings folder not writable (e.g. Windows' folder protection):
+        ; the temp folder always is
+        BoxPicPath := A_Temp . "\BARemapper-box-v25.jpg"
+        FileInstall, assets\box-v25.jpg, %BoxPicPath%, 1
+    }
+}
+
+; Where each button and its print sit on the box picture, in
+; thousandths of the picture: button x, y, print x, y, print align
+; (c centre, l from the left, r up to the right), widest print.
+CheatPicLayout() {
+    static t := {mulligan: [110, 150, 110, 252, "c", 210], heatmap: [379, 150, 379, 252, "c", 210]
+        , putt: [618, 150, 618, 252, "c", 210], flyover: [893, 150, 893, 252, "c", 200]
+        , clubup: [244, 317, 244, 418, "c", 210], up: [753, 317, 753, 418, "c", 210]
+        , left: [618, 486, 609, 588, "c", 200], right: [893, 486, 893, 588, "c", 200]
+        , clubdown: [244, 652, 307, 652, "l", 165], down: [753, 652, 690, 652, "r", 180]
+        , resetaim: [110, 874, 110, 975, "c", 210], teeleft: [379, 874, 379, 975, "c", 210]
+        , teeright: [618, 874, 618, 975, "c", 210], shotcam: [893, 874, 893, 975, "c", 200]}
+    return t
+}
+
+GdipReady() {
+    global GdipToken
+    if (GdipToken)
+        return true
+    if (!DllCall("GetModuleHandle", "Str", "gdiplus", "Ptr"))
+        DllCall("LoadLibrary", "Str", "gdiplus", "Ptr")
+    VarSetCapacity(si, 24, 0)
+    NumPut(1, si, 0, "UInt")
+    tok := 0
+    if (DllCall("gdiplus\GdiplusStartup", "Ptr*", tok, "Ptr", &si, "Ptr", 0) != 0 || !tok)
+        return false
+    GdipToken := tok
+    return true
+}
+
+; The box picture as a GDI+ bitmap held in memory (the file is not
+; kept open, so Factory Reset can always remove it).  0 = none.
+CheatBoxPicture() {
+    global BoxPicPath, BoxPicBmp
+    if (BoxPicBmp)
+        return BoxPicBmp
+    if (!GdipReady() || !FileExist(BoxPicPath))
+        return 0
+    img := 0
+    if (DllCall("gdiplus\GdipCreateBitmapFromFile", "WStr", BoxPicPath, "Ptr*", img) != 0 || !img)
+        return 0
+    w := 0, h := 0
+    DllCall("gdiplus\GdipGetImageWidth", "Ptr", img, "UInt*", w)
+    DllCall("gdiplus\GdipGetImageHeight", "Ptr", img, "UInt*", h)
+    mem := 0
+    if (w > 0 && h > 0 && DllCall("gdiplus\GdipCreateBitmapFromScan0", "Int", w, "Int", h, "Int", 0, "Int", 0xE200B, "Ptr", 0, "Ptr*", mem) = 0 && mem) {
+        gr := 0
+        DllCall("gdiplus\GdipGetImageGraphicsContext", "Ptr", mem, "Ptr*", gr)
+        DllCall("gdiplus\GdipDrawImageRectI", "Ptr", gr, "Ptr", img, "Int", 0, "Int", 0, "Int", w, "Int", h)
+        DllCall("gdiplus\GdipDeleteGraphics", "Ptr", gr)
+    }
+    DllCall("gdiplus\GdipDisposeImage", "Ptr", img)
+    BoxPicBmp := mem
+    return mem
+}
+
+; A rounded rectangle as a GDI+ path (caller deletes it).
+GdipRoundPath(x, y, w, h, r) {
+    p := 0
+    DllCall("gdiplus\GdipCreatePath", "Int", 0, "Ptr*", p)
+    d := Max(1, r * 2)
+    DllCall("gdiplus\GdipAddPathArc", "Ptr", p, "Float", x, "Float", y, "Float", d, "Float", d, "Float", 180, "Float", 90)
+    DllCall("gdiplus\GdipAddPathArc", "Ptr", p, "Float", x + w - d, "Float", y, "Float", d, "Float", d, "Float", 270, "Float", 90)
+    DllCall("gdiplus\GdipAddPathArc", "Ptr", p, "Float", x + w - d, "Float", y + h - d, "Float", d, "Float", d, "Float", 0, "Float", 90)
+    DllCall("gdiplus\GdipAddPathArc", "Ptr", p, "Float", x, "Float", y + h - d, "Float", d, "Float", d, "Float", 90, "Float", 90)
+    DllCall("gdiplus\GdipClosePathFigure", "Ptr", p)
+    return p
+}
+
+GdipFillRound(gr, argb, x, y, w, h, r) {
+    p := GdipRoundPath(x, y, w, h, r)
+    br := 0
+    DllCall("gdiplus\GdipCreateSolidFill", "UInt", argb, "Ptr*", br)
+    DllCall("gdiplus\GdipFillPath", "Ptr", gr, "Ptr", br, "Ptr", p)
+    DllCall("gdiplus\GdipDeleteBrush", "Ptr", br)
+    DllCall("gdiplus\GdipDeletePath", "Ptr", p)
+}
+
+; Text as a path in Arial Bold: size px, ink box placed at x (al: c
+; centre, l left edge, r right edge) and centred on y, never wider
+; than maxW (smaller type instead).  outline > 0 draws a dark edge
+; first so yellow reads on any background.  Returns the ink width.
+GdipText(gr, text, size, x, y, al, maxW, argb, outline := 0) {
+    static fam := 0, fmt := 0
+    if (text = "")
+        return 0
+    if (!fam) {
+        if (DllCall("gdiplus\GdipCreateFontFamilyFromName", "WStr", "Arial", "Ptr", 0, "Ptr*", fam) != 0)
+            DllCall("gdiplus\GdipGetGenericFontFamilySansSerif", "Ptr*", fam)
+        DllCall("gdiplus\GdipCreateStringFormat", "Int", 0x1000, "Int", 0, "Ptr*", fmt)   ; no wrapping
+    }
+    p := 0
+    DllCall("gdiplus\GdipCreatePath", "Int", 1, "Ptr*", p)
+    VarSetCapacity(rc, 16, 0)
+    VarSetCapacity(bd, 16, 0)
+    Loop, 2 {
+        NumPut(0, rc, 0, "Float"), NumPut(0, rc, 4, "Float"), NumPut(100000, rc, 8, "Float"), NumPut(size * 3, rc, 12, "Float")
+        DllCall("gdiplus\GdipResetPath", "Ptr", p)
+        DllCall("gdiplus\GdipAddPathString", "Ptr", p, "WStr", text, "Int", -1, "Ptr", fam, "Int", 1, "Float", size, "Ptr", &rc, "Ptr", fmt)
+        DllCall("gdiplus\GdipGetPathWorldBounds", "Ptr", p, "Ptr", &bd, "Ptr", 0, "Ptr", 0)
+        bx := NumGet(bd, 0, "Float"), by := NumGet(bd, 4, "Float"), bw := NumGet(bd, 8, "Float"), bh := NumGet(bd, 12, "Float")
+        if (bw <= maxW || A_Index = 2 || bw <= 0)
+            break
+        size := size * maxW / bw * 0.98
+    }
+    ; move the ink box to its place
+    tx := (al = "l") ? x : (al = "r") ? x - bw : x - bw / 2
+    ty := y - bh / 2
+    m := 0
+    DllCall("gdiplus\GdipCreateMatrix2", "Float", 1, "Float", 0, "Float", 0, "Float", 1, "Float", tx - bx, "Float", ty - by, "Ptr*", m)
+    DllCall("gdiplus\GdipTransformPath", "Ptr", p, "Ptr", m)
+    DllCall("gdiplus\GdipDeleteMatrix", "Ptr", m)
+    if (outline > 0) {
+        pen := 0
+        DllCall("gdiplus\GdipCreatePen1", "UInt", 0xE6080A16, "Float", outline, "Int", 2, "Ptr*", pen)
+        DllCall("gdiplus\GdipSetPenLineJoin", "Ptr", pen, "Int", 2)
+        DllCall("gdiplus\GdipDrawPath", "Ptr", gr, "Ptr", pen, "Ptr", p)
+        DllCall("gdiplus\GdipDeletePen", "Ptr", pen)
+    }
+    br := 0
+    DllCall("gdiplus\GdipCreateSolidFill", "UInt", argb, "Ptr*", br)
+    DllCall("gdiplus\GdipFillPath", "Ptr", gr, "Ptr", br, "Ptr", p)
+    DllCall("gdiplus\GdipDeleteBrush", "Ptr", br)
+    DllCall("gdiplus\GdipDeletePath", "Ptr", p)
+    return bw
+}
+
+; Paint the sheet (g = CheatGeom) into the layered window hwnd at
+; x, y.  False when GDI+ is not available (nothing drawn).
+CheatPaint(hwnd, x, y, g, spec) {
+    global FnButtonId
+    if (!GdipReady())
+        return false
+    w := g.pw, h := g.ph, sc := g.sc
+    VarSetCapacity(bi, 40, 0)
+    NumPut(40, bi, 0, "UInt"), NumPut(w, bi, 4, "Int"), NumPut(-h, bi, 8, "Int")
+    NumPut(1, bi, 12, "UShort"), NumPut(32, bi, 14, "UShort")
+    bits := 0
+    hdc := DllCall("CreateCompatibleDC", "Ptr", 0, "Ptr")
+    dib := DllCall("CreateDIBSection", "Ptr", hdc, "Ptr", &bi, "UInt", 0, "Ptr*", bits, "Ptr", 0, "UInt", 0, "Ptr")
+    if (!dib) {
+        DllCall("DeleteDC", "Ptr", hdc)
+        return false
+    }
+    old := DllCall("SelectObject", "Ptr", hdc, "Ptr", dib, "Ptr")
+    gr := 0
+    DllCall("gdiplus\GdipCreateFromHDC", "Ptr", hdc, "Ptr*", gr)
+    DllCall("gdiplus\GdipSetSmoothingMode", "Ptr", gr, "Int", 4)
+    DllCall("gdiplus\GdipSetInterpolationMode", "Ptr", gr, "Int", 7)
+    DllCall("gdiplus\GdipSetPixelOffsetMode", "Ptr", gr, "Int", 2)
+    DllCall("gdiplus\GdipGraphicsClear", "Ptr", gr, "UInt", 0)
+    ; card behind everything
+    GdipFillRound(gr, 0xEC10121A, 0, 0, w, h, 14 * sc)
+    ; title line, and the chip saying how the buttons work right now
+    ty := g.pad + g.head / 2 - 4 * sc
+    chipW := 0
+    if (spec.chip != "") {
+        cs := 15 * sc
+        ; measure: draw nothing, just the width
+        cw := GdipTextWidth(spec.chip, cs) + 26 * sc
+        cx1 := w - g.pad, cx0 := cx1 - cw
+        GdipFillRound(gr, spec.chipColor, cx0, ty - 15 * sc, cw, 30 * sc, 15 * sc)
+        GdipText(gr, spec.chip, cs, (cx0 + cx1) / 2, ty, "c", cw, 0xFF0B1A0F)
+        chipW := cw + 12 * sc
+    }
+    GdipText(gr, spec.title, 22 * sc, g.pad, ty, "l", w - 2 * g.pad - chipW, 0xFFFFFFFF)
+    ; the box: soft shadow, then the picture with rounded corners
+    bx := g.pad, by := g.pad + g.head, bw := g.bw, bh := g.bh
+    GdipFillRound(gr, 0x70000000, bx + 2 * sc, by + 4 * sc, bw, bh, 10 * sc)
+    lay := CheatPicLayout()
+    pic := CheatBoxPicture()
+    clip := GdipRoundPath(bx, by, bw, bh, 10 * sc)
+    DllCall("gdiplus\GdipSetClipPath", "Ptr", gr, "Ptr", clip, "Int", 0)
+    if (pic) {
+        DllCall("gdiplus\GdipDrawImageRectI", "Ptr", gr, "Ptr", pic, "Int", Round(bx), "Int", Round(by), "Int", Round(bw), "Int", Round(bh))
+    } else {
+        ; plain box: navy with cream buttons where the real ones are
+        GdipFillRound(gr, 0xFF26283F, bx, by, bw, bh, 0)
+        br := 0
+        DllCall("gdiplus\GdipCreateSolidFill", "UInt", 0xFFEAE5D6, "Ptr*", br)
+        r := bw * 0.0557
+        for id, t in lay
+            DllCall("gdiplus\GdipFillEllipse", "Ptr", gr, "Ptr", br, "Float", bx + bw * t[1] / 1000 - r, "Float", by + bh * t[2] / 1000 - r, "Float", 2 * r, "Float", 2 * r)
+        DllCall("gdiplus\GdipDeleteBrush", "Ptr", br)
+    }
+    DllCall("gdiplus\GdipResetClip", "Ptr", gr)
+    DllCall("gdiplus\GdipDeletePath", "Ptr", clip)
+    ; the yellow print, and a yellow ring round the FN button
+    fs := bh * 0.044
+    for i, l in spec.labels {
+        if (!lay.HasKey(l.id))
+            continue
+        t := lay[l.id]
+        if (l.fn) {
+            r := bw * 0.0557, ccx := bx + bw * t[1] / 1000, ccy := by + bh * t[2] / 1000
+            for k, ring in [[9 * sc, 0x55FFD400, r + 6 * sc], [3.5 * sc, 0xFFFFD400, r + 5 * sc]] {
+                pen := 0
+                DllCall("gdiplus\GdipCreatePen1", "UInt", ring[2], "Float", ring[1], "Int", 2, "Ptr*", pen)
+                DllCall("gdiplus\GdipDrawEllipse", "Ptr", gr, "Ptr", pen, "Float", ccx - ring[3], "Float", ccy - ring[3], "Float", 2 * ring[3], "Float", 2 * ring[3])
+                DllCall("gdiplus\GdipDeletePen", "Ptr", pen)
+            }
+        }
+        if (l.text = "")
+            continue
+        GdipText(gr, l.text, l.dim ? fs * 0.9 : fs, bx + bw * t[3] / 1000, by + bh * t[4] / 1000, t[5], bw * t[6] / 1000
+            , l.dim ? 0xFFC8CDD7 : 0xFFFFD400, Max(2, fs * 0.17))
+    }
+    if (spec.adjust) {
+        ; green outline: this is the sheet being placed
+        pen := 0
+        bwid := Max(3, 6 * sc)
+        DllCall("gdiplus\GdipCreatePen1", "UInt", 0xFF2ECC71, "Float", bwid, "Int", 2, "Ptr*", pen)
+        p := GdipRoundPath(bwid / 2, bwid / 2, w - bwid, h - bwid, 14 * sc)
+        DllCall("gdiplus\GdipDrawPath", "Ptr", gr, "Ptr", pen, "Ptr", p)
+        DllCall("gdiplus\GdipDeletePath", "Ptr", p)
+        DllCall("gdiplus\GdipDeletePen", "Ptr", pen)
+    }
+    DllCall("gdiplus\GdipDeleteGraphics", "Ptr", gr)
+    ; hand the picture to the window (per-pixel alpha)
+    VarSetCapacity(pt, 8, 0), VarSetCapacity(sz, 8, 0), VarSetCapacity(src, 8, 0), VarSetCapacity(bf, 4, 0)
+    NumPut(x, pt, 0, "Int"), NumPut(y, pt, 4, "Int")
+    NumPut(w, sz, 0, "Int"), NumPut(h, sz, 4, "Int")
+    NumPut(0x01FF0000, bf, 0, "UInt")   ; AC_SRC_OVER, 255, AC_SRC_ALPHA
+    ok := DllCall("UpdateLayeredWindow", "Ptr", hwnd, "Ptr", 0, "Ptr", &pt, "Ptr", &sz, "Ptr", hdc, "Ptr", &src, "UInt", 0, "Ptr", &bf, "UInt", 2)
+    DllCall("SelectObject", "Ptr", hdc, "Ptr", old, "Ptr")
+    DllCall("DeleteObject", "Ptr", dib)
+    DllCall("DeleteDC", "Ptr", hdc)
+    return ok ? true : false
+}
+
+; Width of text in Arial Bold at size px (GdipText's ink box).
+GdipTextWidth(text, size) {
+    static fam := 0
+    if (!fam) {
+        if (DllCall("gdiplus\GdipCreateFontFamilyFromName", "WStr", "Arial", "Ptr", 0, "Ptr*", fam) != 0)
+            DllCall("gdiplus\GdipGetGenericFontFamilySansSerif", "Ptr*", fam)
+    }
+    p := 0
+    DllCall("gdiplus\GdipCreatePath", "Int", 1, "Ptr*", p)
+    VarSetCapacity(rc, 16, 0), VarSetCapacity(bd, 16, 0)
+    NumPut(100000, rc, 8, "Float"), NumPut(size * 3, rc, 12, "Float")
+    DllCall("gdiplus\GdipAddPathString", "Ptr", p, "WStr", text, "Int", -1, "Ptr", fam, "Int", 1, "Float", size, "Ptr", &rc, "Ptr", 0)
+    DllCall("gdiplus\GdipGetPathWorldBounds", "Ptr", p, "Ptr", &bd, "Ptr", 0, "Ptr", 0)
+    DllCall("gdiplus\GdipDeletePath", "Ptr", p)
+    return NumGet(bd, 8, "Float")
 }
 
 ; ------------------------------------------------------------
@@ -1525,7 +1927,8 @@ FriendlyAction(k) {
 LoadSettings() {
     global ConfigFile, ActiveProfile, StartupProfile, SwapIK
     global ScrambleAutoPick, ScrambleDelaySec, ScrambleCountdown, ClickDelayMs, ShowFnCheat, CheatSizePct, CheatPosX, CheatPosY
-    IniRead, ActiveProfile,  %ConfigFile%, App, ActiveProfile,  Default
+    global ReliefAutoSheet, ReliefNoFn
+    IniRead, ActiveProfile,  %ConfigFile%, App, ActiveProfile,  Basic Secondary
     IniRead, StartupProfile, %ConfigFile%, App, StartupProfile, %ActiveProfile%
     IniRead, swapVal,        %ConfigFile%, App, SwapIK,         0
     SwapIK := (swapVal + 0) ? true : false
@@ -1542,6 +1945,17 @@ LoadSettings() {
     ShowFnCheat := (fcVal + 0) ? true : false
     IniRead, fsVal,          %ConfigFile%, App, FnCheatSize, 35
     CheatSizePct := CheatSizeValid(fsVal) ? fsVal + 0 : 35
+    global ScrambleLearned
+    for i, cn in [2, 3, 4] {
+        IniRead, lpVal, %ConfigFile%, Scramble, Cards%cn%, %A_Space%
+        lp := ScrambleParsePattern(lpVal)
+        if (IsObject(lp))
+            ScrambleLearned[cn] := lp
+    }
+    IniRead, rsVal,          %ConfigFile%, App, ReliefSheet, 1
+    ReliefAutoSheet := (rsVal + 0) ? true : false
+    IniRead, rnVal,          %ConfigFile%, App, ReliefNoFn, 1
+    ReliefNoFn := (rnVal + 0) ? true : false
     IniRead, fxVal,          %ConfigFile%, App, FnCheatX, 0
     IniRead, fyVal,          %ConfigFile%, App, FnCheatY, 1000
     CheatPosX := CheatPosValid(fxVal) ? fxVal + 0 : 0
@@ -1559,7 +1973,7 @@ LoadSettings() {
 SaveSettings() {
     global ConfigFile, ActiveProfile, StartupProfile, SwapIK
     global ScrambleAutoPick, ScrambleDelaySec, ScrambleCountdown, ClickDelayMs, ShowFnCheat, CheatSizePct, CheatPosX, CheatPosY
-    global CheatAdjusting, CheatAdjOrig
+    global CheatAdjusting, CheatAdjOrig, ReliefAutoSheet, ReliefNoFn
     IniWrite, %ActiveProfile%,  %ConfigFile%, App, ActiveProfile
     IniWrite, %StartupProfile%, %ConfigFile%, App, StartupProfile
     swapWrite := SwapIK ? 1 : 0
@@ -1572,6 +1986,10 @@ SaveSettings() {
     IniWrite, %ClickDelayMs%, %ConfigFile%, App, ClickDelayMs
     fcWrite := ShowFnCheat ? 1 : 0
     IniWrite, %fcWrite%, %ConfigFile%, App, FnCheatSheet
+    rsWrite := ReliefAutoSheet ? 1 : 0
+    IniWrite, %rsWrite%, %ConfigFile%, App, ReliefSheet
+    rnWrite := ReliefNoFn ? 1 : 0
+    IniWrite, %rnWrite%, %ConfigFile%, App, ReliefNoFn
     ; While Size and Place is open only Lock it in saves its values.
     keep := (CheatAdjusting && IsObject(CheatAdjOrig)) ? CheatAdjOrig : {size: CheatSizePct, x: CheatPosX, y: CheatPosY}
     fsWrite := keep.size, fxWrite := keep.x, fyWrite := keep.y
@@ -1755,11 +2173,37 @@ ScanProfileList() {
         SplitPath, A_LoopFileName, , , , baseName
         ProfileList.Push(baseName)
     }
-    if (ProfileList.MaxIndex() = "") {
-        ; First run with no profiles - create Default
-        ProfileList.Push("Default")
-        SaveProfile("Default")
+    ; v5.3.0: a first run has no blank "Default" any more - the
+    ; Basic Secondary preset (SeedPresetProfiles, right after) is the
+    ; profile a new install starts on.
+}
+
+; v5.3.0 (Bruce: "make sure the basic setup the default is what we
+; have been talking about"): a PC still on the blank "Default"
+; profile that 5.2.x and older created at first run - no FN job, no
+; custom tap, FN on Reset Aim - is moved to Basic Secondary once.
+; Any profile with something in it is left exactly as it is.
+MigrateBlankDefault() {
+    global ActiveProfile, StartupProfile, ProfilesDir, AllBtnIds
+    if (ActiveProfile != "Default" && StartupProfile != "Default")
+        return false
+    pf := ProfilesDir . "\Default.ini"
+    if (FileExist(pf)) {
+        IniRead, fnId, %pf%, Profile, FnButtonId, resetaim
+        if (fnId != "resetaim")
+            return false
+        for i, id in AllBtnIds {
+            IniRead, t, %pf%, Profile, %id%_Type, none
+            IniRead, pk, %pf%, Profile, %id%_Primary, %A_Space%
+            if ((t != "none" && t != "") || Trim(pk) != "")
+                return false
+        }
     }
+    if (ActiveProfile = "Default")
+        ActiveProfile := "Basic Secondary"
+    if (StartupProfile = "Default")
+        StartupProfile := "Basic Secondary"
+    return true
 }
 
 ; ============================================================
@@ -2056,16 +2500,32 @@ HandleBoxKeyDown(keyName) {
         return
     }
 
+    ; v5.3.0: on GSPro 4's relief list the relief buttons work without
+    ; FN; on the scramble screen the bottom row picks a card.  A button
+    ; held down after such a press stays quiet: its auto-repeat must
+    ; not become its own key (an aim move) once the screen has closed.
+    global ScreenJobHeld
+    if (ScreenJobHeld.HasKey(btnId) && A_TickCount - ScreenJobHeld[btnId] < 600) {
+        ScreenJobHeld[btnId] := A_TickCount
+        return
+    }
+    if (ReliefNoFnPress(btnId) || ScrambleBoxPress(btnId)) {
+        ScreenJobHeld[btnId] := A_TickCount
+        return
+    }
     pk := BoxTapKey(btnId)
     if (AnyOcrSecondary())
         OcrTrace("key " . keyName . " (" . btnId . ") down, FN not held -> sent " . pk)
-    if (pk != "")
+    if (pk != "") {
+        GsproToFront()
         Send, %pk%
+    }
 }
 
 HandleBoxKeyUp(keyName) {
     global KeyToBtnId, FnButtonId, FnIsDown, FnUsedAsModifier
     global FnLastDownTime, BtnPrimary
+    global ScreenJobHeld
     btnId := KeyToBtnId[keyName]
     if (btnId = "")
         return
@@ -2073,14 +2533,17 @@ HandleBoxKeyUp(keyName) {
         BuilderTestKey(btnId, false)
         return
     }
+    ScreenJobHeld.Delete(btnId)
     if (btnId = FnButtonId) {
-        CheatHide()
+        CheatFnReleased()
         if (AnyOcrSecondary())
             OcrTrace("key FN (" . keyName . ") up" . (FnUsedAsModifier ? "" : " - tapped alone, sent its own key"))
-        if (!FnUsedAsModifier && !OwnTextFocus()) {
+        if (!FnUsedAsModifier && !OwnTextFocus() && !ScrambleBoxPress(btnId)) {
             pk := BoxTapKey(btnId)
-            if (pk != "")
+            if (pk != "") {
+                GsproToFront()
                 Send, %pk%
+            }
         }
         FnIsDown := false
         FnUsedAsModifier := false
@@ -2129,6 +2592,43 @@ FireSecondary(btnId) {
         OcrTrace("secondary fired: " . btnId . " -> " . SecValue[btnId])
         SmartAction(SecValue[btnId])
     }
+}
+
+; v5.3.0 (Bruce: "make sure ... the gspro screen has to be in focus"):
+; a box tap goes to GSPro.  If GSPro is open but another window is in
+; front, GSPro is brought forward first (about 0.1-0.3 s, only then);
+; with GSPro already in front this is one quick check.  Never when
+; GSPro is not open, never from the Remapper's own windows (typing
+; there gets plain keys before this point), never while a GSPro
+; window is minimized by the player.
+GsproToFront() {
+    global GSProWinNeedle, GSProWinExclude
+    h := DllCall("GetForegroundWindow", "Ptr")
+    if (h) {
+        if (GsproIsGame(h))
+            return true
+        WinGet, fpid, PID, ahk_id %h%
+        if (fpid = DllCall("GetCurrentProcessId"))
+            return false
+    }
+    game := GsproWinRect(GSProWinNeedle, GSProWinExclude)
+    if (!game.found)
+        return false
+    g := game.hwnd
+    WinGet, mm, MinMax, ahk_id %g%
+    if (mm = -1)
+        return false
+    WinActivate, ahk_id %g%
+    ; a short wait loop, not WinWaitActive (no ErrorLevel: it would
+    ; throw if this ever runs inside a try)
+    t0 := A_TickCount
+    while (!WinActive("ahk_id " . g) && A_TickCount - t0 < 600)
+        Sleep, 20
+    ok := WinActive("ahk_id " . g) ? true : false
+    ; for support: which window was taken as the game (the other
+    ; program's title is not written down)
+    OcrTrace("box press: GSPro " . (ok ? "brought to the front" : "did not come to the front") . " - " . WinNote(g) . "; in front was " . (h ? WinNote(h, false) : "nothing"))
+    return ok
 }
 
 ; Frame-polled game input can miss an instantaneous SendInput
@@ -2181,18 +2681,11 @@ SendSecondaryKey(keys) {
 ;  is on screen.  A choice is a CAPITALS title with its detail line
 ;  ("... yd to pin", "From your last spot", "Replay the shot")
 ;  right under it, numbered top to bottom.  The highlighted choice
-;  is read from the pixels (its card is blue).  No panel -> the
-;  older menu's RunOcrAction, unchanged.
+;  is read from the pixels (its card is blue).  No panel -> nothing
+;  is sent (v5.3.0: the older menu's reading was removed).
 ; ============================================================
 SmartAction(actionId) {
     global ReliefLast, OcrBusy, PendingOcrAction, PendingOcrSince
-    global LastActionId, LastFireTick
-    ; The older menu is up and being used (a Smart Click landed on
-    ; it moments ago): stay on its fast repeat path, no extra read.
-    if (!ReliefOnlyAction(actionId) && LastActionId != "" && (A_TickCount - LastFireTick) < 4000) {
-        RunOcrAction(actionId)
-        return
-    }
     rel := ReliefLast
     age := IsObject(rel) ? A_TickCount - rel.at : 99999
     fresh := (age <= 1500)
@@ -2222,17 +2715,1101 @@ SmartAction(actionId) {
         ReliefRun(actionId, rel)
         return
     }
-    if (ReliefOnlyAction(actionId)) {
-        OcrTrace("press " . actionId . ": no GSPro 4 relief list on screen - nothing sent")
-        ShowGsproTip(YellowOcrName(actionId) . " - works on GSPro 4's relief list", 1800)
-        return
-    }
-    RunOcrAction(actionId)
+    ; v5.3.0: GSPro 4 only (Bruce, 2026-11-27: "we shouldent need any
+    ; of the old gspro stuff anymore").  The older relief menu's
+    ; reading and learned click spots are gone.
+    OcrTrace("press " . actionId . ": no GSPro 4 relief list on screen - nothing sent")
+    ShowGsproTip(YellowOcrName(actionId) . " - works on GSPro 4's relief list", 1800)
 }
 
 ; v5.2.0 actions that exist only on GSPro 4's relief list
 ReliefOnlyAction(actionId) {
     return (SubStr(actionId, 1, 6) = "Relief")
+}
+
+; ------------------------------------------------------------
+;  RELIEF WATCH  (v5.3.0, Bruce 2026-11-27: "the cool cheat sheet
+;  comes up when it sees the right screen for it - either OB or the
+;  hazard"; "the only thing we would need FN for would be the clear
+;  view")
+;
+;  Cheap on purpose: while mapping is on and GSPro's picture is on
+;  screen (in front, or uncovered behind a click on another screen),
+;  about three times a second ReliefLook copies 64 x 24
+;  pixels of GSPro's panel corner in one go - no OCR, no text.
+;  GSPro 4's relief panel is a solid dark navy block (R11 G17 B31)
+;  with its cards on it; a round has little of that colour there
+;  (Bruce's water and OB screenshots: 21-56% of the look, also with
+;  the UI 20% smaller or bigger or 15% darker or brighter; his round
+;  screenshots: 9% at most).  Seen twice in a row -> ONE OCR read
+;  of the panel (ReliefProbe - the same read an FN press makes)
+;  confirms the list.  Then the cheat sheet comes up by itself and
+;  the box's relief buttons work without FN.  The panel gone (two
+;  looks) -> everything is back to normal at once.
+;
+;  Every size is a share of the game picture's height, from its top
+;  left corner, so any resolution, Windows scale, window size or
+;  number of screens reads the same (the panel is anchored there).
+; ------------------------------------------------------------
+
+; The GSPro game window when its picture can be seen, else found:
+; false.  In front: one check of the window in front, nothing else.
+; Another program clicked last (Bruce, 2026-11-27: "most of us sim
+; golfers have 2 or 3 screens"): the game window is still watched as
+; long as nothing covers it, so the sheet comes up by itself and the
+; first box press does that screen's job.  front: true / false.
+ReliefWatchWin() {
+    global GSProWinNeedle, GSProWinExclude, WatchGameHwnd, WatchGameSeek
+    h := DllCall("GetForegroundWindow", "Ptr")
+    if (h && WatchIsGame(h)) {
+        win := WatchClient(h)
+        if (win.found) {
+            win.front := true
+            return win
+        }
+    }
+    ; Not in front.  The game window is looked up (a walk through
+    ; the open windows) at most every 2 s; in between only this one
+    ; window is checked.
+    g := WatchGameHwnd
+    if (A_TickCount >= WatchGameSeek || (g && (!DllCall("IsWindow", "Ptr", g) || !WatchIsGame(g)))) {
+        WatchGameSeek := A_TickCount + 2000
+        found := GsproWinRect(GSProWinNeedle, GSProWinExclude)
+        g := WatchGameHwnd := found.found ? found.hwnd : 0
+    }
+    if (!g || !DllCall("IsWindowVisible", "Ptr", g) || DllCall("IsIconic", "Ptr", g))
+        return {found: false}
+    win := WatchClient(g)
+    if (!win.found || !WatchUncovered(win))
+        return {found: false}
+    win.front := false
+    return win
+}
+
+; The GSPro game window (see WHICH WINDOW IS GSPRO).
+WatchIsGame(h) {
+    return GsproIsGame(h)
+}
+
+; A window's picture (client area) on the screen: {found, hwnd, x, y,
+; w, h}.  Not GSPro's small connector or a minimized window.
+WatchClient(h) {
+    VarSetCapacity(rc, 16, 0), VarSetCapacity(pt, 8, 0)
+    if (!DllCall("GetClientRect", "Ptr", h, "Ptr", &rc) || !DllCall("ClientToScreen", "Ptr", h, "Ptr", &pt))
+        return {found: false}
+    cw := NumGet(rc, 8, "Int"), ch := NumGet(rc, 12, "Int")
+    if (cw < 640 || ch < 400)
+        return {found: false}
+    return {found: true, hwnd: h, x: NumGet(pt, 0, "Int"), y: NumGet(pt, 4, "Int"), w: cw, h: ch}
+}
+
+; Is the game picture uncovered where the watch looks (the relief
+; panel's corner and the scramble card strip)?  Six points: the
+; window Windows would hand a click to there must be the game.  No
+; message is sent to any program and nothing is read from the screen.
+; Click-through pictures (this program's sheet and card frame, a
+; graphics card's overlay) and this program's own tips do not count.
+WatchUncovered(win) {
+    static pts := [[0.05, 0.10, 1], [0.25, 0.18, 1], [0.45, 0.27, 1], [0.25, 0.62, 0], [0.50, 0.72, 0], [0.75, 0.82, 0]]
+    own := DllCall("GetCurrentProcessId")
+    for i, p in pts {
+        x := win.x + Round((p[3] ? win.h : win.w) * p[1]), y := win.y + Round(win.h * p[2])
+        top := DllCall("WindowFromPoint", "Int64", (x & 0xFFFFFFFF) | (y << 32), "Ptr")
+        root := top ? DllCall("GetAncestor", "Ptr", top, "UInt", 2, "Ptr") : 0
+        if (root = win.hwnd)
+            continue
+        if (!root)
+            return false
+        WinGet, ex, ExStyle, ahk_id %root%
+        if (ex & 0x20)
+            continue
+        WinGet, rpid, PID, ahk_id %root%
+        WinGet, st, Style, ahk_id %root%
+        if (rpid = own && !(st & 0xC00000))
+            continue
+        return false
+    }
+    return true
+}
+
+; GSPro's picture is there for the sheet and the box: its window is
+; in front, or the screen watch has just seen it uncovered (another
+; program was clicked last, on another screen).
+GsproShown(hwnd) {
+    global WatchSeenHwnd, WatchSeenTick
+    if (!hwnd)
+        return false
+    if (WinActive("ahk_id " . hwnd))
+        return true
+    return (WatchSeenHwnd = hwnd && A_TickCount - WatchSeenTick < 3000)
+}
+
+; Some pixel rows of the screen (or srcDC): ONE 1:1 copy of the band
+; from the first row to the last (x0..x0+w), read back row by row.
+; Every screen copy has a fixed cost (on the test PC a stretched copy
+; took 0.8 s and a copy per row added up), so a look makes exactly
+; one.  {ok, bits, w, off: [byte offset of each row]} + handles;
+; ScreenRowsFree releases them.
+ScreenRows(srcDC, x0, w, ys) {
+    y0 := ys[1], y1 := ys[ys.MaxIndex()]
+    h := y1 - y0 + 1
+    VarSetCapacity(bi, 40, 0)
+    NumPut(40, bi, 0, "UInt"), NumPut(w, bi, 4, "Int"), NumPut(-h, bi, 8, "Int")
+    NumPut(1, bi, 12, "UShort"), NumPut(32, bi, 14, "UShort")
+    bits := 0
+    screenDC := 0
+    if (!srcDC)
+        srcDC := screenDC := DllCall("GetDC", "Ptr", 0, "Ptr")
+    mdc := DllCall("CreateCompatibleDC", "Ptr", srcDC, "Ptr")
+    dib := DllCall("CreateDIBSection", "Ptr", mdc, "Ptr", &bi, "UInt", 0, "Ptr*", bits, "Ptr", 0, "UInt", 0, "Ptr")
+    old := DllCall("SelectObject", "Ptr", mdc, "Ptr", dib, "Ptr")
+    ok := (dib && bits && h > 0 && DllCall("BitBlt", "Ptr", mdc, "Int", 0, "Int", 0, "Int", w, "Int", h, "Ptr", srcDC, "Int", x0, "Int", y0, "UInt", 0x00CC0020))
+    if (screenDC)
+        DllCall("ReleaseDC", "Ptr", 0, "Ptr", screenDC)
+    off := []
+    for i, y in ys
+        off.Push((y - y0) * w * 4)
+    return {ok: ok, bits: bits, w: w, off: off, rows: ys.MaxIndex(), mdc: mdc, dib: dib, old: old}
+}
+
+; One 1:1 copy of a screen rectangle (a single BitBlt), freed with
+; ScreenRowsFree.  {ok, bits, w, rows, x, y}.
+ScreenBlock(x, y, w, h, srcDC := 0) {
+    VarSetCapacity(bi, 40, 0)
+    NumPut(40, bi, 0, "UInt"), NumPut(w, bi, 4, "Int"), NumPut(-h, bi, 8, "Int")
+    NumPut(1, bi, 12, "UShort"), NumPut(32, bi, 14, "UShort")
+    bits := 0
+    sdc := srcDC ? srcDC : DllCall("GetDC", "Ptr", 0, "Ptr")
+    mdc := DllCall("CreateCompatibleDC", "Ptr", sdc, "Ptr")
+    dib := DllCall("CreateDIBSection", "Ptr", mdc, "Ptr", &bi, "UInt", 0, "Ptr*", bits, "Ptr", 0, "UInt", 0, "Ptr")
+    old := DllCall("SelectObject", "Ptr", mdc, "Ptr", dib, "Ptr")
+    ok := dib && bits && DllCall("BitBlt", "Ptr", mdc, "Int", 0, "Int", 0, "Int", w, "Int", h, "Ptr", sdc, "Int", x, "Int", y, "UInt", 0x00CC0020)
+    if (!srcDC)
+        DllCall("ReleaseDC", "Ptr", 0, "Ptr", sdc)
+    return {ok: ok, bits: bits, w: w, rows: h, x: x, y: y, mdc: mdc, dib: dib, old: old}
+}
+
+; A pixel of a ScreenBlock in GetPixel's 0x00BBGGRR form (-1 outside).
+ScreenBlockPixel(blk, x, y) {
+    x -= blk.x, y -= blk.y
+    if (!blk.ok || x < 0 || y < 0 || x >= blk.w || y >= blk.rows)
+        return -1
+    c := NumGet(blk.bits + 0, (y * blk.w + x) * 4, "UInt")
+    return ((c >> 16) & 0xFF) | (c & 0xFF00) | ((c & 0xFF) << 16)
+}
+
+ScreenRowsFree(o) {
+    DllCall("SelectObject", "Ptr", o.mdc, "Ptr", o.old, "Ptr")
+    DllCall("DeleteObject", "Ptr", o.dib)
+    DllCall("DeleteDC", "Ptr", o.mdc)
+}
+
+; One look at the panel corner: share of panel-navy, card-navy and
+; highlight-blue pixels in 64 samples on each of 6 rows (0.08 to 0.28
+; heights down) of the area 0.50 heights wide from the left edge.
+; up = the relief panel is there.  srcDC (tests): a DC holding a
+; screenshot.  The colour families are wide on purpose (any
+; brightness, HDR, a UI 20% bigger or smaller than Bruce's screens):
+; his relief screens give 21-56% navy, his round screens at most 9%;
+; one OCR read decides anyway.
+ReliefLook(win, srcDC := 0) {
+    res := {panel: 0, card: 0, blue: 0, up: false}
+    w := Min(Round(win.h * 0.50), win.w)
+    if (w < 64 || win.h < 100)
+        return res
+    ys := []
+    for i, f in [0.08, 0.12, 0.16, 0.20, 0.24, 0.28]
+        ys.Push(win.y + Round(win.h * f))
+    o := ScreenRows(srcDC, win.x, w, ys)
+    panel := 0, card := 0, blue := 0, n := 0
+    if (o.ok) {
+        Loop, % o.rows {
+            row := o.off[A_Index]
+            Loop, 64 {
+                c := NumGet(o.bits + 0, row + Floor((A_Index - 0.5) * w / 64) * 4, "UInt")
+                b := c & 0xFF, g := (c >> 8) & 0xFF, r := (c >> 16) & 0xFF
+                n += 1
+                if (r <= 50 && g <= 50 && b <= 50 && b >= 18 && b - r >= 10 && b - g >= 6)
+                    panel += 1      ; the panel's dark navy (R11 G17 B31)
+                else if (r >= 8 && r <= 48 && g >= 16 && g <= 60 && b >= 34 && b <= 90 && b - r >= 16 && b - g >= 10)
+                    card += 1       ; a card (R24 G33 B53)
+                else if (b - r >= 50 && b > 70 && g > 30)
+                    blue += 1       ; the highlighted card
+            }
+        }
+    }
+    ScreenRowsFree(o)
+    if (!n)
+        return res
+    res.panel := panel / n, res.card := card / n, res.blue := blue / n
+    res.up := (res.panel >= 0.06 && res.panel + res.card + res.blue >= 0.18)
+    return res
+}
+
+; A press just changed the screen: look quickly for the next 1.5 s.
+ScreenWatchHurry() {
+    global ScreenWatchFast, ScreenWatchOn
+    if (!ScreenWatchOn)
+        return
+    ScreenWatchFast := 10
+    SetTimer, ScreenWatchTick, 150
+}
+
+; The screen watch timer (ScreenWatchTick, every 400 ms).
+ScreenWatchStep() {
+    global RemapActive, ReliefAutoSheet, ReliefNoFn, ReliefWatchHits, ScrambleBoxCards, CheatVisible, FnIsDown
+    if (!RemapActive || (!ReliefAutoSheet && !ReliefNoFn)) {
+        ReliefWatchSet(false)
+        ScrambleBoxCards := ""
+        CheatWatchCheck()
+        return
+    }
+    global WatchSeenHwnd, WatchSeenTick
+    win := ReliefWatchWin()
+    if (!win.found) {
+        ; GSPro's picture is not on screen (closed, minimized or
+        ; covered): nothing to watch until it is back
+        WatchSeenHwnd := 0
+        ReliefWatchHits := 0
+        ReliefWatchSet(false)
+        ScrambleBoxCards := ""
+        CheatWatchCheck()
+        return
+    }
+    static notedWin := ""
+    if (notedWin != win.hwnd . "|" . win.w . "x" . win.h) {
+        notedWin := win.hwnd . "|" . win.w . "x" . win.h
+        OcrTrace("screen watch: GSPro window " . WinNote(win.hwnd) . ", picture " . win.w . " x " . win.h . " at " . win.x . ", " . win.y . (win.front ? "" : " (another program in front)"))
+    }
+    WatchSeenHwnd := win.hwnd, WatchSeenTick := A_TickCount
+    ReliefWatchLook(win)
+    ScrambleBoxWatchStep(win)
+    global ScrambleLearnedId, ScrambleBoxDeepId, ScrambleBoxDeepHow, OcrBusy, ScrambleBusy
+    lc := ScrambleBoxCardsNow()
+    ; Auto-Pick on, a picture under 2000 px high: a read can leave out
+    ; the highlighted card (see ScrambleBoxRead).  The box reads the
+    ; enlarged card strip itself, once for these cards, so its card
+    ; numbers are right from the start.
+    if (IsObject(lc) && lc.auto && ReliefNoFn && ScrambleBoxDeepId != lc.id && lc.n < 4 && win.h < 2000 && !OcrBusy && !ScrambleBusy) {
+        ScrambleBoxDeepId := lc.id
+        OcrLockTake()
+        try {
+            rd := ScrambleBoxRead(win)
+            ScrambleBoxKeepBest(rd.uses, rd.lines)
+            ScrambleBoxDeepHow := rd.how
+            OcrTrace("scramble (Auto-Pick on): the box read " . rd.n . " cards (" . rd.how . "; picture " . win.w . " x " . win.h . ")")
+        } catch appErr {
+            LogAppError("ScrambleBoxDeep", appErr)
+        }
+        OcrBusy := false
+        lc := ScrambleBoxCardsNow()
+    }
+    if (IsObject(lc) && lc.auto && ScrambleLearnedId != lc.id) {
+        ScrambleLearnedId := lc.id
+        ScrambleLearn(lc, win)
+    }
+    ; Auto-Pick reads every 2 s; when the cards are taken with the
+    ; mouse, the cheap look sees them go sooner.  Only for cards the
+    ; look has itself seen (so a GSPro look it cannot see is never
+    ; hidden by it): two looks without them and the sheet, the frame
+    ; and the countdown go; Auto-Pick's next read decides the rest.
+    global ScrambleAutoSeenId, ScrambleAutoGoneId, ScrambleAutoMiss, ScramblePreviewRead
+    if (IsObject(lc) && lc.auto && !CheatCovers(win.x + Round(win.w * 0.15), win.y + Round(win.h * 0.50), Round(win.w * 0.70), Round(win.h * 0.38))) {
+        if (ScrambleBoxLook(win)) {
+            ScrambleAutoSeenId := lc.id
+            ScrambleAutoMiss := 0
+        } else if (ScrambleAutoSeenId = lc.id) {
+            ScrambleAutoMiss += 1
+            if (ScrambleAutoMiss >= 2) {
+                ScrambleAutoGoneId := lc.id
+                ScramblePreviewRead := ""
+                ScrambleHidePreview()
+                OcrTrace("scramble: cards gone (picked by hand) - sheet and frame hidden")
+            }
+        }
+    }
+    if (CheatAutoWanted() && !CheatVisible && !FnIsDown)
+        CheatAutoShow()
+    CheatWatchCheck()
+}
+
+ReliefWatchLook(win) {
+    global ReliefWatchUp, ReliefWatchHits, ReliefWatchMiss, ReliefWatchRetry, ReliefWatchWait, ReliefLast, ReliefLastActTick, OcrBusy
+    ; Old Windows (no capture exclusion): the sheet itself would be in
+    ; the look if it sits over the panel corner - keep what was seen.
+    if (CheatCovers(win.x, win.y + Round(win.h * 0.06), Round(win.h * 0.50), Round(win.h * 0.24)))
+        return
+    look := ReliefLook(win)
+    if (!look.up) {
+        ReliefWatchHits := 0
+        ReliefWatchMiss += 1
+        ReliefWatchRetry := 0
+        ReliefWatchWait := 0
+        if (ReliefWatchUp && ReliefWatchMiss >= 2)
+            ReliefWatchSet(false)
+        return
+    }
+    ReliefWatchMiss := 0
+    ReliefWatchHits += 1
+    if (ReliefWatchUp && IsObject(ReliefLast) && ReliefLast.found) {
+        ; still up: the read stays good for presses and the sheet
+        ReliefLast.at := A_TickCount
+        return
+    }
+    ; New panel, or the read was used up by Enter (Lateral Drop and
+    ; Flag Line show the lie with the list still up): read it once.
+    if (ReliefWatchHits < 2 || A_TickCount < ReliefWatchRetry || OcrBusy)
+        return
+    if (ReliefWatchUp && (A_TickCount - ReliefLastActTick) < 900)
+        return   ; GSPro is still taking the last press
+    OcrLockTake()
+    rel := ""
+    try {
+        rel := ReliefProbe()
+    } catch appErr {
+        LogAppError("ReliefWatch", appErr)
+    }
+    OcrBusy := false
+    if (IsObject(rel) && rel.found) {
+        ReliefWatchSet(true)
+        ReliefWatchWait := 0
+    } else {
+        ; something navy that is not the list: look again later, less
+        ; often each time (3, 6, 12 ... 30 s) while it stays
+        ReliefWatchSet(false)
+        ReliefWatchWait := Min(30000, ReliefWatchWait ? ReliefWatchWait * 2 : 3000)
+        ReliefWatchRetry := A_TickCount + ReliefWatchWait
+    }
+}
+
+ReliefWatchSet(up) {
+    global ReliefWatchUp, ReliefLast, ReliefExpectSel, CheatAuto, FnIsDown
+    if ((up ? true : false) = (ReliefWatchUp ? true : false))
+        return
+    ReliefWatchUp := up ? true : false
+    if (up) {
+        OcrTrace("relief watch: list on screen - " . ReliefNote(ReliefLast))
+        return
+    }
+    OcrTrace("relief watch: list gone")
+    ReliefLast := ""
+    ReliefExpectSel := 0
+    if (!FnIsDown)
+        CheatHide()
+}
+
+; The sheet may only be up by itself while its screen is.  The
+; screen watch checks that at every look, whatever became of the
+; sheet's own timer, so a sheet can never be left standing.
+CheatWatchCheck() {
+    global CheatVisible, CheatHwnd, FnIsDown, CheatAdjusting, CheatTickLast
+    if (FnIsDown || CheatAdjusting)
+        return
+    if (!CheatVisible && !(CheatHwnd && DllCall("IsWindowVisible", "Ptr", CheatHwnd)))
+        return
+    if (!CheatAutoWanted())
+        CheatHide()
+    else if (A_TickCount - CheatTickLast > 1500)
+        SetTimer, CheatTick, 250
+}
+
+ReliefNoFnActive() {
+    global ReliefNoFn, ReliefWatchUp
+    return ReliefNoFn && ReliefWatchUp
+}
+
+; The FN jobs that mean something on the relief list.
+ReliefNoFnAction(a) {
+    return (a = "DropRehit" || a = "NextOption" || a = "Rehit" || a = "MoveForward" || a = "MoveBack" || ReliefOnlyAction(a))
+}
+
+; A box press on the relief list without FN: true = handled here.
+; Only buttons whose FN job is a relief action, only while the watch
+; has the list and its panel is on screen right now (a fresh look);
+; every other button, and every button off the list, sends its own
+; key exactly as before.  A held button counts once (ScreenJobHeld).
+ReliefNoFnPress(btnId) {
+    global ReliefNoFn, ReliefWatchUp, SecType, SecValue, FnButtonId
+    if (!ReliefNoFn || !ReliefWatchUp || btnId = FnButtonId)
+        return false
+    if (SecType[btnId] != "ocr" || !ReliefNoFnAction(SecValue[btnId]))
+        return false
+    win := ReliefWatchWin()
+    if (!win.found || !ReliefLook(win).up) {
+        ReliefWatchSet(false)
+        return false
+    }
+    OcrTrace("key " . btnId . " on the relief list, no FN needed -> " . SecValue[btnId])
+    FireSecondary(btnId)
+    return true
+}
+
+; What the sheet should show now, as a key (redraw when it changes).
+CheatStateKey() {
+    global ReliefNoFn
+    st := CheatReliefState()
+    if (!st.on && ReliefNoFn) {
+        c := ScrambleBoxCardsNow()
+        if (IsObject(c))
+            return "s|" . c.id . "|" . ScrambleBoxTakeCard(c)
+    }
+    return st.key
+}
+
+; True when the sheet is on screen over (x, y, w, h) and could be in
+; a screen capture (Windows before 10 2004 cannot leave it out).
+CheatCovers(x, y, w, h) {
+    global CheatVisible, CheatExcluded, CheatHwnd
+    if (!CheatVisible || CheatExcluded || !CheatHwnd)
+        return false
+    WinGetPos, sx, sy, sw, sh, ahk_id %CheatHwnd%
+    return (sx != "" && sx < x + w && sx + sw > x && sy < y + h && sy + sh > y)
+}
+
+CheatAutoWanted() {
+    global ReliefWatchUp, ReliefAutoSheet, ReliefNoFn, RemapActive, CheatAdjusting
+    if (!ReliefAutoSheet || !RemapActive || CheatAdjusting)
+        return false
+    return ReliefWatchUp || (ReliefNoFn && IsObject(ScrambleBoxCardsNow()))
+}
+
+CheatAutoShow() {
+    global CheatVisible, FnIsDown
+    if (!CheatAutoWanted() || FnIsDown)
+        return
+    CheatDraw()
+    if (CheatVisible)
+        SetTimer, CheatTick, 250
+}
+
+; FN let go: the sheet goes, unless the relief list keeps it up.
+CheatFnReleased() {
+    if (CheatAutoWanted()) {
+        SetTimer, CheatAfterFn, -1
+        return
+    }
+    CheatHide()
+}
+
+; ------------------------------------------------------------
+;  SCRAMBLE CARDS FROM THE BOX  (v5.3.0, Bruce 2026-11-27)
+;
+;  While a scramble shot-select screen is up, the bottom row picks a
+;  card: Reset Aim (tapped) 1, Tee Left 2, Tee Right 3, Shot Cam 4.
+;  The Remapper frames that card and left-clicks the player's name
+;  on it, so GSPro shows where that ball lies; AIM right takes it -
+;  the card's number, the same key Auto-Pick sends.  Auto-Pick keeps
+;  counting down; a card picked on the box is the one it takes at
+;  zero (the box choice outvotes every read).  The cheat sheet shows
+;  CARD 1-4 on the bottom row and TAKE CARD on AIM right.
+;
+;  How the screen is known: with Auto-Pick on, from its own reads
+;  (nothing extra runs).  With Auto-Pick off, a cheap colour check
+;  of the card strip in the screen watch - the chosen card is a
+;  solid teal-navy (R2 G39 B58) with a blue button (R27 G128 B198)
+;  on Bruce's screenshots - and one read when the cards show up.
+; ------------------------------------------------------------
+
+; The cards on screen now: {uses, n, hwnd, auto, id} or "".
+ScrambleBoxCardsNow() {
+    global RemapActive, ScrambleAutoPick, ScrambleArmedTick, ScrambleCoolDown, ScrambleMissTicks
+    global ScrambleLastUses, ScrambleLastHwnd, ScrambleBoxCards
+    if (!RemapActive)
+        return ""
+    if (ScrambleAutoPick) {
+        u := ScrambleLastUses
+        global ScrambleAutoGoneId, ScrambleBoxBest
+        if (ScrambleArmedTick > 0 && !ScrambleCoolDown && ScrambleMissTicks = 0 && IsObject(u) && u.MaxIndex() >= 2 && ScrambleAutoGoneId != "a" . ScrambleArmedTick) {
+            ; The fullest read of these cards counts and stays (a later
+            ; read can leave out the card whose button turned blue when
+            ; the box picked it - the numbers must not shift).
+            id := "a" . ScrambleArmedTick, ln := ""
+            bb := ScrambleBoxBest
+            if (IsObject(bb) && bb.id = id && bb.uses.Length() >= u.Length())
+                u := bb.uses, ln := bb.lines
+            return {uses: u, n: Min(u.Length(), 4), hwnd: ScrambleLastHwnd, auto: true, id: id, lines: ln}
+        }
+        return ""
+    }
+    c := ScrambleBoxCards
+    return (IsObject(c) && c.n >= 2) ? c : ""
+}
+
+; Auto-Pick on: the fullest read of the cards now on screen, for the
+; box (never fewer cards than an earlier read of the same cards).
+ScrambleBoxKeepBest(uses, lines) {
+    global ScrambleBoxBest, ScrambleArmedTick
+    if (!ScrambleArmedTick || !IsObject(uses) || uses.Length() < 2 || uses.Length() > 4)
+        return
+    id := "a" . ScrambleArmedTick
+    uses := ScrambleFillGaps(uses)
+    if (!IsObject(ScrambleBoxBest) || ScrambleBoxBest.id != id || uses.Length() > ScrambleBoxBest.uses.Length())
+        ScrambleBoxBest := {id: id, uses: uses, lines: lines}
+}
+
+; The card picked on the box for these cards (0 = none yet).
+ScrambleBoxPickNow(c) {
+    global ScrambleBoxPick, ScrambleBoxFor
+    return (IsObject(c) && ScrambleBoxPick && ScrambleBoxFor = c.id && ScrambleBoxPick <= c.n) ? ScrambleBoxPick : 0
+}
+
+; The card AIM right would take: the box pick, else Auto-Pick's choice.
+ScrambleBoxTakeCard(c) {
+    k := ScrambleBoxPickNow(c)
+    if (!k && c.auto)
+        k := ScrambleVoteLeader()
+    return (k >= 1 && k <= c.n) ? k : 0
+}
+
+; A box press on the scramble screen: true = handled here.
+ScrambleBoxPress(btnId) {
+    global ReliefNoFn, ScrambleBoxPick, ScrambleBoxFor, ScrambleBusy, ScrambleBoxPending
+    static cardOf := {resetaim: 1, teeleft: 2, teeright: 3, shotcam: 4}
+    if (!ReliefNoFn || (!cardOf.HasKey(btnId) && btnId != "right"))
+        return false
+    c := ScrambleBoxCardsNow()
+    if (!IsObject(c) || (c.hwnd && !GsproShown(c.hwnd)))
+        return false
+    ; The colour check alone never moves a tee button's job: before a
+    ; press counts, one small read proves the cards are still there.
+    if (!ScrambleBoxConfirm(c))
+        return false
+    ; Another program was clicked last: GSPro first, so the click on
+    ; the name and the card's number land in the game.
+    if (c.hwnd && !WinActive("ahk_id " . c.hwnd))
+        GsproToFront()
+    if (btnId = "right") {
+        k := ScrambleBoxTakeCard(c)
+        if (!k) {
+            ShowGsproTip("Pick a card first: Reset Aim 1, Tee Left 2, Tee Right 3, Shot Cam 4", 2200)
+            return true
+        }
+        if (c.auto && ScrambleBusy) {
+            ; Auto-Pick is reading the cards right now: take it the
+            ; moment that read is done (it may have picked already)
+            ScrambleBoxPending := k
+            SetTimer, ScrambleBoxTakeLater, -60
+            return true
+        }
+        ScrambleBoxTake(k, c)
+        return true
+    }
+    k := cardOf[btnId]
+    if (k > c.n) {
+        ShowGsproTip("Only " . c.n . " cards on this screen", 1500)
+        return true
+    }
+    ScrambleBoxPick := k
+    ScrambleBoxFor := c.id
+    if (c.auto)
+        ScrambleBoxVote(k, c.n)
+    OcrTrace("scramble: card " . k . " picked on the box (" . c.n . " cards)")
+    ; Left-click the player's name: GSPro shows where that ball is.
+    ; The name sits 7.8 USE-text heights above the top of its USE /
+    ; Select text, centred over it (Bruce's real screens).
+    pt := ScrambleNamePoint(c, k)
+    if (IsObject(pt)) {
+        DpiClickAt(pt[1], pt[2])
+        ParkMouse()
+    }
+    return true
+}
+
+; Auto-Pick off: the cards were found by colours and one read; a
+; fairway could look alike later.  So a box press first reads the
+; thin strip around the USE / Select words (enlarged on small
+; screens) - good for 3 s.  No button word there: the cards are
+; gone, the press is the button's own key.  Auto-Pick on: its own
+; read every 2 s is the proof.  A read already running: trust it.
+ScrambleBoxConfirm(c) {
+    global ScrambleBoxCards, ScrambleBoxRetry, ScrambleBoxOkTick, ScrambleBoxOkId, OcrBusy
+    if (c.auto)
+        return true
+    if (ScrambleBoxOkId = c.id && A_TickCount - ScrambleBoxOkTick < 3000)
+        return true
+    if (OcrBusy)
+        return true
+    x0 := 999999, x1 := -999999, y0 := 999999, y1 := -999999, hh := 0
+    for i, u in c.uses
+        x0 := Min(x0, u.x), x1 := Max(x1, u.x + u.w), y0 := Min(y0, u.y), y1 := Max(y1, u.y + u.h), hh := Max(hh, u.h)
+    if (hh <= 0)
+        return false
+    rx := Round(x0 - 3 * hh), ry := Round(y0 - 1.5 * hh), rw := Round(x1 - x0 + 6 * hh), rh := Round(y1 - y0 + 3 * hh)
+    found := 0
+    OcrLockTake()
+    try {
+        ; The animated green grid can spoil one frame (as it did for
+        ; Auto-Pick): two sizes, then both again a moment later.
+        for i, f in (hh < 24 ? [2, 3, 0, 2, 3] : [1, 2, 0, 1, 2]) {
+            if (!f) {
+                Sleep, 150
+                continue
+            }
+            o := (f > 1) ? OcrRegionScaled(rx, ry, rw, rh, f) : OcrRegion(rx, ry, rw, rh)
+            found := ScrambleButtons({lines: o.lines}).MaxIndex()
+            if (found)
+                break
+        }
+    } catch appErr {
+        LogAppError("ScrambleBoxConfirm", appErr)
+        found := 1      ; the reader failed, not the screen
+    }
+    OcrBusy := false
+    if (found) {
+        ScrambleBoxOkId := c.id, ScrambleBoxOkTick := A_TickCount
+        return true
+    }
+    OcrTrace("scramble watch: no cards at the press - the button keeps its own job")
+    ScrambleBoxCards := ""
+    ScrambleBoxRetry := A_TickCount + 3000
+    CheatHide()
+    return false
+}
+
+; Auto-Pick takes the box's card at zero: the box choice gets 1000
+; votes on top of the reads (ScrambleVoteLeader is unchanged).
+ScrambleBoxVote(k, n) {
+    global ScrambleVotes, ScrambleReadsN, ScrambleVoteLast, ScrambleBoxBoost
+    cn := 0
+    for key, v in ScrambleReadsN
+        cn := Max(cn, key + 0)
+    if (!cn)
+        cn := n
+    if (ScrambleBoxBoost != "" && ScrambleVotes.HasKey(ScrambleBoxBoost))
+        ScrambleVotes[ScrambleBoxBoost] -= 1000
+    key := cn . "-" . k
+    ScrambleVotes[key] := (ScrambleVotes.HasKey(key) ? ScrambleVotes[key] : 0) + 1000
+    ScrambleVoteLast := key
+    ScrambleBoxBoost := key
+}
+
+; AIM right: the card's number goes to GSPro, as Auto-Pick sends it.
+ScrambleBoxTake(k, c) {
+    global ScrambleCoolDown, ScrambleArmedTick, ScrambleTries, ScrambleLastRead, ScrambleBoxCards
+    global ScrambleBoxPick, ScrambleBoxRetry
+    ScrambleHidePreview()
+    ; A held keypress into the game window, like every box key GSPro
+    ; must not miss between frames (SendSecondaryKey).
+    if (!SendSecondaryKey(k . ""))
+        return
+    if (c.auto) {
+        ScrambleCoolDown := true
+        ScrambleArmedTick := 0
+        ScrambleTries := 0
+        SetTimer, ScrambleZero, Off
+        lr := ScrambleLastRead
+        if (IsObject(lr))
+            ScrambleLogDecision(lr.n, lr.cards, lr.minShot, k, "OK - PICKED " . k . " on the box (AIM right)")
+    } else {
+        ScrambleBoxCards := ""
+        ScrambleBoxRetry := A_TickCount + 3000   ; the cards are going away
+    }
+    ScrambleBoxPick := 0
+    global FnIsDown
+    if (!FnIsDown)
+        CheatHide()
+    ScreenWatchHurry()
+    OcrTrace("scramble: card " . k . " taken on the box (AIM right)")
+}
+
+; Auto-Pick off: the cheap look for the cards, one read when they
+; show up, gone after two looks without them.
+ScrambleBoxWatchStep(win) {
+    global ScrambleAutoPick, ScrambleBoxCards, ScrambleBoxHits, ScrambleBoxMiss, ScrambleBoxRetry
+    global ReliefNoFn, ReliefWatchUp, OcrBusy, GSProWinNeedle, GSProWinExclude, FnIsDown
+    global ScrambleBoxWait, ScrambleBoxTick
+    if (ScrambleAutoPick || ReliefWatchUp || !ReliefNoFn) {
+        ScrambleBoxCards := ""
+        ScrambleBoxHits := 0
+        return
+    }
+    ; every other tick (0.8 s) is plenty for a screen that stays up
+    ScrambleBoxTick := !ScrambleBoxTick
+    if (ScrambleBoxTick)
+        return
+    if (CheatCovers(win.x + Round(win.w * 0.15), win.y + Round(win.h * 0.50), Round(win.w * 0.70), Round(win.h * 0.38)))
+        return
+    if (!ScrambleBoxLook(win)) {
+        ScrambleBoxHits := 0
+        ScrambleBoxWait := 0
+        ScrambleBoxMiss += 1
+        if (ScrambleBoxMiss >= 2 && IsObject(ScrambleBoxCards)) {
+            ScrambleBoxCards := ""
+            OcrTrace("scramble watch: cards gone")
+            if (!FnIsDown)
+                CheatHide()
+        }
+        return
+    }
+    ScrambleBoxMiss := 0
+    ScrambleBoxHits += 1
+    ; A second opinion (v5.3.0): fewer than four cards were read and
+    ; nothing has been picked yet - one more read about a second and a
+    ; half later.  The green's moving grid can spoil a single read (as
+    ; it once did for Auto-Pick); the cards only ever become more.
+    global ScrambleBoxPick, ScrambleBoxFor
+    sc := ScrambleBoxCards
+    if (IsObject(sc) && sc.n < 4 && !sc.again && A_TickCount - sc.at >= 1500 && !OcrBusy && !(ScrambleBoxPick && ScrambleBoxFor = sc.id)) {
+        sc.again := true
+        OcrLockTake()
+        rd := ""
+        try {
+            rd := ScrambleBoxRead(win)
+        } catch appErr {
+            LogAppError("ScrambleBoxWatch", appErr)
+        }
+        OcrBusy := false
+        if (IsObject(rd) && rd.n > sc.n && rd.n <= 4) {
+            ScrambleBoxCards := {uses: rd.uses, n: rd.n, hwnd: win.hwnd, auto: false, id: "b" . A_TickCount, lines: rd.lines, how: sc.how . "; again " . rd.how, at: A_TickCount, again: true}
+            ScrambleLearn(ScrambleBoxCards, win)
+            OcrTrace("scramble watch: " . rd.n . " cards on a second read (" . rd.how . ")")
+        }
+        return
+    }
+    if (IsObject(ScrambleBoxCards) || ScrambleBoxHits < 2 || A_TickCount < ScrambleBoxRetry || OcrBusy)
+        return
+    OcrLockTake()
+    uses := "", readLines := "", readHow := ""
+    try {
+        rd := ScrambleBoxRead(win)
+        uses := rd.uses, readLines := rd.lines, readHow := rd.how
+    } catch appErr {
+        LogAppError("ScrambleBoxWatch", appErr)
+    }
+    OcrBusy := false
+    if (IsObject(uses) && uses.Length() >= 2) {
+        ScrambleBoxCards := {uses: uses, n: Min(uses.Length(), 4), hwnd: win.hwnd, auto: false, id: "b" . A_TickCount, lines: readLines, how: readHow, at: A_TickCount, again: false}
+        ScrambleBoxWait := 0
+        ScrambleLearn(ScrambleBoxCards, win)
+        OcrTrace("scramble watch: " . uses.Length() . " cards on screen (" . readHow . "; picture " . win.w . " x " . win.h . ")")
+    } else {
+        ScrambleBoxWait := Min(30000, ScrambleBoxWait ? ScrambleBoxWait * 2 : 3000)
+        ScrambleBoxRetry := A_TickCount + ScrambleBoxWait
+    }
+}
+
+; The card buttons for the box, every one of them (v5.3.0).  One read
+; can leave a card out: Windows' reader loses small white print on the
+; highlighted card's blue button first (1641 x 1020: 2 of 3 and 3 of 4
+; cards; 1280 x 796: 2 of 4).  A card left out would shift the numbers,
+; so on a picture under 2000 px high (in the Windows tests a 1440-line
+; picture lost a card too; 4K reads every card) the card strip is read
+; again enlarged (2x; 2x and 3x under 1300 px; 3x and 4x under 850 px)
+; and the read with the most buttons in one row counts.  Once, when
+; the cards show up.
+; {uses: [left to right], lines, n, how}
+ScrambleBoxRead(win) {
+    global GSProWinNeedle, GSProWinExclude
+    best := [], bestLines := "", how := ""
+    scan := ScanWinClient(GSProWinNeedle, GSProWinExclude)
+    if (!scan.found)
+        return {uses: best, lines: "", n: 0, how: "no window"}
+    rscan := ScrambleRecoverCards(scan)
+    best := ScrambleRowButtons(rscan.lines), bestLines := rscan.lines
+    how := "1x: " . best.Length()
+    if (best.Length() < 4 && win.h < 2000) {
+        band := ScrambleCardStrip(scan.win)
+        for i, f in (win.h < 850 ? [3, 4] : win.h < 1300 ? [2, 3] : [2]) {
+            o := OcrRegionScaled(band.x, band.y, band.w, band.h, f)
+            u2 := ScrambleRowButtons(o.lines)
+            how .= ", " . f . "x: " . u2.Length()
+            if (u2.Length() > best.Length() && u2.Length() <= 4)
+                best := u2, bestLines := o.lines
+            if (best.Length() >= 4)
+                break
+        }
+    }
+    else if (best.Length() >= 1 && best.Length() < 4) {
+        ; a 4K picture: every card is read as it is; one more look at
+        ; the strip a moment later, in case this one caught a bad frame
+        Sleep, 150
+        band := ScrambleCardStrip(scan.win)
+        o := OcrRegion(band.x, band.y, band.w, band.h)
+        u2 := ScrambleRowButtons(o.lines)
+        how .= ", strip: " . u2.Length()
+        if (u2.Length() > best.Length() && u2.Length() <= 4)
+            best := u2, bestLines := o.lines
+    }
+    best := ScrambleFillGaps(best)
+    return {uses: best, lines: bestLines, n: best.Length(), how: how}
+}
+
+; The card strip for an enlarged read: the cards' band (0.45 to 0.92
+; heights down), 1.7 heights wide around the middle - the full width
+; on a 16:10 picture, the middle of a wider one (an ultrawide strip
+; enlarged whole would be too big for Windows' reader).
+ScrambleCardStrip(win) {
+    band := ScrambleCardBand(win)
+    w := Min(win.w, Round(win.h * 1.7))
+    return {x: win.x + (win.w - w) // 2, y: band.y, w: w, h: band.h}
+}
+
+; The USE / Select words of one read that share a row, left to right.
+; A stray word elsewhere on the screen is not a card; a word read
+; twice counts once.
+ScrambleRowButtons(lines) {
+    all := ScrambleButtons({lines: lines})
+    row := []
+    for i, a in all {
+        r := []
+        for j, b in all {
+            if (Abs((b.y + b.h / 2) - (a.y + a.h / 2)) <= 1.2 * Max(a.h, 1))
+                r.Push(b)
+        }
+        if (r.Length() > row.Length())
+            row := r
+    }
+    out := []
+    Loop, % row.Length() {
+        pick := 0
+        for i, b in row {
+            if (!pick || b.x < row[pick].x)
+                pick := i
+        }
+        b := row.RemoveAt(pick)
+        last := out.Length() ? out[out.Length()] : ""
+        if (IsObject(last) && Abs((b.x + b.w / 2) - (last.x + last.w / 2)) < Max(b.h, last.h))
+            continue
+        out.Push(b)
+    }
+    return out
+}
+
+; Cards stand in an even row.  Three buttons with one double-wide gap
+; mean a card between them was not read: it gets its place.
+ScrambleFillGaps(uses) {
+    n := uses.Length()
+    if (n < 3 || n >= 4)
+        return uses
+    pitch := 0
+    Loop, % n - 1 {
+        d := (uses[A_Index + 1].x + uses[A_Index + 1].w / 2) - (uses[A_Index].x + uses[A_Index].w / 2)
+        pitch := pitch ? Min(pitch, d) : d
+    }
+    if (pitch <= 0)
+        return uses
+    out := []
+    for i, u in uses {
+        out.Push(u)
+        if (i < n) {
+            gap := (uses[i + 1].x + uses[i + 1].w / 2) - (u.x + u.w / 2)
+            m := Round(gap / pitch)
+            if (m = 2 && Abs(gap - 2 * pitch) <= 0.15 * pitch)
+                out.Push({x: Round(u.x + gap / 2), y: u.y, w: u.w, h: u.h, text: "(between)"})
+        }
+    }
+    return (out.Length() <= 4) ? out : uses
+}
+
+; The chosen scramble card's colours in the card strip: 80 samples
+; on each of 7 rows, 0.56 to 0.86 heights down, across the middle 70%.
+; Bruce's 2/3/4-player screens: 1.4-7.9% card navy (UI 20% smaller
+; or bigger, 15% darker or brighter); his relief screens: 0.2% at
+; most.  srcDC (tests): a DC holding a screenshot.
+ScrambleBoxLook(win, srcDC := 0) {
+    if (ScrambleLearnedLook(win, srcDC))
+        return true
+    ; The middle 70% of Bruce's 16:10 pictures is 1.13 heights wide.
+    ; On a wider picture (16:9, ultrawide) the cards still stand in the
+    ; middle, so the look keeps that width there instead of thinning
+    ; out across the extra width.
+    w := Min(Round(win.w * 0.70), Round(win.h * 1.13))
+    if (w < 80 || win.h < 100)
+        return false
+    ys := []
+    for i, f in [0.56, 0.61, 0.66, 0.71, 0.76, 0.81, 0.86]
+        ys.Push(win.y + Round(win.h * f))
+    o := ScreenRows(srcDC, win.x + (win.w - w) // 2, w, ys)
+    navy := 0, n := 0
+    if (o.ok) {
+        Loop, % o.rows {
+            row := o.off[A_Index]
+            Loop, 80 {
+                c := NumGet(o.bits + 0, row + Floor((A_Index - 0.5) * w / 80) * 4, "UInt")
+                b := c & 0xFF, g := (c >> 8) & 0xFF, r := (c >> 16) & 0xFF
+                n += 1
+                if (r <= 20 && g >= 26 && g <= 56 && b >= 40 && b <= 80 && b - g >= 8 && g - r >= 18)
+                    navy += 1       ; the chosen card's teal-navy (R2 G39 B58)
+            }
+        }
+    }
+    ScreenRowsFree(o)
+    return (n && navy / n >= 0.007)
+}
+
+; ---- Learned scramble cards (v5.3.0, "make it smarter to work every
+; time") ----
+; Every confirmed read of the cards teaches the cheap look what THIS
+; PC's GSPro draws: the colour just left and right of each USE /
+; Select word (inside its button) at that spot, as shares of the
+; game picture.  Kept in settings.ini per number of cards, so any
+; GSPro look, theme or display is recognised with a handful of pixels
+; from then on.  A spot matches any button colour learned with it, so
+; the highlight moving to another card does not hide the cards.
+ScrambleLearn(c, win, srcDC := 0) {
+    global ScrambleLearned, ConfigFile
+    n := c.n
+    if (n < 2 || n > 4 || win.w <= 0 || win.h <= 0)
+        return false
+    spots := []
+    for k, u in c.uses {
+        if (k > 4)
+            break
+        yy := Round(u.y + u.h / 2)
+        spots.Push([Round(u.x - 0.6 * u.h), yy, Round(u.x + u.w + 0.6 * u.h)])
+    }
+    x0 := 999999, x1 := -999999, y0 := 999999, y1 := -999999
+    for i, sp in spots
+        x0 := Min(x0, sp[1]), x1 := Max(x1, sp[3]), y0 := Min(y0, sp[2]), y1 := Max(y1, sp[2])
+    if (x1 - x0 > 8000 || y1 - y0 > 2000)
+        return false
+    blk := ScreenBlock(x0, y0, x1 - x0 + 1, y1 - y0 + 1, srcDC)
+    pts := [], good := 0
+    for i, sp in spots {
+        cl := ScreenBlockPixel(blk, sp[1], sp[2]), cr := ScreenBlockPixel(blk, sp[3], sp[2])
+        if (cl < 0 || cr < 0 || ColorGap(cl, cr) > 24)
+            continue        ; not inside a solid button there
+        pts.Push([sp[1], sp[2], cl], [sp[3], sp[2], cr])
+        good += 1
+    }
+    ScreenRowsFree(blk)
+    if (good < 2)
+        return false
+    str := Round(win.w * 1000 / win.h) . "|"
+    for i, p in pts
+        str .= (i > 1 ? ";" : "") . Round((p[1] - win.x) * 100000 / win.w) . "," . Round((p[2] - win.y) * 100000 / win.h) . "," . p[3]
+    pat := ScrambleParsePattern(str)
+    if (!IsObject(pat))
+        return false
+    ScrambleLearned[n] := pat
+    if (!srcDC)
+        IniWrite, %str%, %ConfigFile%, Scramble, Cards%n%
+    OcrTrace("scramble cards learned: " . n . " cards, " . good . " buttons")
+    return true
+}
+
+; "aspect|x,y,colour;..." (x, y in 1/100000 of the game picture,
+; colour 0x00BBGGRR) -> {aspect, pts, palette} or "" if malformed.
+ScrambleParsePattern(str) {
+    p := StrSplit(str, "|")
+    if (p.MaxIndex() != 2 || !RegExMatch(p[1], "^\d{3,5}$"))
+        return ""
+    pts := [], palette := []
+    for i, q in StrSplit(p[2], ";") {
+        v := StrSplit(q, ",")
+        if (v.MaxIndex() != 3 || !RegExMatch(v[1], "^\d{1,6}$") || !RegExMatch(v[2], "^\d{1,6}$") || !RegExMatch(v[3], "^\d{1,8}$"))
+            return ""
+        if (v[1] > 100000 || v[2] > 100000 || v[3] > 0xFFFFFF)
+            return ""
+        pts.Push([v[1] / 100000, v[2] / 100000, v[3] + 0])
+        known := false
+        for j, pc in palette {
+            if (ColorGap(pc, v[3] + 0) <= 24)
+                known := true
+        }
+        if (!known)
+            palette.Push(v[3] + 0)
+    }
+    return (pts.MaxIndex() >= 4 && pts.MaxIndex() <= 8) ? {aspect: p[1] + 0, pts: pts, palette: palette} : ""
+}
+
+; Largest channel difference of two colours (either byte order).
+ColorGap(a, b) {
+    return Max(Abs((a & 0xFF) - (b & 0xFF)), Abs(((a >> 8) & 0xFF) - ((b >> 8) & 0xFF)), Abs(((a >> 16) & 0xFF) - ((b >> 16) & 0xFF)))
+}
+
+; The learned spots for this picture shape: number of cards seen, or 0.
+ScrambleLearnedLook(win, srcDC := 0) {
+    global ScrambleLearned
+    asp := Round(win.w * 1000 / win.h)
+    for n, pat in ScrambleLearned {
+        if (!IsObject(pat) || Abs(pat.aspect - asp) > 20)
+            continue
+        x0 := 999999, x1 := -999999, y0 := 999999, y1 := -999999, xy := []
+        for i, pt in pat.pts {
+            x := win.x + Round(pt[1] * win.w), y := win.y + Round(pt[2] * win.h)
+            xy.Push([x, y])
+            x0 := Min(x0, x), x1 := Max(x1, x), y0 := Min(y0, y), y1 := Max(y1, y)
+        }
+        blk := ScreenBlock(x0, y0, x1 - x0 + 1, y1 - y0 + 1, srcDC)
+        hits := 0
+        for i, q in xy {
+            c := ScreenBlockPixel(blk, q[1], q[2])
+            if (c < 0)
+                continue
+            for j, pc in pat.palette {
+                if (ColorGap(c, pc) <= 30) {
+                    hits += 1
+                    break
+                }
+            }
+        }
+        ScreenRowsFree(blk)
+        if (hits >= Ceil(xy.MaxIndex() * 0.75))
+            return n
+    }
+    return 0
+}
+
+; Where to click card k's player name: the top text line on the card
+; from the read (any GSPro layout), else 7.8 USE-heights above the
+; USE text, centred (Bruce's screens).  [x, y] or "".
+ScrambleNamePoint(c, k) {
+    global ScrambleLastLines
+    u := c.uses[k]
+    if (!IsObject(u))
+        return ""
+    lines := IsObject(c.lines) ? c.lines : ScrambleLastLines
+    pt := ScrambleNameFromLines(lines, c.uses, k)
+    return IsObject(pt) ? pt : [Round(u.x + u.w / 2), Round(u.y - 7.8 * u.h)]
+}
+
+ScrambleNameFromLines(lines, uses, k) {
+    u := uses[k]
+    if (!IsObject(lines) || !IsObject(u) || u.h <= 0)
+        return ""
+    cx := u.x + u.w / 2
+    pitch := 0
+    for i, o in uses {
+        if (i != k) {
+            d := Abs(o.x + o.w / 2 - cx)
+            pitch := pitch ? Min(pitch, d) : d
+        }
+    }
+    half := pitch ? pitch * 0.4 : u.h * 5
+    best := ""
+    for i, ln in lines {
+        lx := ln.x + ln.w / 2
+        ; on the card: above the USE row, below the card's top edge
+        ; (10.1 USE-heights up on Bruce's screens), card-sized text
+        if (Abs(lx - cx) > half || ln.y >= u.y - 2 * u.h || ln.y < u.y - 11 * u.h || ln.h > 4 * u.h)
+            continue
+        t := Trim(ln.text)
+        if (StrLen(t) < 2 || !RegExMatch(t, "[A-Za-z]"))
+            continue        ; the card's number badge, a lone digit
+        if (!IsObject(best) || ln.y < best.y)
+            best := ln
+    }
+    return IsObject(best) ? [Round(best.x + best.w / 2), Round(best.y + best.h / 2)] : ""
+}
+
+; The sheet's labels on the scramble screen: only the cards there are
+; (bottom row) and AIM right to take one - nothing else, no FN ring.
+CheatScrambleLabels(model, c) {
+    static cardOf := {resetaim: 1, teeleft: 2, teeright: 3, shotcam: 4}
+    k := ScrambleBoxTakeCard(c)
+    out := []
+    for i, m in model {
+        t := ""
+        if (cardOf.HasKey(m.id)) {
+            if (cardOf[m.id] <= c.n)
+                t := "CARD " . cardOf[m.id]
+        } else if (m.id = "right") {
+            t := k ? "TAKE CARD " . k : "TAKE CARD"
+        }
+        out.Push({id: m.id, text: t, dim: false, fn: false})
+    }
+    return out
 }
 
 ; FN-down prefetch: read the panel corner (lock must be free).
@@ -2280,18 +3857,79 @@ ReliefRegion(win) {
 
 ReliefRead(win, reader := "") {
     r := ReliefRegion(win)
-    sc := (win.h < 1300) ? 2 : 1
-    if (IsObject(reader))
-        o := reader.Call(r.x, r.y, r.w, r.h, sc)
-    else if (sc > 1)
-        o := OcrRegionScaled(r.x, r.y, r.w, r.h, sc)
-    else
-        o := OcrRegion(r.x, r.y, r.w, r.h)
+    ; The titles are about 1.5% of the picture's height: read them at
+    ; 30 px or more (v5.3.0: 3x under 950 px - at 1280 x 800 a 2x read
+    ; lost the second word of FLAG LINE).
+    sc := (win.h >= 1300) ? 1 : (win.h >= 950) ? 2 : 3
+    o := ReliefReadPart(r, sc, reader)
     rel := ReliefParse(o.lines)
+    ; Nothing read although the panel's colours are there (a very small
+    ; picture: 1024 x 637 in the Windows tests): once more, one step
+    ; larger.  Not when the panel is not on screen - an FN press during
+    ; play costs one read, as before.
+    if (!rel.found && sc < 4 && (IsObject(reader) || ReliefLook(win).up)) {
+        oB := ReliefReadPart(r, sc + 1, reader)
+        relB := ReliefParse(oB.lines)
+        if (relB.found)
+            rel := relB, o := oB, sc += 1
+    }
+    ; Small print (a picture between sizes, or a shape on which GSPro
+    ; draws the panel smaller): titles read at under 34 px are read once
+    ; more, one step larger; that read counts unless it finds fewer
+    ; choices.  (At 1280 x 796 a 30 px read lost the second word of
+    ; FLAG LINE.)
+    if (rel.found && sc < 4) {
+        th := 0
+        for i, op in rel.opts
+            th := Max(th, op.h)
+        if (th > 0 && th * sc < 34) {
+            oB := ReliefReadPart(r, sc + 1, reader)
+            relB := ReliefParse(oB.lines)
+            if (relB.found && relB.opts.MaxIndex() >= rel.opts.MaxIndex())
+                rel := relB, o := oB, sc += 1
+        }
+    }
+    ; Any picture shape (v5.3.0): on Bruce's screens the whole panel
+    ; sits well inside this corner (it ends 0.365 heights across and,
+    ; with four choices, 0.447 down).  On a wider picture GSPro may
+    ; draw it bigger.  A list that runs to the edge of what was read -
+    ; no room left for one more choice - is read again with more room;
+    ; the read with more choices counts.
+    if (rel.found && ReliefAtEdge(rel, r)) {
+        r2 := {x: win.x, y: win.y, w: Round(win.w * 0.48), h: Round(win.h * 0.88)}
+        o2 := ReliefReadPart(r2, sc, reader)
+        rel2 := ReliefParse(o2.lines)
+        if (rel2.found && rel2.opts.MaxIndex() > rel.opts.MaxIndex())
+            rel := rel2, o := o2
+    }
     rel.win := win
     rel.lines := o.lines     ; kept for the trace when a read surprises
     rel.at := A_TickCount
     return rel
+}
+
+ReliefReadPart(r, sc, reader := "") {
+    if (IsObject(reader))
+        return reader.Call(r.x, r.y, r.w, r.h, sc)
+    return (sc > 1) ? OcrRegionScaled(r.x, r.y, r.w, r.h, sc) : OcrRegion(r.x, r.y, r.w, r.h)
+}
+
+; Does the list run to the bottom or the right edge of the part that
+; was read?  (No room below the last choice for another one, or a
+; title ending at the right edge.)
+ReliefAtEdge(rel, r) {
+    n := rel.opts.MaxIndex()
+    if (!n)
+        return false
+    last := rel.opts[n]
+    pitch := (n >= 2) ? (last.y - rel.opts[1].y) / (n - 1) : last.h * 3.7
+    if (last.y + pitch + last.h > r.y + r.h)
+        return true
+    for i, o in rel.opts {
+        if (o.x + o.w + o.h > r.x + r.w)
+            return true
+    }
+    return false
 }
 
 ; A choice's title: capitals only once the number badge ("1 ")
@@ -2500,6 +4138,21 @@ ReliefSelected(rel, pixFn := "") {
     return (best && bestV >= 50 && bestV - secondV >= 25) ? best : 0
 }
 
+; One copy of the screen under every point ReliefSelected samples.
+ReliefCardsBlock(rel) {
+    x0 := "", y0 := "", x1 := "", y1 := ""
+    for i, o in rel.opts {
+        h := o.h
+        ax := Floor(o.x - h * 0.45) - 1, bx := Ceil(o.x + h * 2.6) + 2
+        ay := Floor(o.y + h * 0.3) - 1, by := Ceil(o.y + h * 1.25) + 2
+        x0 := (x0 = "") ? ax : Min(x0, ax), x1 := (x1 = "") ? bx : Max(x1, bx)
+        y0 := (y0 = "") ? ay : Min(y0, ay), y1 := (y1 = "") ? by : Max(y1, by)
+    }
+    if (x0 = "" || x1 - x0 < 2 || y1 - y0 < 2 || (x1 - x0) * (y1 - y0) > 4000000)
+        return ""
+    return ScreenBlock(x0, y0, x1 - x0, y1 - y0)
+}
+
 ReliefScreenPixel(x, y) {
     hdc := DllCall("GetDC", "Ptr", 0, "Ptr")
     c := DllCall("GetPixel", "Ptr", hdc, "Int", x, "Int", y, "UInt")
@@ -2607,7 +4260,7 @@ ReliefWheel(dir) {
 ReliefFindRecenter(win, reader := "") {
     rx := win.x + Round(win.w * 0.15), ry := win.y + Round(win.h * 0.82)
     rw := Round(win.w * 0.75), rh := win.h - Round(win.h * 0.82)
-    sc := (win.h < 1300) ? 2 : 1
+    sc := (win.h >= 1300) ? 1 : (win.h >= 950) ? 2 : 3   ; as ReliefRead: small pictures read larger
     if (IsObject(reader))
         o := reader.Call(rx, ry, rw, rh, sc)
     else if (sc > 1)
@@ -2701,6 +4354,7 @@ ReliefRun(actionId, rel) {
             break
     }
     ReliefLastActTick := A_TickCount
+    ScreenWatchHurry()
     if (closes) {
         ReliefLast := ""
         ReliefExpectSel := 0
@@ -2713,249 +4367,8 @@ ReliefRun(actionId, rel) {
     }
 }
 
-; ============================================================
-;  SMART CLICK EXECUTION
-;
-;  Stateless: scan the GSPro window, find the needle text,
-;  click the bottom-most match (titles repeat button words
-;  above the actual buttons).  Up to 3 scan attempts over
-;  ~2 seconds - the menu is normally already on screen when
-;  the player presses the combo.  Never blind-clicks; on a
-;  miss it shows a tooltip and dumps the scan text to
-;  ocr_last_miss.txt for diagnosis (proven support pattern).
-; ============================================================
-RunOcrAction(actionId) {
-    global OcrBusy, OcrActionNeedles, OcrActionName
-    global GSProWinNeedle, GSProWinExclude, PendingOcrAction, PendingOcrSince
-    global LastActionId, LastClickX, LastClickY, LastFireTick
-    global LastScanObj, LastScanTick, VerifyActionId, VerifyY, VerifyBandPx
-    global LastResolveBand, LastLatticeNote, LastRef, SpotWin
-    if (!OcrActionNeedles.HasKey(actionId))
-        return
-    closesMenu := (actionId = "DropRehit" || actionId = "Rehit")
-    now := A_TickCount
-    ; Per-action minimum gap: menu-cycling actions allow rapid
-    ; intentional taps (120ms absorbs only the OS auto-repeat
-    ; flood); menu-closing actions hold 900ms so a repeat can
-    ; never fire into the closing fade.
-    minGap := closesMenu ? 900 : 120
-    if (actionId = LastActionId && (now - LastFireTick) < minGap)
-        return
-    ; A new press supersedes any pending background re-click of
-    ; the previous closing action.
-    VerifyActionId := ""
-    ; A scan in flight (prefetch, watcher, verify) cannot finish
-    ; while this keypress thread runs, so never wait here: hand
-    ; the press to a timer that fires once the lock is free.
-    OcrTrace("press " . actionId)
-    OcrStaleCheck()
-    if (OcrBusy) {
-        PendingOcrAction := actionId
-        PendingOcrSince := A_TickCount
-        SetTimer, OcrDeferred, -60
-        OcrTrace("  deferred (scan in flight)")
-        return
-    }
-    OcrLockTake()
-    try {
-
-    ; FAST PATH 1 - identical repeat: the menu stack does not
-    ; move while it is up, and the cursor is still hovering the
-    ; button (parking waits for the burst to end).  Tap the same
-    ; combo again within 4s -> click the cached spot instantly.
-    if (!closesMenu && actionId = LastActionId && LastClickX
-        && (now - LastFireTick) < 4000) {
-        OcrTrace("  repeat click at " . LastClickX . "," . LastClickY)
-        DpiRepeatClick(LastClickX, LastClickY)
-        LastFireTick := A_TickCount
-        SetTimer, ParkTick, -1200
-        OcrBusy := false
-        return
-    }
-
-    found := false
-    learnNow := false
-    cx := 0
-    cy := 0
-    scan := {found: false, lines: [], text: "", lc: ""}
-
-    ; FAST PATH 2 - LOCKED SPOTS.  This PC's menu positions were
-    ; verified and saved on an earlier press (same GSPro window
-    ; size): read only the button's own small area, confirm its
-    ; word sits there at the saved size, click.  Tens of ms
-    ; instead of two full-window reads.
-    curWr := ClientRectByTitle(GSProWinNeedle, GSProWinExclude)
-    curKey := curWr.found ? curWr.x . "," . curWr.y . "," . curWr.w . "," . curWr.h : ""
-    spotsValid := (curKey != "" && curKey = SpotWin)
-    if (spotsValid) {
-        if (SpotFastResolve(actionId, cx, cy, 12)) {
-            found := true
-            LastScanObj := {found: true, lines: [], text: "", lc: "", win: curWr}
-        } else {
-            OcrTrace("  locked spot not confirmed - reading the whole screen")
-        }
-    }
-
-    ; LEARN PATH - TWO-FRAME AGREEMENT.  A click is authorized
-    ; only when two consecutive reads put the menu in the same
-    ; place.  GSPro slides its menus in: a frame caught mid-slide
-    ; forms a perfectly consistent menu ~100px from where it ends
-    ; up (field trace 4 Oct: the FN-press read had Drop Ball where
-    ; Move Back settles).  The first read is the whole window (or
-    ; the FN-press prefetch); the confirming read covers only the
-    ; menu's area, so it is fast.  When the two agree, the click
-    ; goes out and every button's position is LOCKED for next time.
-    if (!found) {
-        ; Up to 8 reads (after the first, each is the fast menu-
-        ; area read).  With locked spots the poll above already
-        ; waited for the menu, so three empty full reads in a row
-        ; mean no menu is up: stop instead of searching for 4s.
-        maxReads := 8
-        missRun := 0
-        prevOk := false
-        prevRef := ""
-        lastWin := curWr.found ? curWr : ""
-        px := 0
-        py := 0
-        if (!spotsValid && actionId != "Rehit" && IsObject(LastScanObj) && (A_TickCount - LastScanTick) <= 2500) {
-            tx := 0
-            ty := 0
-            if (ResolveOcrTarget(actionId, LastScanObj, tx, ty)) {
-                prevOk := true
-                prevRef := LastRef
-                px := LastRef.rx
-                py := LastRef.ry
-                OcrTrace("  frame A (prefetch): " . tx . "," . ty . "  " . LastLatticeNote)
-            }
-        }
-        Loop, %maxReads% {
-            useArea := (prevOk && IsObject(prevRef) && prevRef.kind = "menu" && IsObject(lastWin))
-            if (useArea) {
-                scan := ScanMenuArea(prevRef, lastWin)
-            } else {
-                scan := ScanWinClient(GSProWinNeedle, GSProWinExclude)
-                if (!scan.found)
-                    scan := ScanScreen()   ; window title fallback
-                if (scan.HasKey("win"))
-                    lastWin := scan.win
-            }
-            LastScanObj := scan
-            LastScanTick := A_TickCount
-            tx := 0
-            ty := 0
-            ok := ResolveOcrTarget(actionId, scan, tx, ty)
-            OcrTrace("  read " . A_Index . (useArea ? " (menu area)" : " (full)") . ": " . (ok ? tx . "," . ty : "no target") . "  " . LastLatticeNote)
-            if (ok && prevOk) {
-                agreeTol := LastResolveBand // 4
-                if (agreeTol < 4)
-                    agreeTol := 4
-                agreeX := agreeTol
-                agreeY := agreeTol
-                ; The OB dialog's Rehit button wobbles sideways
-                ; (field trace 1788 -> 1817 -> 1788): agree on
-                ; the button, not on one pixel.
-                if (LastRef.kind = "ob") {
-                    agreeX := Round(LastRef.w * 0.6) + 4
-                    agreeY := Round(LastRef.h * 0.6) + 4
-                }
-                if (Abs(LastRef.rx - px) <= agreeX && Abs(LastRef.ry - py) <= agreeY) {
-                    found := true
-                    learnNow := true
-                    cx := tx
-                    cy := ty
-                    break
-                }
-                OcrTrace("    moved since last read - waiting for the menu to settle")
-            }
-            prevOk := ok
-            if (ok) {
-                prevRef := LastRef
-                px := LastRef.rx
-                py := LastRef.ry
-            }
-            if (!ok) {
-                missRun += 1
-                if (spotsValid && missRun >= 3)
-                    break
-                Sleep, 120
-            } else {
-                missRun := 0
-            }
-        }
-    }
-
-    if (found) {
-        OcrTrace("  resolved at " . cx . "," . cy)
-        ; Lock in this PC's spots from the verified frames.
-        if (learnNow && IsObject(LastScanObj) && LastScanObj.HasKey("win") && LastScanObj.win.found) {
-            lw := LastScanObj.win
-            LearnSpots(lw.x . "," . lw.y . "," . lw.w . "," . lw.h)
-        }
-        ; The click is about to change the screen, so this scan
-        ; is spent: the next press must read fresh rather than
-        ; resolve against a pre-click cache.
-        LastScanTick := 0
-        ; Foreground guard: a click into an inactive window can
-        ; be consumed activating it, so the press never lands.
-        if (IsObject(LastScanObj) && LastScanObj.HasKey("win") && LastScanObj.win.hwnd) {
-            gsHwnd := LastScanObj.win.hwnd
-            if (!WinActive("ahk_id " . gsHwnd)) {
-                WinActivate, ahk_id %gsHwnd%
-                Sleep, 150
-            }
-        }
-        DpiClickAt(cx, cy)
-        LastFireTick := A_TickCount
-        if (closesMenu) {
-            ; No repeat cache after a closing action; hand the
-            ; fade-proof verify to a background timer so the
-            ; next press is never swallowed by a busy lock.
-            LastActionId := ""
-            LastClickX := 0
-            LastClickY := 0
-            LastScanTick := 0
-            VerifyActionId := actionId
-            VerifyY := cy
-            VerifyBandPx := LastResolveBand
-            SetTimer, OcrVerifyTick, -900
-            ; Extra taps of the same button made while this one
-            ; was working are impatience, not new requests: the
-            ; menu is closing.  (Field trace: a queued Drop Ball
-            ; ran after the drop and searched 5s for a menu that
-            ; was gone, then showed "not found".)
-            if (PendingOcrAction = actionId) {
-                PendingOcrAction := ""
-                OcrTrace("  extra " . actionId . " tap made during this press dropped")
-            }
-        } else {
-            LastActionId := actionId
-            LastClickX := cx
-            LastClickY := cy
-        }
-        SetTimer, ParkTick, -1200
-    } else {
-        dispName := OcrActionName.HasKey(actionId) ? OcrActionName[actionId] : actionId
-        OcrTrace("  NOT FOUND (" . LastLatticeNote . ")")
-        ShowGsproTip(dispName . " - not found on screen", 1800)
-        OcrDumpMiss("SmartClick " . actionId . " (" . LastLatticeNote . ")", scan)
-    }
-    } catch appErr {
-        LogAppError("SmartClick", appErr)
-    }
-    OcrBusy := false
-}
-
-; Repeat click on a cached spot: cursor is already hovering it
-; (hover requirement long satisfied), so a short settle + click.
-DpiRepeatClick(x, y) {
-    CoordMode, Mouse, Screen
-    MouseMove, %x%, %y%, 0
-    Sleep, 60
-    Click
-    Sleep, 120
-}
-
-
+; Fuzzy word match and OCR text normalising (kept from the older
+; relief menu's reading, removed in v5.3.0; the relief list uses them).
 ; ============================================================
 ;  MENU LATTICE  (no click without verified geometry)
 ;
@@ -2985,669 +4398,6 @@ FuzzyIs(t, needle) {
         return true
     tol := StrLen(nn) >= 8 ? 2 : 1
     return (LevDist(ll, nn) <= tol)
-}
-
-FindFirstFuzzy(scan, needle) {
-    for i, ln in scan.lines {
-        if (FuzzyIs(ln.text, needle))
-            return {found: true, x: ln.x, y: ln.y, w: ln.w, h: ln.h, text: ln.text}
-    }
-    return {found: false}
-}
-
-FindAllFuzzy(scan, needle) {
-    out := []
-    for i, ln in scan.lines {
-        if (FuzzyIs(ln.text, needle))
-            out.Push({found: true, x: ln.x, y: ln.y, w: ln.w, h: ln.h, text: ln.text})
-    }
-    return out
-}
-
-; Pick, for each anchor word, the candidate line nearest the
-; menu column.  A stray match elsewhere on screen (the HUD's
-; "SHOT OPTIONS", a hallucinated line over grass) can never
-; displace the real button: the column is set by the words
-; that matched exactly once, and ambiguous words snap to it.
-PickAnchors(scan) {
-    words := {0: "options", 1: "move forward", 3: "move back", 4: "next option", 5: "mulligan"}
-    cands := {}
-    refXs := []
-    for slot, nd in words {
-        c := FindAllFuzzy(scan, nd)
-        if (c.MaxIndex() = "")
-            continue
-        cands[slot] := c
-        if (c.MaxIndex() = 1)
-            refXs.Push(c[1].x + c[1].w // 2)
-    }
-    refX := ""
-    if (refXs.MaxIndex() != "") {
-        Loop, % refXs.MaxIndex() - 1 {
-            i := A_Index + 1
-            j := i
-            while (j > 1 && refXs[j-1] > refXs[j]) {
-                tmp := refXs[j-1]
-                refXs[j-1] := refXs[j]
-                refXs[j] := tmp
-                j--
-            }
-        }
-        refX := refXs[(refXs.MaxIndex() + 1) // 2]
-    }
-    anch := {}
-    for slot, c in cands {
-        if (c.MaxIndex() = 1 || refX = "") {
-            anch[slot] := c[1]
-            continue
-        }
-        bestD := 999999
-        for i, cd in c {
-            d := Abs((cd.x + cd.w // 2) - refX)
-            if (d < bestD) {
-                bestD := d
-                anch[slot] := cd
-            }
-        }
-    }
-    ; Size sanity: anchors are the same font; drop any line whose
-    ; height is wildly off the median (junk lines from textures).
-    hs := []
-    for slot, a in anch
-        hs.Push(a.h)
-    if (hs.MaxIndex() >= 3) {
-        Loop, % hs.MaxIndex() - 1 {
-            i := A_Index + 1
-            j := i
-            while (j > 1 && hs[j-1] > hs[j]) {
-                tmp := hs[j-1]
-                hs[j-1] := hs[j]
-                hs[j] := tmp
-                j--
-            }
-        }
-        medH := hs[(hs.MaxIndex() + 1) // 2]
-        for slot, a in anch {
-            if (a.h < medH * 0.5 || a.h > medH * 2.0)
-                anch.Delete(slot)
-        }
-    }
-    return anch
-}
-
-FindMenuLattice(scan) {
-    global LastLatticeNote
-    lat := {found: false}
-    ; Anchors: slot 0 = the "Options X / 3" counter (always
-    ; present, one pitch above Move Forward - with mulligans OFF
-    ; the menu has no Mulligan button, and this anchor is what
-    ; keeps redundancy in that four-button stack), slot 1 Move
-    ; Forward, 3 Move Back, 4 Next Option, 5 Mulligan.
-    anch := PickAnchors(scan)
-    cnt := 0
-    for slot, a in anch
-        cnt += 1
-    LastLatticeNote := "anchors=" . cnt
-    if (cnt < 3)
-        return lat
-    ; One shared column
-    xs := []
-    sumW := 0
-    for sIdx, a in anch {
-        xs.Push(a.x + a.w // 2)
-        sumW += a.w
-    }
-    wavg := sumW / cnt
-    Loop, % xs.MaxIndex() - 1 {
-        i := A_Index + 1
-        j := i
-        while (j > 1 && xs[j-1] > xs[j]) {
-            tmp := xs[j-1]
-            xs[j-1] := xs[j]
-            xs[j] := tmp
-            j--
-        }
-    }
-    colX := xs[(xs.MaxIndex() + 1) // 2]
-    ; An anchor word read OFF the menu column (the HUD's "SHOT
-    ; OPTIONS" while the menu's own "Options 3/3" misread) is not
-    ; part of the menu: drop it and judge the stack on the rest.
-    ; Fewer than 3 in-column anchors is still a refusal.
-    offCol := []
-    for sIdx, a in anch {
-        if (Abs((a.x + a.w // 2) - colX) > wavg * 0.6)
-            offCol.Push(sIdx)
-    }
-    for i, sIdx in offCol
-        anch.Delete(sIdx)
-    if (offCol.MaxIndex() != "") {
-        cnt := 0
-        sumW := 0
-        for sIdx, a in anch {
-            cnt += 1
-            sumW += a.w
-        }
-        if (cnt < 3) {
-            LastLatticeNote .= " colfail"
-            return lat
-        }
-        wavg := sumW / cnt
-    }
-    ; One consistent pitch across known anchors
-    order := []
-    Loop, 6 {
-        if (anch.HasKey(A_Index - 1))
-            order.Push(A_Index - 1)
-    }
-    pitches := []
-    sumP := 0
-    Loop, % order.MaxIndex() - 1 {
-        a := order[A_Index]
-        b := order[A_Index + 1]
-        pv := ((anch[b].y + anch[b].h / 2) - (anch[a].y + anch[a].h / 2)) / (b - a)
-        pitches.Push(pv)
-        sumP += pv
-    }
-    pitch := sumP / pitches.MaxIndex()
-    if (pitch <= 0) {
-        LastLatticeNote .= " pitchfail"
-        return lat
-    }
-    for i, pv in pitches {
-        if (Abs(pv - pitch) > pitch * 0.2) {
-            LastLatticeNote .= " pitchfail"
-            return lat
-        }
-    }
-    sumH := 0
-    for sIdx, a in anch
-        sumH += a.h
-    havg := sumH / cnt
-    if (pitch < havg * 0.7 || pitch > havg * 4.5) {
-        LastLatticeNote .= " pitchrange"
-        return lat
-    }
-    ; Slot positions from least-squares base
-    base := 0
-    for sIdx, a in anch
-        base += (a.y + a.h / 2) - sIdx * pitch
-    base := base / cnt
-    slotY := []
-    Loop, 5
-        slotY.Push(Round(base + A_Index * pitch))
-    ; Slot-2 line, when its text was readable
-    s2 := {found: false}
-    for i, ln in scan.lines {
-        lcx := ln.x + ln.w // 2
-        lcy := ln.y + ln.h // 2
-        if (Abs(lcx - colX) <= wavg * 0.8 && Abs(lcy - slotY[2]) <= pitch * 0.35) {
-            s2 := {found: true, x: ln.x, y: ln.y, w: ln.w, h: ln.h, text: ln.text}
-            break
-        }
-    }
-    lat.found := true
-    lat.colX := Round(colX)
-    lat.havg := havg
-    lat.wavg := wavg
-    lat.pitch := pitch
-    lat.slotY := slotY
-    lat.anch := anch
-    lat.s2 := s2
-    an := ""
-    for sIdx, a in anch
-        an .= (an = "" ? "" : " ") . sIdx . ":" . Round(a.y + a.h / 2)
-    LastLatticeNote := "anchors=" . cnt . " [" . an . "] pitch=" . Round(pitch) . " col=" . Round(colX)
-    return lat
-}
-
-; OB dialog: Mulligan and Rehit side by side on ONE row - its
-; own two-word lattice.  The relief menu can never satisfy it
-; (there Mulligan sits three slots BELOW the rehit slot).
-FindObPair(scan) {
-    for i, ln in scan.lines {
-        if (!FuzzyIs(ln.text, "rehit"))
-            continue
-        rcy := ln.y + ln.h / 2
-        for j, ln2 in scan.lines {
-            if (j = i)
-                continue
-            if (!FuzzyIs(ln2.text, "mulligan"))
-                continue
-            hMax := ln.h > ln2.h ? ln.h : ln2.h
-            if (Abs((ln2.y + ln2.h / 2) - rcy) < hMax * 0.8
-                && Abs((ln2.x + ln2.w // 2) - (ln.x + ln.w // 2)) > ln.w) {
-                return {found: true, x: ln.x, y: ln.y, w: ln.w, h: ln.h, text: ln.text}
-            }
-        }
-    }
-    return {found: false}
-}
-
-; The line (if any) sitting at a lattice slot position.
-LineAtSlot(scan, lat, slotIdx) {
-    for i, ln in scan.lines {
-        lcx := ln.x + ln.w // 2
-        lcy := ln.y + ln.h // 2
-        if (Abs(lcx - lat.colX) <= lat.wavg * 0.8 && Abs(lcy - lat.slotY[slotIdx]) <= lat.pitch * 0.35)
-            return {found: true, x: ln.x, y: ln.y, w: ln.w, h: ln.h, text: ln.text}
-    }
-    return {found: false}
-}
-
-; Does this text read as one of the menu's stack words?
-IsStackWord(t) {
-    return (FuzzyIs(t, "move forward") || FuzzyIs(t, "move back") || FuzzyIs(t, "next option")
-         || FuzzyIs(t, "mulligan") || FuzzyIs(t, "drop ball") || FuzzyIs(t, "rehit"))
-}
-
-; OB dialog by its TITLE: "You have hit OB!" directly above a
-; Rehit button.  Covers both variants - with Mulligan (mulligans
-; on) and Rehit-only (mulligans off).
-FindObTitleRehit(scan) {
-    for i, ln in scan.lines {
-        tn := OcrNorm(ln.text)
-        if (!(FuzzyIs(ln.text, "you have hit ob") || InStr(tn, "hitob")))
-            continue
-        tcx := ln.x + ln.w // 2
-        tcy := ln.y + ln.h / 2
-        for j, ln2 in scan.lines {
-            if (j = i || !FuzzyIs(ln2.text, "rehit"))
-                continue
-            rcy := ln2.y + ln2.h / 2
-            rcx := ln2.x + ln2.w // 2
-            if (rcy > tcy && (rcy - tcy) < ln.h * 8 && Abs(rcx - tcx) < ln.w)
-                return {found: true, x: ln2.x, y: ln2.y, w: ln2.w, h: ln2.h, text: ln2.text}
-        }
-    }
-    return {found: false}
-}
-
-; Resolve an action to an authorized click point.  Returns
-; true and sets cx/cy; sets LastResolveBand (the vertical
-; tolerance used by the background verify).
-ResolveOcrTarget(actionId, scan, ByRef cx, ByRef cy) {
-    global LastResolveBand, LastLatticeNote, LastRef
-    LastRef := {kind: ""}
-    target := 0
-    if (actionId = "MoveForward")
-        target := 1
-    else if (actionId = "DropRehit")
-        target := 2
-    else if (actionId = "MoveBack")
-        target := 3
-    else if (actionId = "NextOption")
-        target := 4
-    if (target) {
-        lat := FindMenuLattice(scan)
-        if (!lat.found)
-            return false
-        LastResolveBand := Round(lat.pitch)
-        if (target = 2) {
-            ; The combined Drop Ball / Rehit button: click the
-            ; slot whichever word it shows - even unreadable,
-            ; the lattice proves which button it is.
-            if (lat.s2.found) {
-                cx := lat.s2.x + lat.s2.w // 2
-                cy := lat.s2.y + lat.s2.h // 2
-            } else {
-                cx := lat.colX
-                cy := lat.slotY[2]
-            }
-            LastRef := MenuRef(lat, 2)
-            return true
-        }
-        if (lat.anch.HasKey(target)) {
-            a := lat.anch[target]
-            cx := a.x + a.w // 2
-            cy := a.y + a.h // 2
-            LastRef := MenuRef(lat, target)
-            return true
-        }
-        ; Inferred position: refuse if a DIFFERENT stack word is
-        ; readable at that spot (geometry/word mismatch = the
-        ; one-button-off failure).  Only an unreadable or empty
-        ; slot may be clicked by inference.
-        atSlot := LineAtSlot(scan, lat, target)
-        if (atSlot.found && IsStackWord(atSlot.text)) {
-            LastLatticeNote .= " slotmismatch"
-            return false
-        }
-        cx := lat.colX
-        cy := lat.slotY[target]
-        LastRef := MenuRef(lat, target)
-        return true
-    }
-    ; actionId = "Rehit": the OB dialog (by title, or by the
-    ; Mulligan pair), or the relief menu's slot 2 showing Rehit.
-    pr := FindObTitleRehit(scan)
-    if (!pr.found)
-        pr := FindObPair(scan)
-    if (pr.found) {
-        LastResolveBand := Round(pr.h * 2)
-        cx := pr.x + pr.w // 2
-        cy := pr.y + pr.h // 2
-        LastRef := {kind: "ob", rx: cx, ry: cy, w: pr.w, h: pr.h}
-        LastLatticeNote := "OB dialog"
-        return true
-    }
-    lat := FindMenuLattice(scan)
-    if (lat.found && lat.s2.found && FuzzyIs(lat.s2.text, "rehit")) {
-        LastResolveBand := Round(lat.pitch)
-        cx := lat.s2.x + lat.s2.w // 2
-        cy := lat.s2.y + lat.s2.h // 2
-        LastRef := MenuRef(lat, 2)
-        return true
-    }
-    return false
-}
-
-; Geometry of a verified relief menu, for agreement checks, the
-; small confirm read, and learning the locked spots.
-MenuRef(lat, target) {
-    return {kind: "menu", rx: lat.colX, ry: lat.slotY[target], colX: lat.colX
-        , slotY: lat.slotY, pitch: lat.pitch, wavg: lat.wavg, havg: lat.havg
-        , anch: lat.anch, s2: lat.s2}
-}
-
-; ============================================================
-;  LOCKED SMART CLICK SPOTS  (v5.0.6)
-;
-;  The first Smart Click on a PC that two agreeing screen reads
-;  verify saves where every relief-menu button sits (and the OB
-;  dialog's Rehit), keyed to the GSPro window's exact position
-;  and size, in settings.ini [SmartSpots].  From then on a press
-;  reads ONLY that button's small area - tens of milliseconds
-;  instead of two full-window reads - confirms the button's own
-;  word is there at the saved size (a menu still sliding in is
-;  neither in place nor full size), and clicks.  Anything else -
-;  menu not up yet, a different layout - falls back to the full
-;  read, which re-learns.  A different GSPro window size or
-;  position (new resolution) never uses old spots: they are
-;  re-learned on the next press automatically.  Tray menu: Reset
-;  Smart Click spots forces a fresh learn.
-; ============================================================
-SpotKeys() {
-    return ["MoveForward", "DropRehit", "MoveBack", "NextOption", "ObRehit"]
-}
-
-LoadSpots() {
-    global ConfigFile, SpotWin, Spots
-    Spots := {}
-    SpotWin := ""
-    IniRead, sw, %ConfigFile%, SmartSpots, Win, %A_Space%
-    sw := Trim(sw)
-    if (!RegExMatch(sw, "^-?\d+,-?\d+,\d+,\d+$"))
-        return
-    SpotWin := sw
-    for i, k in SpotKeys() {
-        IniRead, v, %ConfigFile%, SmartSpots, %k%, %A_Space%
-        p := StrSplit(Trim(v), ",")
-        if (p.MaxIndex() >= 4 && p[3] > 0 && p[4] > 0)
-            Spots[k] := {x: p[1] + 0, y: p[2] + 0, w: p[3] + 0, h: p[4] + 0, inferred: (p[5] = "1" ? 1 : 0)}
-    }
-}
-
-SaveSpots() {
-    global ConfigFile, SpotWin, Spots
-    try {
-        IniWrite, %SpotWin%, %ConfigFile%, SmartSpots, Win
-        for i, k in SpotKeys() {
-            v := ""
-            if (Spots.HasKey(k))
-                v := Spots[k].x . "," . Spots[k].y . "," . Spots[k].w . "," . Spots[k].h . "," . Spots[k].inferred
-            IniWrite, %v%, %ConfigFile%, SmartSpots, %k%
-        }
-    } catch spErr {
-        LogAppError("SaveSpots", spErr)
-    }
-}
-
-; Are this PC's locked spots valid for the GSPro window as it is
-; right now?  (Cheap: a window lookup, no screen read.)
-SpotsValidNow() {
-    global GSProWinNeedle, GSProWinExclude, SpotWin
-    if (SpotWin = "")
-        return false
-    wr := ClientRectByTitle(GSProWinNeedle, GSProWinExclude)
-    if (!wr.found)
-        return false
-    return ((wr.x . "," . wr.y . "," . wr.w . "," . wr.h) = SpotWin)
-}
-
-; Save the spots from the frame just verified (LastRef).
-LearnSpots(winKey) {
-    global Spots, SpotWin, LastRef
-    if (winKey = "" || !IsObject(LastRef) || LastRef.kind = "")
-        return
-    if (SpotWin != winKey) {
-        Spots := {}
-        SpotWin := winKey
-    }
-    if (LastRef.kind = "menu") {
-        keys := {1: "MoveForward", 2: "DropRehit", 3: "MoveBack", 4: "NextOption"}
-        for slot, key in keys {
-            a := ""
-            if (slot = 2) {
-                if (LastRef.s2.found)
-                    a := LastRef.s2
-            } else if (LastRef.anch.HasKey(slot)) {
-                a := LastRef.anch[slot]
-            }
-            if (IsObject(a))
-                Spots[key] := {x: a.x + a.w // 2, y: a.y + a.h // 2, w: a.w, h: a.h, inferred: 0}
-            else
-                Spots[key] := {x: LastRef.colX, y: LastRef.slotY[slot], w: Round(LastRef.wavg), h: Round(LastRef.havg), inferred: 1}
-        }
-        OcrTrace("  spots locked for this PC: menu at col " . LastRef.colX . ", pitch " . Round(LastRef.pitch))
-    } else if (LastRef.kind = "ob") {
-        Spots["ObRehit"] := {x: LastRef.rx, y: LastRef.ry, w: LastRef.w, h: LastRef.h, inferred: 0}
-        OcrTrace("  spot locked for this PC: OB Rehit at " . LastRef.rx . "," . LastRef.ry)
-    }
-    SaveSpots()
-}
-
-; Confirm a locked spot with a small read of the button's own
-; area.  The word must be the right one, centered where it was
-; learned, at the learned size - a menu still sliding in is not
-; there yet and a menu zooming in is too small, so neither is
-; ever clicked; the read simply repeats (up to `tries` times,
-; ~0.1s apart) until the menu holds still.
-;
-; The second button changes its word with the option shown -
-; Drop Ball, Rehit, Go to DZ (water drop zone, field photo
-; 4 Oct) - so Drop Ball / Rehit is confirmed by the two buttons
-; that never change, Move Forward above it and Move Back below
-; it, both in their locked places; then the second button is
-; clicked whatever it says.
-SpotFastResolve(actionId, ByRef cx, ByRef cy, tries := 12) {
-    global Spots, LastResolveBand
-    ; The menu's text heights (words with and without descenders)
-    ; - a size check that does not depend on which word a button
-    ; shows.
-    hMin := 0
-    hMax := 0
-    for i, k in ["MoveForward", "DropRehit", "MoveBack", "NextOption"] {
-        if (Spots.HasKey(k) && !Spots[k].inferred) {
-            hv := Spots[k].h
-            if (hMin = 0 || hv < hMin)
-                hMin := hv
-            if (hv > hMax)
-                hMax := hv
-        }
-    }
-    cands := []
-    if (actionId = "MoveForward")
-        cands.Push(["MoveForward", ["move forward"]])
-    else if (actionId = "MoveBack")
-        cands.Push(["MoveBack", ["move back"]])
-    else if (actionId = "NextOption")
-        cands.Push(["NextOption", ["next option"]])
-    else if (actionId = "DropRehit")
-        cands.Push(["DropRehit", ["drop ball", "rehit", "go to dz"]])
-    else if (actionId = "Rehit") {
-        cands.Push(["ObRehit", ["rehit"]])
-        cands.Push(["DropRehit", ["rehit"]])
-    }
-    useFrame := (actionId = "DropRehit" && Spots.HasKey("MoveForward")
-        && Spots.HasKey("MoveBack") && Spots.HasKey("DropRehit"))
-    have := useFrame
-    for i, c in cands {
-        if (Spots.HasKey(c[1]))
-            have := true
-    }
-    if (!have)
-        return false
-    Loop, %tries% {
-        tryN := A_Index
-        if (useFrame) {
-            if (SpotSlot2Confirm(cx, cy, hMin, hMax)) {
-                LastResolveBand := Round(Spots["DropRehit"].h * 2)
-                OcrTrace("  locked spot DropRehit confirmed by Move Forward + Move Back, read " . tryN)
-                return true
-            }
-        } else {
-            for i, c in cands {
-                if (!Spots.HasKey(c[1]))
-                    continue
-                sp := Spots[c[1]]
-                isMenu := (c[1] != "ObRehit")
-                hx := sp.w // 2 + sp.h * 2
-                hy := Round(sp.h * 1.3)
-                o := OcrRegion(sp.x - hx, sp.y - hy, hx * 2, hy * 2)
-                for j, ln in o.lines {
-                    hit := false
-                    for k, nd in c[2] {
-                        if (FuzzyIs(ln.text, nd))
-                            hit := true
-                    }
-                    if (!hit || !SpotLineOk(ln, sp, isMenu, hMin, hMax))
-                        continue
-                    cx := ln.x + ln.w // 2
-                    cy := ln.y + ln.h // 2
-                    LastResolveBand := Round(sp.h * 2)
-                    OcrTrace("  locked spot " . c[1] . " confirmed |" . ln.text . "| read " . tryN)
-                    ; A spot learned by inference (its word did not
-                    ; read that time) takes the real box the first
-                    ; time the word is seen.
-                    if (sp.inferred) {
-                        Spots[c[1]] := {x: cx, y: cy, w: ln.w, h: ln.h, inferred: 0}
-                        SaveSpots()
-                    }
-                    return true
-                }
-            }
-        }
-        if (tryN < tries)
-            Sleep, 50
-    }
-    return false
-}
-
-; Is this OCR line the locked button, settled: in its place and
-; at its size?  Menu buttons are sized against the menu's own
-; text-height range (Drop Ball has a descender, Rehit does not).
-; The OB dialog's Rehit button wobbles sideways (field trace:
-; 1788 -> 1817 -> 1788), so its sideways tolerance follows the
-; word's width.
-SpotLineOk(ln, sp, isMenu, hMin, hMax) {
-    lx := ln.x + ln.w / 2
-    ly := ln.y + ln.h / 2
-    tolY := sp.h * 0.25
-    if (isMenu && hMax > hMin && (hMax - hMin) / 2 + 4 > tolY)
-        tolY := (hMax - hMin) / 2 + 4
-    if (!isMenu)
-        tolY := sp.h * 0.4
-    if (tolY < 5)
-        tolY := 5
-    tolX := sp.h * 0.6
-    if (!isMenu && sp.w * 0.4 > tolX)
-        tolX := sp.w * 0.4
-    if (tolX < 8)
-        tolX := 8
-    if (Abs(ly - sp.y) > tolY || Abs(lx - sp.x) > tolX)
-        return false
-    if (isMenu && hMin > 0)
-        return (ln.h >= hMin * 0.8 && ln.h <= hMax * 1.2)
-    return (ln.h >= sp.h * 0.72 && ln.h <= sp.h * 1.3)
-}
-
-; Drop Ball / Rehit / Go to DZ: one small read covering Move
-; Forward, the second button and Move Back.  Both fixed words
-; must sit in their locked places at menu size; then the second
-; button is clicked - at its word if one reads there, else at
-; its locked spot.
-SpotSlot2Confirm(ByRef cx, ByRef cy, hMin, hMax) {
-    global Spots
-    mf := Spots["MoveForward"]
-    mb := Spots["MoveBack"]
-    s2 := Spots["DropRehit"]
-    hx := s2.w // 2 + s2.h * 2
-    if (mf.w // 2 + mf.h > hx)
-        hx := mf.w // 2 + mf.h
-    if (mb.w // 2 + mb.h > hx)
-        hx := mb.w // 2 + mb.h
-    y1 := Round(mf.y - mf.h * 1.3)
-    y2 := Round(mb.y + mb.h * 1.3)
-    if (y2 - y1 < 20)
-        return false
-    o := OcrRegion(s2.x - hx, y1, hx * 2, y2 - y1)
-    okF := false
-    okB := false
-    best := ""
-    for i, ln in o.lines {
-        if (FuzzyIs(ln.text, "move forward")) {
-            if (SpotLineOk(ln, mf, true, hMin, hMax))
-                okF := true
-            continue
-        }
-        if (FuzzyIs(ln.text, "move back")) {
-            if (SpotLineOk(ln, mb, true, hMin, hMax))
-                okB := true
-            continue
-        }
-        if (FuzzyIs(ln.text, "next option") || FuzzyIs(ln.text, "mulligan"))
-            continue
-        lcy := ln.y + ln.h / 2
-        lcx := ln.x + ln.w / 2
-        if (Abs(lcy - s2.y) <= s2.h * 0.6 && Abs(lcx - s2.x) <= s2.w)
-            best := ln
-    }
-    if (!okF || !okB)
-        return false
-    if (IsObject(best)) {
-        cx := best.x + best.w // 2
-        cy := best.y + best.h // 2
-    } else {
-        cx := s2.x
-        cy := s2.y
-    }
-    return true
-}
-
-; Confirming read for the learn path: just the menu's area
-; (around a tenth of a 1440p window), padded so a menu that is
-; still settling stays inside it.
-ScanMenuArea(ref, win) {
-    r := {found: true, lines: [], text: "", lc: "", win: win}
-    x1 := Round(ref.colX - ref.wavg * 0.6 - ref.pitch * 2)
-    x2 := Round(ref.colX + ref.wavg * 0.6 + ref.pitch * 2)
-    y1 := Round(ref.slotY[1] - ref.pitch * 2.3)
-    y2 := Round(ref.slotY[4] + ref.pitch * 2.3)
-    if (x1 < win.x)
-        x1 := win.x
-    if (y1 < win.y)
-        y1 := win.y
-    if (x2 > win.x + win.w)
-        x2 := win.x + win.w
-    if (y2 > win.y + win.h)
-        y2 := win.y + win.h
-    if (x2 - x1 < 20 || y2 - y1 < 20)
-        return r
-    o := OcrRegion(x1, y1, x2 - x1, y2 - y1)
-    r.lines := o.lines
-    r.text := o.text
-    r.lc := LowerStr(o.text)
-    return r
 }
 
 ; Normalize OCR text for matching: lowercase, strip everything
@@ -3720,6 +4470,10 @@ GsproWinRect(include, exclude := "") {
             continue
         if (exclude != "" && InStr(tl, excL))
             continue
+        ; v5.3.0: another program can carry the word too (a GSPro
+        ; video in a browser, the GSPro Discord, a folder): not the game.
+        if (GsproLookAlike(id))
+            continue
         WinGetPos, wx, wy, ww, wh, ahk_id %id%
         if (ww <= 0 || wh <= 0)
             continue
@@ -3735,6 +4489,51 @@ GsproWinRect(include, exclude := "") {
         }
     }
     return best
+}
+
+; ------------------------------------------------------------
+;  WHICH WINDOW IS GSPRO  (v5.3.0, Bruce 2026-11-27: "how does the
+;  software know what gspro is? all the time every time")
+;
+;  The game is known by its window title: it has "GSPro" in it and
+;  is not the Configuration window; of several, the largest (the
+;  rule since v5.0 - no screen number, no mouse position).  Other
+;  programs can carry that word too: a YouTube tab or forum page
+;  about GSPro, the GSPro Discord, a folder or a note named GSPro.
+;  Those are never the game: the windows of a web browser or a
+;  browser-built app (Discord, Teams ...), File Explorer, Notepad
+;  and Windows Store apps are left out - unless the program is
+;  GSPro.exe itself, which is never left out.
+; ------------------------------------------------------------
+GsproLookAlike(h) {
+    static classes := {"Chrome_WidgetWin_1": 1, "MozillaWindowClass": 1, "CabinetWClass": 1, "ExploreWClass": 1, "ApplicationFrameWindow": 1, "Notepad": 1}
+    static exes := {"chrome.exe": 1, "msedge.exe": 1, "firefox.exe": 1, "brave.exe": 1, "opera.exe": 1, "vivaldi.exe": 1, "discord.exe": 1, "explorer.exe": 1, "notepad.exe": 1, "applicationframehost.exe": 1}
+    WinGet, pn, ProcessName, ahk_id %h%
+    if (pn = "GSPro.exe")
+        return false
+    WinGetClass, cls, ahk_id %h%
+    return (classes.HasKey(cls) || (pn != "" && exes.HasKey(LowerStr(pn)))) ? true : false
+}
+
+; Is this window the GSPro game?  (Title rule, look-alikes left out.)
+GsproIsGame(h) {
+    global GSProWinNeedle, GSProWinExclude
+    if (!h)
+        return false
+    WinGetTitle, t, ahk_id %h%
+    if (t = "" || !InStr(t, GSProWinNeedle) || (GSProWinExclude != "" && InStr(t, GSProWinExclude)))
+        return false
+    return !GsproLookAlike(h)
+}
+
+; A window for the trace: title [window class, program file].
+WinNote(h, withTitle := true) {
+    WinGetClass, c, ahk_id %h%
+    WinGet, p, ProcessName, ahk_id %h%
+    t := ""
+    if (withTitle)
+        WinGetTitle, t, ahk_id %h%
+    return (withTitle ? SubStr(t, 1, 40) . " " : "") . "[" . c . ", " . p . "]"
 }
 
 ; Client-area rect of a window: excludes the title bar, borders
@@ -4376,22 +5175,54 @@ FindAllLinesExact(scan, needle) {
 ; physical desktop pixels, including negative origins on another
 ; monitor.
 ScrambleRecoverCards(scan) {
+    global ScrambleArmedTick, ScrambleFullFor, ScrambleFullN, ScrambleSmallRetry
     if (!IsObject(scan) || !scan.HasKey("win") || !scan.win.found)
         return scan
     uses := ScrambleButtons(scan)
-    if (uses.MaxIndex() >= 2)
-        return scan
-    band := ScrambleCardBand(scan.win)
-    if (band.w <= 0 || band.h <= 0)
-        return scan
-    o := OcrRegion(band.x, band.y, band.w, band.h)
-    recovered := {found: true, win: scan.win, lines: o.lines, text: o.text, lc: LowerStr(o.text)}
-    recoveredUses := ScrambleButtons(recovered)
-    n := recoveredUses.MaxIndex()
-    if (n >= 2 && n <= 4)
-        return recovered
-    return scan
+    n := uses.MaxIndex() ? uses.MaxIndex() : 0
+    best := scan
+    if (n < 2) {
+        band := ScrambleCardBand(scan.win)
+        if (band.w <= 0 || band.h <= 0)
+            return scan
+        o := OcrRegion(band.x, band.y, band.w, band.h)
+        recovered := {found: true, win: scan.win, lines: o.lines, text: o.text, lc: LowerStr(o.text)}
+        recoveredUses := ScrambleButtons(recovered)
+        rn := recoveredUses.MaxIndex() ? recoveredUses.MaxIndex() : 0
+        if (rn >= 2 && rn <= 4)
+            best := recovered, n := rn
+        else if (rn = 1)
+            n := 1
+    }
+    ; v5.3.0 (Bruce, 2026-11-27: "if you found something that didnt
+    ; work try it again and make it work"): on a picture under 2000 px
+    ; high one read can leave a card out - Windows' reader loses the
+    ; small white word on the highlighted card's blue button first
+    ; (Windows tests: 3 of 4 cards at 1641 x 1020, 1738 x 1080 and on
+    ; 1440-line pictures, so Auto-Pick took the second-best shot; 1 of
+    ; 2 on a 2-player screen, so it never started).  When a button word
+    ; is on screen and fewer than four were read, the card strip is
+    ; read once more, enlarged, and the read with more buttons counts.
+    ; Not on a 4K picture (every card is read as before), not while no
+    ; button word is on screen (nothing extra during play), and not
+    ; again for cards whose full count the plain read already gives.
+    if (scan.win.h < 2000 && n >= 1 && n < 4 && A_TickCount >= ScrambleSmallRetry
+        && !(ScrambleArmedTick && ScrambleFullFor = ScrambleArmedTick && n >= ScrambleFullN)) {
+        strip := ScrambleCardStrip(scan.win)
+        o := OcrRegionScaled(strip.x, strip.y, strip.w, strip.h, (scan.win.h < 850) ? 3 : 2)
+        bn := ScrambleRowButtons(o.lines).Length()
+        if (bn >= 2 && bn <= 4) {
+            if (bn > n)
+                best := {found: true, win: scan.win, lines: o.lines, text: o.text, lc: LowerStr(o.text)}
+            if (ScrambleArmedTick)
+                ScrambleFullFor := ScrambleArmedTick, ScrambleFullN := Max(n, bn)
+        } else if (n < 2) {
+            ScrambleSmallRetry := A_TickCount + 10000   ; a stray word, no cards: not again for 10 s
+        }
+    }
+    return best
 }
+
 
 ; Where GSPro draws the scramble cards: on Bruce's real 2/3/4-player
 ; screens (3397-3438 x 2097-2137) the cards span 63%-78% of the game
@@ -4809,7 +5640,9 @@ ScrambleSendPick(pick, when) {
 ; shot-key delivery are unchanged. Coordinates are physical desktop
 ; pixels from the same GSPro client/USE read, never monitor 1.
 ScrambleRememberPreview(scan, uses) {
-    global ScramblePreviewRead, ScrambleLastRead
+    global ScramblePreviewRead, ScrambleLastRead, ScrambleLastLines
+    ScrambleLastLines := scan.lines   ; v5.3.0: where the names are (box picks)
+    ScrambleBoxKeepBest(ScrambleRowButtons(scan.lines), scan.lines)
     ScramblePreviewRead := ""
     lr := ScrambleLastRead
     if (!scan.HasKey("win") || !scan.win.found || !IsObject(lr) || lr.winner <= 0)
@@ -4881,6 +5714,9 @@ ScramblePreviewModel(win) {
         if (card.green && !other.green && other.shot = card.shot)
             reason := "Green preferred"
     }
+    boxCards := ScrambleBoxCardsNow()
+    if (IsObject(boxCards) && ScrambleBoxPickNow(boxCards) = pick)
+        reason := "Picked on the box"   ; v5.3.0
     ; Format parsed units, not raw OCR (291 71' must never appear
     ; as 29,171 feet). Explicit feet marks off-green stay feet too.
     markedFeet := InStr(ScrambleNormQuotes(card.distRaw), "'")
@@ -5442,10 +6278,11 @@ UpdateMainStatus() {
 ;  INIT  -  call order matters
 ; ============================================================
 LoadSettings()
-LoadSpots()
 RefreshAutoStartPath()
 ScanProfileList()
 SeedPresetProfiles()
+if (MigrateBlankDefault())
+    SaveSettings()
 LoadProfile(ActiveProfile)
 
 ; ============================================================
@@ -5458,7 +6295,6 @@ Menu, Tray, Add, Toggle Mapping,   ToggleFromTray
 Menu, Tray, Add,
 Menu, Tray, Add, Open Settings Folder, OpenSettingsFolder
 Menu, Tray, Add, OCR Test (dump screen text), TrayOcrDump
-Menu, Tray, Add, Reset Smart Click spots, ResetSmartSpots
 Menu, Tray, Add, Key Test (last keys received), KeyTestShow
 Menu, Tray, Add,
 Menu, Tray, Add, Exit,             ExitLabel
@@ -5532,29 +6368,38 @@ Gui, Main:Add, Checkbox, x25 y580 w320 vFnCheatCheck gOnFnCheatToggle Checked%ch
 Gui, Main:Font, s9 c000000 Normal, Segoe UI
 Gui, Main:Add, Button, x355 y575 w180 h28 gOnCheatAdjust, Size and Place...
 Gui, Main:Font, s10 cCCCCCC Normal, Segoe UI
-Gui, Main:Add, Text, x25 y612 w510 0x10
+; v5.3.0: the screen watch (relief list and scramble cards)
+autoSheetChecked := ReliefAutoSheet ? 1 : 0
+Gui, Main:Add, Checkbox, x25 y612 w510 vReliefSheetCheck gOnReliefSheetToggle Checked%autoSheetChecked%, Show it by itself on the relief list (water / OB) and scramble cards
+noFnChecked := ReliefNoFn ? 1 : 0
+Gui, Main:Add, Checkbox, x25 y644 w510 vReliefNoFnCheck gOnReliefNoFnToggle Checked%noFnChecked%, On those screens the buttons work without FN (FN + Club = Clear View)
+Gui, Main:Add, Text, x25 y676 w510 0x10
 Gui, Main:Font, s9 c999999 Normal, Segoe UI
-Gui, Main:Add, Text, x25 y624 w510, Files are saved at:
+Gui, Main:Add, Text, x25 y688 w510, Files are saved at:
 Gui, Main:Font, s9 cWhite Normal, Consolas
-Gui, Main:Add, Text, x25 y643 w510 h34, %ConfigDir%
+Gui, Main:Add, Text, x25 y707 w510 h34, %ConfigDir%
 Gui, Main:Font, s9 c000000 Normal, Segoe UI
-Gui, Main:Add, Button, x25 y686 w95 h29 gOnOpenFolder, Open Folder
-Gui, Main:Add, Button, x128 y686 w188 h29 gResetSmartSpots, Reset Smart Click Spots
-Gui, Main:Add, Button, x324 y686 w91 h29 gTrayOcrDump, OCR Test
-Gui, Main:Add, Button, x423 y686 w112 h29 gShowHelp, Help / Guide
+Gui, Main:Add, Button, x25 y750 w150 h29 gOnOpenFolder, Open Folder
+Gui, Main:Add, Button, x185 y750 w150 h29 gTrayOcrDump, OCR Test
+Gui, Main:Add, Button, x345 y750 w190 h29 gShowHelp, Help / Guide
 Gui, Main:Font, s9 cAAAAAA Normal, Segoe UI
-Gui, Main:Add, Text, x25 y724 w345 h30, Reset Smart Click Spots re-learns click positions only.
+Gui, Main:Add, Text, x25 y788 w345 h30, OCR Test saves what Windows reads on the GSPro screen (for support).
 Gui, Main:Font, s9 c000000 Normal, Segoe UI
-Gui, Main:Add, Button, x385 y722 w150 h27 gShowFactoryReset, Factory Reset...
+Gui, Main:Add, Button, x385 y786 w150 h27 gShowFactoryReset, Factory Reset...
 Gui, Main:Font, s9 cAAAAAA Normal, Segoe UI
-Gui, Main:Add, Text, x20 y764 w520 Center, Ctrl+F12 toggles button mapping. Turn mapping OFF to type normally.
+Gui, Main:Add, Text, x20 y826 w520 h32 Center, With mapping ON the box always goes to GSPro, even after you click another screen.`nTo type in another program, turn mapping OFF first (Ctrl+F12).
 Gui, Main:Font, s10 c000000 Normal, Segoe UI
-Gui, Main:Add, Button, x125 y792 w150 h35 gMinimizeMain, Minimize to Tray
-Gui, Main:Add, Button, x285 y792 w150 h35 gDoFullExit, Exit
+Gui, Main:Add, Button, x125 y866 w150 h35 gMinimizeMain, Minimize to Tray
+Gui, Main:Add, Button, x285 y866 w150 h35 gDoFullExit, Exit
+; v5.3.0 (Bruce): no tip jar here - the box is the product.  One quiet
+; line to pass it on; it only opens the website in the browser.
+Gui, Main:Font, s9 c7FB8FF Underline, Segoe UI
+Gui, Main:Add, Text, x20 y910 w520 Center gOnShareLink, Know another sim golfer?  Share bacustomproducts.com
+Gui, Main:Font, s10 c000000 Normal, Segoe UI
 RefreshProfileActions()
 UpdateMainStatus()
 LoadWindowPos(wx, wy)
-ShowSettingsWindow("Main", MainHwnd, 560, 844, launchHidden, wx, wy)
+ShowSettingsWindow("Main", MainHwnd, 560, 940, launchHidden, wx, wy)
 
 ; ============================================================
 ;  STARTUP-LAUNCH FLOW
@@ -5585,6 +6430,10 @@ SetTimer, ScrambleTick, 2000
 
 ; Countdown overlay updater (light, no OCR)
 SetTimer, CdTick, 500
+
+; v5.3.0 screen watch: GSPro 4's relief list and the scramble cards
+; (a few pixels, no OCR until something shows up)
+SetTimer, ScreenWatchTick, 400
 
 ; One-shot OCR engine warm-up in the background
 SetTimer, OcrWarmup, -3000
@@ -5917,6 +6766,26 @@ OnFnCheatToggle:
         CheatHide()
 Return
 
+; v5.3.0: the sheet comes up by itself on the relief list and the
+; scramble cards; the buttons work there without FN.
+OnShareLink:
+    Run, https://www.bacustomproducts.com/
+Return
+
+OnReliefSheetToggle:
+    Gui, Main:Submit, NoHide
+    ReliefAutoSheet := ReliefSheetCheck ? true : false
+    SaveSettings()
+    if (!ReliefAutoSheet && CheatAuto && !FnIsDown)
+        CheatHide()
+Return
+
+OnReliefNoFnToggle:
+    Gui, Main:Submit, NoHide
+    ReliefNoFn := ReliefNoFnCheck ? true : false
+    SaveSettings()
+Return
+
 ; ------------------------------------------------------------
 ;  Size and place the FN cheat sheet (main window button).  The
 ;  sheet is drawn over GSPro, live: the slider sizes it, dragging
@@ -5938,7 +6807,7 @@ OnCheatAdjust:
     Gui, CheatAdj:Font, s10 cWhite Bold, Segoe UI
     Gui, CheatAdj:Add, Text, x16 y12 w420, Drag the cheat sheet to where you want it.
     Gui, CheatAdj:Font, s9 cCCCCCC Normal, Segoe UI
-    adjNote := adjArea.screen ? "GSPro is not open: shown on the main screen. Open GSPro first to see it on the game." : "It is shown over GSPro, the size it will be when FN is held."
+    adjNote := adjArea.screen ? "GSPro is not open: shown on the main screen. Open GSPro first to see it on the game." : "It is shown over GSPro, the size it will be when FN is held or it comes up by itself."
     Gui, CheatAdj:Add, Text, x16 y36 w420 h34 vCheatAdjNote, %adjNote%
     Gui, CheatAdj:Font, s10 cWhite Normal, Segoe UI
     Gui, CheatAdj:Add, Text, x16 y80 w50, Size:
@@ -6080,108 +6949,15 @@ ClearOcrTip:
     ToolTip
 Return
 
-; Background fade-proof verify for menu-closing smart clicks:
-; runs AFTER the busy lock is released so rapid follow-up
-; presses are never swallowed.  A swallowed click leaves the
-; button in place indefinitely; a closing fade is gone well
-; before the second look - only a persistent button earns the
-; single retry.
-OcrVerifyTick:
-    if (VerifyActionId = "")
-        Return
-    OcrStaleCheck()
-    if (OcrBusy) {
-        SetTimer, OcrVerifyTick, -300
-        Return
-    }
-    OcrLockTake()
-    vAgain := false
-    try {
-        vx := 0
-        vy := 0
-        if (SpotsValidNow()) {
-            vHit := SpotFastResolve(VerifyActionId, vx, vy, 1)
-        } else {
-            vScan := ScanWinClient(GSProWinNeedle, GSProWinExclude)
-            vHit := ResolveOcrTarget(VerifyActionId, vScan, vx, vy)
-        }
-        if (vHit && Abs(vy - VerifyY) < VerifyBandPx)
-            vAgain := true
-    } catch appErr {
-        LogAppError("ClickVerify", appErr)
-    }
-    OcrBusy := false
-    ; The lock is released between the two looks, so a press in
-    ; the meantime is never kept waiting behind this check (and a
-    ; press cancels the pending re-click outright).
-    if (vAgain)
-        SetTimer, OcrVerifyTick2, -450
-    else
-        VerifyActionId := ""
-Return
-
-OcrVerifyTick2:
-    if (VerifyActionId = "")
-        Return
-    OcrStaleCheck()
-    if (OcrBusy) {
-        SetTimer, OcrVerifyTick2, -200
-        Return
-    }
-    OcrLockTake()
-    try {
-        vx := 0
-        vy := 0
-        if (SpotsValidNow()) {
-            vHit := SpotFastResolve(VerifyActionId, vx, vy, 1)
-        } else {
-            vScan2 := ScanWinClient(GSProWinNeedle, GSProWinExclude)
-            vHit := ResolveOcrTarget(VerifyActionId, vScan2, vx, vy)
-        }
-        if (vHit && Abs(vy - VerifyY) < VerifyBandPx) {
-            OcrTrace("  verify: " . VerifyActionId . " still on screen - clicked again at " . vx . "," . vy)
-            DpiClickAt(vx, vy)
-            ParkMouse()
-        }
-    } catch appErr {
-        LogAppError("ClickVerify", appErr)
-    }
-    VerifyActionId := ""
-    OcrBusy := false
-Return
-
 ; FN-hold prefetch: one background scan into the shared cache.
 OcrPrefetch:
     ; GSPro 4's relief panel first: one small read of its corner,
     ; so the arrow that follows knows which screen is up.
+    ; (v5.3.0: no full-screen prefetch for the older menu any more)
     if (ReliefPrefetch())
         Return
-    ; Locked spots confirm with their own small read - a full
-    ; prefetch would only hold the lock the press needs.
-    if (SpotsValidNow())
-        Return
-    OcrStaleCheck()
-    if (OcrBusy) {
-        if (FnIsDown)
-            SetTimer, OcrPrefetch, -300   ; keep the FN-held chain alive
-        Return
-    }
-    OcrLockTake()
-    try {
-        pfScan := ScanWinClient(GSProWinNeedle, GSProWinExclude)
-        if (pfScan.found) {
-            LastScanObj := pfScan
-            LastScanTick := A_TickCount
-        }
-    } catch appErr {
-        LogAppError("Prefetch", appErr)
-    }
-    OcrBusy := false
-    ; Keep the cache warm for as long as FN stays held, so a
-    ; player who reads the menu for a while never waits on a
-    ; scan when the arrow finally lands.
-    if (FnIsDown)
-        SetTimer, OcrPrefetch, -1500
+    if (OcrBusy && FnIsDown)
+        SetTimer, OcrPrefetch, -300   ; keep the FN-held chain alive
 Return
 
 ; Deferred Smart Click: fires the queued press as soon as the
@@ -6220,11 +6996,18 @@ Return
 ; while another window has the focus; the follow-up brings GSPro to
 ; the front before it presses anything.  Never from the Remapper's
 ; own windows.
+GsproIsFront() {
+    return GsproIsGame(WinExist("A"))
+}
+
+MulliganToGspro() {
+    if (SendSecondaryKey("^m"))
+        MulliganPressed()
+}
+
 MulliganWatchWanted() {
     global GSProWinNeedle, GSProWinExclude
-    WinGetTitle, t, A
-    t := LowerStr(t)
-    if (InStr(t, LowerStr(GSProWinNeedle)) && !(GSProWinExclude != "" && InStr(t, LowerStr(GSProWinExclude))))
+    if (GsproIsGame(WinExist("A")))
         return true
     WinGet, apid, PID, A
     if (apid = DllCall("GetCurrentProcessId"))
@@ -6316,6 +7099,7 @@ MulliganSend(keys) {
             break
     }
     ReliefLastActTick := A_TickCount
+    ScreenWatchHurry()
     ReliefLast := ""
     ReliefExpectSel := 0
 }
@@ -6407,39 +7191,6 @@ Return
 ; never appears here is not reaching the PC at all).
 KeyTestShow:
     KeyHistory
-Return
-
-; Forget this PC's locked Smart Click spots; the next press
-; re-learns them with two full screen reads.
-ResetSmartSpots:
-    ; Drop every cached/repeated click as well as saved spots.
-    ; Otherwise the repeat fast path can still use the old point
-    ; for up to four seconds after a reset.
-    if (OcrBusy || FnIsDown) {
-        MsgBox, 64, Smart Click Busy, Release FN and let the current screen read finish, then reset the Smart Click spots.
-        Return
-    }
-    SetTimer, OcrPrefetch, Off
-    SetTimer, OcrDeferred, Off
-    SetTimer, OcrVerifyTick, Off
-    SetTimer, OcrVerifyTick2, Off
-    SetTimer, ParkTick, Off
-    PendingOcrAction := ""
-    PendingOcrSince := 0
-    VerifyActionId := ""
-    LastActionId := ""
-    LastClickX := 0
-    LastClickY := 0
-    LastFireTick := 0
-    LastScanObj := ""
-    LastScanTick := 0
-    LastRef := {}
-    Spots := {}
-    SpotWin := ""
-    ReliefLast := ""
-    ReliefExpectSel := 0
-    SaveSpots()
-    TrayTip, BA Remapper, Smart Click spots cleared. The next Smart Click reads the screen and learns again. Profiles and settings are kept., 5, 1
 Return
 
 ; One-time OCR engine warm-up (first call pays ~1s engine
@@ -6616,10 +7367,6 @@ OnOpenFolder:
     Run, %ConfigDir%
 Return
 
-OnCleanup:
-    Gosub, ResetSmartSpots
-Return
-
 MainGuiSize:
 BuilderGuiSize:
 CfgGuiSize:
@@ -6693,6 +7440,13 @@ Return
 ;  more is sent, so Enter never takes a drop or rehit by mistake.
 ;  Mapping OFF, or GSPro not the active window: not watched at all.
 ; ============================================================
+; v5.3.0 (Bruce, 2026-11-27): another window in front (a video or a
+; stats page on another screen) - the box's Ctrl+M goes to GSPro: GSPro
+; is brought forward and gets the Ctrl+M as a held keypress, then the
+; same relief follow-up.  (Windows cannot tell the box from a keyboard:
+; with mapping ON, Ctrl+M typed in another program does this too.)
+#If (RemapActive && MulliganWatchWanted() && !GsproIsFront())
+^m::MulliganToGspro()
 #If (RemapActive && MulliganWatchWanted())
 ~^m::MulliganPressed()
 #If
@@ -6743,7 +7497,7 @@ Pause::return
 ; ============================================================
 ShowQuickStart:
     Gui, Main:+OwnDialogs
-    MsgBox, 64, BA Remapper - Quick Start, 1. Select Basic Secondary for the yellow functions printed on your box.`n`n2. Button Mapping turns ON by itself each time BA Remapper opens (the status above shows it).`n`n3. Tap a button for its white function. Hold Reset Aim (A) and press another button for its yellow function. FN + either club button gives Clear View (B).`n`n4. Want a different function? Choose Customize a Copy, open the Builder, click a button, choose its tap and FN actions, and Save. Test mode in the Builder shows what each button does. Export / Import copies a layout to another PC.`n`n5. Optional: use Current Profile at Windows Startup and check Start with Windows.`n`n6. For scramble play, check Auto-Pick Scramble Shot, choose a delay (start with 15 seconds), and check Show chosen card highlight and countdown. Return to GSPro: the green outline shows the planned pick. You can still use any GSPro Select (older GSPro: USE) button yourself.`n`nSmart Click used a wrong spot? Release FN, then use Reset Smart Click Spots. The next press reads the screen and learns again; your profiles stay.`n`nCtrl+F12 turns button mapping on/off. Scramble Auto-Pick has its own checkbox. Exit fully quits; closing the window keeps the app in the tray.
+    MsgBox, 64, BA Remapper - Quick Start, 1. Select Basic Secondary for the yellow functions printed on your box.`n`n2. Button Mapping turns ON by itself each time BA Remapper opens (the status above shows it).`n`n3. Tap a button for its white function. Hold Reset Aim (A) and press another button for its yellow function. FN + either club button gives Clear View (B).`n`n4. Want a different function? Choose Customize a Copy, open the Builder, click a button, choose its tap and FN actions, and Save. Test mode in the Builder shows what each button does. Export / Import copies a layout to another PC.`n`n5. Optional: use Current Profile at Windows Startup and check Start with Windows.`n`n6. For scramble play, check Auto-Pick Scramble Shot, choose a delay (start with 15 seconds), and check Show chosen card highlight and countdown. Return to GSPro: the green outline shows the planned pick. You can still use any GSPro Select (older GSPro: USE) button yourself.`n`nOn GSPro 4's water / OB relief list and the scramble cards the cheat sheet comes up by itself and the buttons work without FN.`n`nCtrl+F12 turns button mapping on/off. Scramble Auto-Pick has its own checkbox. Exit fully quits; closing the window keeps the app in the tray.
 Return
 
 ShowHelp:
@@ -6776,23 +7530,12 @@ ShowHelp:
     SECONDARY FUNCTIONS (set in Builder)
     GSPro Hotkey: FN + button sends a keyboard key
       (includes Select Shot 1-4 for scrambles)
-    Smart Click (OCR): FN + button READS THE SCREEN, finds
-      the GSPro menu button by its text, and clicks it.
-      No setup, works at any resolution.  Actions: Move
-      Forward, Move Back, Next Option, Drop Ball / Rehit
-      (also "Go to DZ" in a water drop zone), OB Rehit.
-      Needs Windows 10 or 11.
-      The first press on a PC learns where the menu buttons
-      sit and LOCKS them in - every press after that is
-      fast.  Changed the resolution?  It re-learns by itself
-      on the next press (or tray menu: Reset Smart Click
-      spots).
+    Smart Click (OCR): for GSPro 4's relief list - the box
+      reads the list and presses GSPro's own keys.  Actions:
+      Move Forward, Move Back, Next Option, Drop Ball / Rehit
+      OB Rehit.  Needs Windows 10 or 11 and GSPro 4.
     Taught Screen Click: FN + button clicks a fixed spot
       you captured (the old way - still available).
-    Speed: keep FN held and tap the button repeatedly -
-      consecutive presses of the same Smart Click fire
-      instantly (Next Option a few times in a row, or
-      walking the ball with Move Forward / Move Back).
     GSPro 4 relief list (RELIEF OPTIONS / YOUR OPTIONS at
       the top left): the same buttons press GSPro's own
       keys - OB Rehit = Rehit's number + Enter, Drop Ball /
@@ -6826,7 +7569,17 @@ ShowHelp:
       On GSPro 4's relief list it follows the screen: the
       top line shows the choice picked and each button says
       what it does for it (ENTER: FLAG LINE, NEXT: 3 REHIT,
-      CLOSER (F) / FURTHER BACK (B) with Flag Line picked).
+      CLOSER / FURTHER BACK with Flag Line picked).
+    Screen watch (5.3.0, main window checkboxes): on GSPro 4's
+      relief list (water / OB) and on the scramble cards the
+      sheet comes up by itself and the buttons work WITHOUT
+      FN.  Relief: Aim Right takes the choice, Aim Left goes to
+      the next, Tee Left rehits, Aim Up / Down move a Flag Line
+      drop.  Scramble: Reset Aim (tap) / Tee Left / Tee Right /
+      Shot Cam pick card 1-4 (GSPro shows that ball), Aim Right
+      takes it; Auto-Pick takes the box's card at zero.  FN +
+      Club is still Clear View.  A quick pixel look finds the
+      screen (no screen reading until it shows up).
 
     BUILT-IN PRESET: "Basic Secondary"
     QUICK START: pick "Basic Secondary" in the profile dropdown and the
@@ -6902,13 +7655,6 @@ ShowHelp:
     Same as Windows startup: Boot Profile, mapping ON, tray
     only.  Opened by you from the desktop or Start menu, the
     window shows - also with mapping ON.
-
-    RESET SMART CLICK SPOTS
-    If a Smart Click used a wrong spot, release FN and choose
-    Reset Smart Click Spots. This clears the learned positions
-    and temporary click caches. The next press re-reads the
-    screen and learns again. Profiles, startup and other
-    settings are kept. It does not erase Taught Screen Clicks.
 
     FACTORY RESET / REMOVAL
     Factory Reset is a separate, advanced action that removes
@@ -7010,12 +7756,60 @@ CheatShow:
     }
 Return
 
+BuilderRepaint:
+    if (BuilderHwnd && DllCall("IsWindow", "Ptr", BuilderHwnd))
+        DllCall("RedrawWindow", "Ptr", BuilderHwnd, "Ptr", 0, "Ptr", 0, "UInt", 0x185)
+Return
+
+ScreenWatchTick:
+    try {
+        ScreenWatchStep()
+    } catch appErr {
+        LogAppError("ScreenWatch", appErr)
+    }
+    ; Right after a choice was taken the screen is about to close:
+    ; look every 150 ms for a moment (two looks without it and the
+    ; sheet is gone), then back to the easy pace.
+    if (ScreenWatchFast > 0) {
+        ScreenWatchFast -= 1
+        SetTimer, ScreenWatchTick, % ScreenWatchFast > 0 ? 150 : 400
+    }
+Return
+
+; FN let go on a screen that keeps the sheet up: same sheet, now
+; saying what the buttons do without FN.
+CheatAfterFn:
+    if (FnIsDown)
+        Return
+    if (CheatAutoWanted()) {
+        CheatDraw()
+        if (CheatVisible)
+            SetTimer, CheatTick, 250
+    } else {
+        CheatHide()
+    }
+Return
+
+; AIM right while Auto-Pick was reading the cards: take the box's
+; card once that read is done, unless Auto-Pick already picked.
+ScrambleBoxTakeLater:
+    if (ScrambleBusy) {
+        SetTimer, ScrambleBoxTakeLater, -60
+        Return
+    }
+    sbtCards := ScrambleBoxCardsNow()
+    if (ScrambleBoxPending && IsObject(sbtCards))
+        ScrambleBoxTake(ScrambleBoxPending, sbtCards)
+    ScrambleBoxPending := 0
+Return
+
 CheatTick:
-    if (!FnIsDown || !CheatVisible) {
+    CheatTickLast := A_TickCount
+    if (!CheatVisible || !(FnIsDown || CheatAutoWanted())) {
         CheatHide()
         Return
     }
-    if (!WinActive("ahk_id " . CheatShownFor)) {
+    if (!GsproShown(CheatShownFor)) {
         CheatHide()
         Return
     }
@@ -7026,12 +7820,21 @@ CheatTick:
     ; GSPro's own redraw never makes the sheet flicker.)
     if (CheatAdjusting)
         Return
-    cheatNowKey := CheatReliefState().key
+    cheatNowKey := CheatStateKey()
+    ; The watch has the relief list up but its read is being renewed
+    ; (after Enter): keep what is shown instead of a flash of the
+    ; normal sheet.
+    if (cheatNowKey = "off" && !FnIsDown && CheatAutoWanted()) {
+        CheatPendingKey := ""
+        Return
+    }
     if (cheatNowKey = CheatShownKey) {
         CheatPendingKey := ""
     } else if (cheatNowKey = CheatPendingKey) {
         CheatPendingKey := ""
         CheatDraw()
+        if (CheatVisible)
+            SetTimer, CheatTick, 250
     } else {
         CheatPendingKey := cheatNowKey
     }
@@ -7114,110 +7917,65 @@ ShowBuilder:
     Gui, Builder:Add, Text, x30 y98 w920 0x10
 
     ; --------------------------------------------------------
-    ;  PANEL REPLICA - positions mirror the physical box:
-    ;
-    ;   MULLIGAN    HEAT MAP     PUTT       FLYOVER
-    ;         ^                       ^
-    ;      [CLUB UP]              [AIM UP]
-    ;               BA CUSTOM PRODUCTS
-    ;    CLUB            < [AIM LT]  AIM  [AIM RT] >
-    ;      [CLUB DN]              [AIM DN]
-    ;         v          TEE POS     v
-    ;   RESET AIM   < [TEE L]  [TEE R] >   SHOT CAM
+    ;  v5.3.0: the Builder is the box itself - the same top-down
+    ;  picture of the V2.5 as the cheat sheet.  Each round button
+    ;  is a click spot (its tap key printed on it), and its job
+    ;  with FN is printed in yellow where the sheet prints it.
     ; --------------------------------------------------------
-
-    ; Top row  (yellow text under each button = its secondary
-    ; function, exactly like the yellow print on the real box)
-    Gui, Builder:Font, s9 c000000 Normal, Segoe UI
-    Gui, Builder:Add, Button, x55  y110 w85 h85 Disabled     vBtnMulligan, MULLIGAN`nCtrl+M
-    Gui, Builder:Add, Button, x280 y110 w85 h85 gBtnHeatmap  vBtnHeatmap,  HEAT MAP`nY
-    Gui, Builder:Add, Button, x505 y110 w85 h85 gBtnPutt     vBtnPutt,     PUTT`nU
-    Gui, Builder:Add, Button, x800 y110 w85 h85 gBtnFlyover  vBtnFlyover,  FLYOVER`nO
-    Gui, Builder:Font, s8 cFFD400 Bold, Segoe UI
-    Gui, Builder:Add, Text, x262 y197 w121 Center vSecHeatmap,
-    Gui, Builder:Add, Text, x487 y197 w121 Center vSecPutt,
-    Gui, Builder:Add, Text, x782 y197 w121 Center vSecFlyover,
-
-    ; Up arrows (panel print)
-    Gui, Builder:Font, s11 cWhite Bold, Segoe UI
-    Gui, Builder:Add, Text, x222 y198 w20 Center, ^
-    Gui, Builder:Add, Text, x677 y198 w20 Center, ^
-
-    ; Second row: CLUB UP (left) and AIM UP (right)
-    Gui, Builder:Font, s9 c000000 Normal, Segoe UI
-    Gui, Builder:Add, Button, x190 y218 w85 h85 gBtnClubup vBtnClubup, CLUB UP`nI
-    Gui, Builder:Add, Button, x645 y218 w85 h85 gBtnUp     vBtnUp,     AIM UP`nUp
-    Gui, Builder:Font, s8 cFFD400 Bold, Segoe UI
-    Gui, Builder:Add, Text, x172 y305 w121 Center vSecClubup,
-    Gui, Builder:Add, Text, x627 y305 w121 Center vSecUp,
-
-    ; Brand center (like the logo on the physical panel)
-    Gui, Builder:Font, s12 c2ECC71 Bold, Segoe UI
-    Gui, Builder:Add, Text, x300 y252 w320 Center, BA CUSTOM PRODUCTS
-
-    ; Middle row: AIM LEFT / AIM text / AIM RIGHT, CLUB label at left
-    Gui, Builder:Font, s16 cWhite Bold, Segoe UI
-    Gui, Builder:Add, Text, x157 y355 w150 Center, CLUB
-    Gui, Builder:Add, Text, x640 y355 w150 Center, AIM
-    Gui, Builder:Font, s14 cWhite Bold, Segoe UI
-    Gui, Builder:Add, Text, x505 y358 w20 Center, <
-    Gui, Builder:Add, Text, x897 y358 w20 Center, >
-    Gui, Builder:Font, s9 c000000 Normal, Segoe UI
-    Gui, Builder:Add, Button, x535 y330 w85 h85 gBtnLeft  vBtnLeft,  AIM LEFT`nLeft
-    Gui, Builder:Add, Button, x805 y330 w85 h85 gBtnRight vBtnRight, AIM RIGHT`nRight
-    Gui, Builder:Font, s8 cFFD400 Bold, Segoe UI
-    Gui, Builder:Add, Text, x517 y417 w121 Center vSecLeft,
-    Gui, Builder:Add, Text, x787 y417 w121 Center vSecRight,
-
-    ; Fourth row: CLUB DOWN (left) and AIM DOWN (right)
-    Gui, Builder:Font, s9 c000000 Normal, Segoe UI
-    Gui, Builder:Add, Button, x190 y440 w85 h85 gBtnClubdown vBtnClubdown, CLUB DOWN`nK
-    Gui, Builder:Add, Button, x645 y440 w85 h85 gBtnDown     vBtnDown,     AIM DOWN`nDown
-    Gui, Builder:Font, s8 cFFD400 Bold, Segoe UI
-    Gui, Builder:Add, Text, x172 y527 w121 Center vSecClubdown,
-    Gui, Builder:Add, Text, x627 y527 w121 Center vSecDown,
-
-    ; Down arrows (beside the buttons) + TEE POS panel print
-    Gui, Builder:Font, s11 cWhite Bold, Segoe UI
-    Gui, Builder:Add, Text, x162 y478 w20 Center, v
-    Gui, Builder:Add, Text, x740 y478 w20 Center, v
-    Gui, Builder:Add, Text, x455 y528 w120 Center, TEE POS
-
-    ; Bottom row: corners + tee pair
-    Gui, Builder:Font, s9 c000000 Normal, Segoe UI
-    Gui, Builder:Add, Button, x55  y550 w85 h85 gBtnResetaim vBtnResetaim, RESET AIM`nA
-    Gui, Builder:Add, Button, x385 y550 w85 h85 gBtnTeeleft  vBtnTeeleft,  TEE LEFT`nC
-    Gui, Builder:Add, Button, x560 y550 w85 h85 gBtnTeeright vBtnTeeright, TEE RIGHT`nV
-    Gui, Builder:Add, Button, x800 y550 w85 h85 gBtnShotcam  vBtnShotcam,  SHOT CAM`nJ
-    Gui, Builder:Font, s14 cWhite Bold, Segoe UI
-    Gui, Builder:Add, Text, x352 y580 w20 Center, <
-    Gui, Builder:Add, Text, x652 y580 w20 Center, >
-    Gui, Builder:Font, s8 cFFD400 Bold, Segoe UI
-    Gui, Builder:Add, Text, x42  y639 w121 Center vSecResetaim,
-    Gui, Builder:Add, Text, x372 y639 w121 Center vSecTeeleft,
-    Gui, Builder:Add, Text, x547 y639 w121 Center vSecTeeright,
-    Gui, Builder:Add, Text, x787 y639 w121 Center vSecShotcam,
+    BldPicX := 80, BldPicY := 104, BldPicW := 800, BldPicH := 552
+    if (FileExist(BoxPicPath))
+        Gui, Builder:Add, Picture, x%BldPicX% y%BldPicY% w%BldPicW% h%BldPicH% vBuilderBoxPic, %BoxPicPath%
+    else
+        Gui, Builder:Add, Progress, x%BldPicX% y%BldPicY% w%BldPicW% h%BldPicH% Background26283F Disabled vBuilderBoxPic
+    bldLay := CheatPicLayout()
+    bldBtns := [["mulligan", "BtnMulligan", "", "Ctrl+M"], ["heatmap", "BtnHeatmap", "SecHeatmap", "Y"], ["putt", "BtnPutt", "SecPutt", "U"]
+        , ["flyover", "BtnFlyover", "SecFlyover", "O"], ["clubup", "BtnClubup", "SecClubup", "I"], ["up", "BtnUp", "SecUp", "Up"]
+        , ["left", "BtnLeft", "SecLeft", "Left"], ["right", "BtnRight", "SecRight", "Right"], ["clubdown", "BtnClubdown", "SecClubdown", "K"]
+        , ["down", "BtnDown", "SecDown", "Down"], ["resetaim", "BtnResetaim", "SecResetaim", "A"], ["teeleft", "BtnTeeleft", "SecTeeleft", "C"]
+        , ["teeright", "BtnTeeright", "SecTeeright", "V"], ["shotcam", "BtnShotcam", "SecShotcam", "J"]]
+    bldR := Round(BldPicW * 0.0557)
+    for i, bb in bldBtns {
+        t := bldLay[bb[1]]
+        bx := BldPicX + Round(BldPicW * t[1] / 1000) - bldR, by := BldPicY + Round(BldPicH * t[2] / 1000) - bldR, bd := 2 * bldR
+        Gui, Builder:Font, s10 c303030 Bold, Segoe UI
+        ctl := bb[2], lbl := bb[1]
+        if (lbl = "mulligan")
+            Gui, Builder:Add, Text, x%bx% y%by% w%bd% h%bd% Center +0x200 BackgroundTrans Disabled v%ctl%, % bb[4]
+        else
+            Gui, Builder:Add, Text, x%bx% y%by% w%bd% h%bd% Center +0x200 BackgroundTrans g%ctl% v%ctl%, % bb[4]
+        if (bb[3] != "") {
+            sw := Round(BldPicW * t[6] / 1000), sh := 20
+            ax := BldPicX + Round(BldPicW * t[3] / 1000), ay := BldPicY + Round(BldPicH * t[4] / 1000) - sh // 2
+            sx := (t[5] = "l") ? ax : (t[5] = "r") ? ax - sw : ax - sw // 2
+            sal := (t[5] = "l") ? "Left" : (t[5] = "r") ? "Right" : "Center"
+            Gui, Builder:Font, s9 cFFD400 Bold, Segoe UI
+            sc := bb[3]
+            Gui, Builder:Add, Text, x%sx% y%ay% w%sw% h%sh% %sal% BackgroundTrans v%sc%,
+        }
+    }
+    Gui, Builder:Font, s8 cAAAAAA Normal, Segoe UI
+    Gui, Builder:Add, Text, x80 y658 w800 Center, Click a button on the box to set its tap and FN jobs.  GSPro hotkeys only work in the GSPro window - BA Remapper brings it to the front first.
 
     ; Bottom action buttons
     Gui, Builder:Font, s10 c000000 Bold, Segoe UI
-    Gui, Builder:Add, Button, x40 y662 w150 h40 gBuilderImport, Import Profile...
-    Gui, Builder:Add, Button, x200 y662 w150 h40 gBuilderExport, Export Profile...
+    Gui, Builder:Add, Button, x40 y684 w150 h40 gBuilderImport, Import Profile...
+    Gui, Builder:Add, Button, x200 y684 w150 h40 gBuilderExport, Export Profile...
     Gui, Builder:Font, s9 cFFFFFF Normal, Segoe UI
     BuilderTestMode := false
-    Gui, Builder:Add, Checkbox, x370 y668 w230 h30 vBuilderTest gOnBuilderTest, Test mode: press box buttons, see what they do (nothing sent)
+    Gui, Builder:Add, Checkbox, x370 y690 w230 h30 vBuilderTest gOnBuilderTest, Test mode: press box buttons, see what they do (nothing sent)
     Gui, Builder:Font, s10 c000000 Bold, Segoe UI
-    Gui, Builder:Add, Button, x620 y662 w150 h40 gBuilderReset vBuilderResetBtn, Reset Profile
-    Gui, Builder:Add, Button, x780 y662 w150 h40 gBuilderClose, Close
+    Gui, Builder:Add, Button, x620 y684 w150 h40 gBuilderReset vBuilderResetBtn, Reset Profile
+    Gui, Builder:Add, Button, x780 y684 w150 h40 gBuilderClose, Close
 
     Gui, Builder:Font, s9 cC8E6C2 Normal, Segoe UI
-    Gui, Builder:Add, Text, x20 y712 w940 Center vBuilderStatus, Click a button to set its FN secondary  -  yellow text = current secondary  -  auto-saves
+    Gui, Builder:Add, Text, x20 y734 w940 Center vBuilderStatus, Click a button on the box to set its jobs  -  yellow = its FN job  -  auto-saves
     Gui, Builder:Font, s9 cFFD400 Normal, Segoe UI
-    Gui, Builder:Add, Text, x20 y736 w940 Center vBuilderCheck gBuilderCheckDetails, Layout check: OK
+    Gui, Builder:Add, Text, x20 y758 w940 Center vBuilderCheck gBuilderCheckDetails, Layout check: OK
 
     UpdateBuilderLabels()
     RefreshBuilderPresetControls()
     WinGetPos, bx, by, , , ahk_id %MainHwnd%
-    ShowSettingsWindow("Builder", BuilderHwnd, 980, 772, false, bx, by)
+    ShowSettingsWindow("Builder", BuilderHwnd, 980, 794, false, bx, by)
 Return
 
 OnBuilderTest:
@@ -7398,11 +8156,13 @@ ConfigButton(btnIdVal, displayName, primaryKey) {
     Gui, Cfg:Font, s10 cWhite Normal, Segoe UI
     Gui, Cfg:Add, Radio, x15 y468 w430 vCfgTypeNone gCfgTypeChanged, None - no FN function
     Gui, Cfg:Font, s10 cFFD400 Normal, Segoe UI
-    Gui, Cfg:Add, Text, x15 y498 w430 h60 vCfgPreview,
+    Gui, Cfg:Add, Text, x15 y498 w430 h48 vCfgPreview,
 
+    Gui, Cfg:Font, s8 cAAAAAA Normal, Segoe UI
+    Gui, Cfg:Add, Text, x15 y548 w430 h16, GSPro hotkeys only work in the GSPro window - BA Remapper brings it to the front first.
     Gui, Cfg:Font, s10 c000000 Normal, Segoe UI
-    Gui, Cfg:Add, Button, x90 y566 w120 h32 gCfgOK Default, Save
-    Gui, Cfg:Add, Button, x240 y566 w120 h32 gCfgCancel, Cancel
+    Gui, Cfg:Add, Button, x90 y570 w120 h32 gCfgOK Default, Save
+    Gui, Cfg:Add, Button, x240 y570 w120 h32 gCfgCancel, Cancel
 
     ; Preselect the tap key
     if (ProfPrimary.HasKey(btnIdVal)) {
@@ -7682,6 +8442,8 @@ Return
 ;  UPDATE BUILDER LABELS
 ; ============================================================
 UpdateBuilderLabels() {
+    global BuilderHwnd
+    SetTimer, BuilderRepaint, -30   ; v5.3.0: see-through print on the picture
     UpdateLayoutCheck()
     UpdateOneLabel("heatmap",  "BtnHeatmap",  "SecHeatmap",  "HEAT MAP",  "Y")
     UpdateOneLabel("putt",     "BtnPutt",     "SecPutt",     "PUTT",      "U")
@@ -7703,9 +8465,11 @@ UpdateOneLabel(btnIdVal, ctrlName, secCtrl, dispName, priKey) {
     ; A custom tap key shows on the button with a * (v5.2.0)
     if (ProfPrimary.HasKey(btnIdVal))
         priKey := KeyShortName(ProfPrimary[btnIdVal]) . " *"
-    label := dispName . "`n" . priKey
+    ; v5.3.0: the picture prints the button's name; the button shows
+    ; its tap key (and FN on the FN button)
+    label := priKey
     if (btnIdVal = FnButtonId)
-        label := "[FN]`n" . dispName . "`n" . priKey
+        label := "FN`n" . priKey
     GuiControl, Builder:, %ctrlName%, %label%
     ; Yellow panel print under the button = the secondary
     sec := (btnIdVal = FnButtonId) ? "FN / SHIFT KEY" : YellowSecName(btnIdVal)

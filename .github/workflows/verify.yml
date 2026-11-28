@@ -13,9 +13,45 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      - name: Full HD test screen (the screen-watch checks read GSPro-size screens)
+        shell: pwsh
+        run: |
+          try { Set-DisplayResolution -Width 1920 -Height 1080 -Force -ErrorAction Stop } catch { Write-Host "Set-DisplayResolution: $_" }
+          Add-Type -AssemblyName System.Windows.Forms
+          Write-Host ("Screen: " + [System.Windows.Forms.Screen]::PrimaryScreen.Bounds)
       - name: Verify app, compile 64-bit builds and test installer upgrade
         shell: pwsh
         run: ./scripts/package-release.ps1
+      - name: Screen watch again at 150% Windows scale
+        shell: pwsh
+        run: |
+          Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public static class DpiSet { [DllImport("user32.dll", SetLastError = true)] public static extern bool SystemParametersInfo(uint action, int param, IntPtr pv, uint winIni); }'
+          $asked = [DpiSet]::SystemParametersInfo(0x009F, 2, [IntPtr]::Zero, 1)
+          Write-Host "Display scale two steps up asked: $asked"
+          Start-Sleep -Seconds 3
+          python tests/verify_remapper.py --ahk "$env:RUNNER_TEMP/ahk/AutoHotkeyU64.exe" --screen-watch-only
+      - name: Screen watch again on a 4K screen, when this test PC can show one
+        shell: pwsh
+        run: |
+          Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public static class DpiSet { [DllImport("user32.dll", SetLastError = true)] public static extern bool SystemParametersInfo(uint action, int param, IntPtr pv, uint winIni); }'
+          [void][DpiSet]::SystemParametersInfo(0x009F, 0, [IntPtr]::Zero, 1)
+          Start-Sleep -Seconds 2
+          foreach ($size in @(@(3840, 2160), @(2560, 1440))) {
+            try { Set-DisplayResolution -Width $size[0] -Height $size[1] -Force -ErrorAction Stop } catch { Write-Host "Set-DisplayResolution $($size[0]) x $($size[1]): $_" }
+            Start-Sleep -Seconds 3
+            $now = (Get-CimInstance Win32_VideoController | Select-Object -First 1).CurrentHorizontalResolution
+            Write-Host "Screen width now: $now"
+            if ($now -ge $size[0]) { break }
+          }
+          [void][DpiSet]::SystemParametersInfo(0x009F, 0, [IntPtr]::Zero, 1)
+          Start-Sleep -Seconds 3
+          $video = Get-CimInstance Win32_VideoController | Select-Object -First 1
+          Write-Host "Screen: $($video.CurrentHorizontalResolution) x $($video.CurrentVerticalResolution)"
+          if ($video.CurrentHorizontalResolution -ge 2560) {
+            python tests/verify_remapper.py --ahk "$env:RUNNER_TEMP/ahk/AutoHotkeyU64.exe" --screen-watch-only
+          } else {
+            Write-Host "BIG SCREEN RUN NOT POSSIBLE: this test PC cannot show more than $($video.CurrentHorizontalResolution) x $($video.CurrentVerticalResolution)."
+          }
       - uses: actions/upload-artifact@v4
         if: always()
         with:

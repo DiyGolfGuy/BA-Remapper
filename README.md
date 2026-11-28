@@ -4,7 +4,10 @@
 
 [Full how-to guide](HOW_TO_USE.txt) · [Scramble highlight with screenshots](docs/scramble-preview.md)
 
-BA Remapper is the companion app for the BA Custom Products wireless control box. Out of the box, every button sends its printed GSPro hotkey with no software at all. BA Remapper adds the FN secondary layer (the yellow print) with an on-screen FN cheat sheet, support for GSPro 4's relief list (including a one-press Mulligan when mulligans are on), on-screen Smart Clicks powered by built-in Windows OCR, your own custom layouts, and an automatic scramble shot picker. Free with your box; installs like any normal Windows program (a portable version is available too).
+BA Remapper is the companion app for the BA Custom Products wireless control box. Out of the box, every button sends its printed GSPro hotkey with no software at all. BA Remapper adds the FN secondary layer (the yellow print) with an on-screen cheat sheet that shows a picture of your box, support for GSPro 4's relief list (the buttons work there without FN, and a one-press Mulligan when mulligans are on), scramble card picking from the box, on-screen Smart Clicks powered by built-in Windows OCR, your own custom layouts, and an automatic scramble shot picker. Free with your box; installs like any normal Windows program (a portable version is available too).
+
+
+**Like it? Tell another sim golfer.** BA Remapper is free with every BA Custom Products control box; the boxes are at [bacustomproducts.com](https://www.bacustomproducts.com/). Sharing the site with a friend or your league is the best way to support it.
 
 ---
 
@@ -32,9 +35,9 @@ The installer puts BA Remapper in Program Files, adds it to the Start Menu and *
 2. **Button Mapping** turns ON by itself every time BA Remapper opens (Ctrl+F12 or the button turns it off to type). Tap for a white function; hold Reset Aim (A) and tap another button for its yellow function. FN + either club button sends Camera Clip / Clear View (B).
 3. To change a function, choose **Customize a Copy**, give it a name, open the Builder, click a button, choose the action, and **Save**. The original preset and Windows Startup Profile stay unchanged. **New Blank** starts without secondary actions.
 4. Optional: choose **Use Current Profile at Windows Startup**, then check **Start with Windows**.
-5. Hold FN in GSPro to see the **FN cheat sheet**; **Size and Place...** on the main window sets its size and spot.
+5. Hold FN in GSPro to see the **cheat sheet**, a picture of your box with each button's job. On GSPro 4's water / OB relief list and on the scramble cards it comes up **by itself** and the buttons work **without FN** (FN + Club is still Clear View). **Size and Place...** on the main window sets its size and spot.
 
-**Button Mapping and Scramble Auto-Pick have separate status indicators.** Turning mapping off with Ctrl+F12 does not turn Auto-Pick off; use its own checkbox. **Reset Smart Click Spots** clears only learned OCR positions and temporary click caches so the next press reads the screen and learns again. Profiles, startup preferences, and Taught Screen Click positions are kept.
+**Button Mapping and Scramble Auto-Pick have separate status indicators.** Turning mapping off with Ctrl+F12 does not turn Auto-Pick off; use its own checkbox.
 
 ## What It Does
 
@@ -53,11 +56,11 @@ Each button's secondary can be one of three types:
 | **Taught Screen Click** | Clicks a fixed position you capture yourself (the classic method, still available) |
 
 ### Smart Clicks
-Five penalty/relief menu actions are built in: **Move Forward, Move Back, Next Option, Drop Ball / Rehit, OB Rehit**. Before any click, the app verifies the entire relief menu — the Options counter and the buttons, in order, evenly spaced, one column — and clicks the verified position inside it. It works with mulligans on or off (GSPro hides the Mulligan button when they're off). It never clicks a lone matched word, never clicks into an opening or closing animation, and if a button's own text misreads, the surrounding menu still proves where it is. Drop Ball / Rehit clicks the changing second slot whichever word it currently shows (Drop Ball, Rehit, or "Go to DZ" in a water drop zone); OB Rehit handles the "You have hit OB!" dialog (with or without its Mulligan button) and the relief menu's rehit option. The app starts reading the screen the moment you press FN, and keeps retrying while a menu is still fading in, so one press is all it takes. If the menu genuinely isn't on screen, the app tells you instead of guessing.
+Five relief actions are built in: **Move Forward, Move Back, Next Option, Drop Ball / Rehit, OB Rehit**, for GSPro 4's relief list (5.3.0 is for GSPro 4; the older GSPro relief menu is no longer read).
 
-**GSPro 4 relief list.** GSPro 4 shows water and out-of-bounds relief as a numbered list at the top left (RELIEF OPTIONS / YOUR OPTIONS): a number picks a choice, Enter takes it, and on Flag Line B / F move the drop further back / closer. The same box buttons work there, pressing GSPro's own keys: **OB Rehit** = Rehit's number + Enter (1 on out of bounds, 3 on water), **Drop Ball / Rehit** = Enter on the highlighted choice, **Next Option** = the next number, **Move Forward / Move Back** = Closer / Further Back with Flag Line picked, and the box's **Mulligan** button takes the mulligan when Mulligan is one of the choices (its Ctrl+M as always, then Mulligan's number and Enter; nothing more when it isn't on the list). A small read of that corner decides which GSPro is on screen; without the list, every press works on the older menu exactly as before. Anything more (Preview Lie, rotating the map) is the mouse or keyboard.
+**GSPro 4 relief list.** GSPro 4 shows water and out-of-bounds relief as a numbered list at the top left (RELIEF OPTIONS / YOUR OPTIONS): a number picks a choice, Enter takes it, and on Flag Line B / F move the drop further back / closer. The same box buttons work there, pressing GSPro's own keys: **OB Rehit** = Rehit's number + Enter (1 on out of bounds, 3 on water), **Drop Ball / Rehit** = Enter on the highlighted choice, **Next Option** = the next number, **Move Forward / Move Back** = Closer / Further Back with Flag Line picked, and the box's **Mulligan** button takes the mulligan when Mulligan is one of the choices (its Ctrl+M as always, then Mulligan's number and Enter; nothing more when it isn't on the list). Without the list on screen a relief press sends nothing and says so. Anything more (Preview Lie, rotating the map) is the mouse or keyboard.
 
-**Locked spots — fast after the first press.** The first Smart Click on a PC reads the screen twice, checks both reads agree, and locks in where every menu button sits (saved in `settings.ini`). From then on each press reads only that button's small area and clicks right away, with no click positions to program. The spots are tied to the GSPro window size: change the resolution and they are re-learned automatically on the next press. Tray menu → **Reset Smart Click spots** forces a fresh learn.
+**No FN needed on GSPro 4's screens (5.3.0).** A light screen watch spots the relief list and the scramble cards; the cheat sheet comes up by itself and the buttons do that screen's jobs without FN (see the how-to guide).
 
 ### Your own layout (v5.2.0)
 **Customize a Copy**, open the **Button Builder** and click any button:
@@ -133,7 +136,7 @@ Everything lives in `Documents\BA Custom Products\Remapper\` — visible, plain 
 
 The **OCR Test** button (main window and tray menu) scans the GSPro window on demand and opens the result in Notepad — the first stop for any "it didn't click" question. With scramble cards on screen it also shows which card the auto-pick would choose from that exact frame (no key is sent).
 
-**Reset Smart Click Spots** is the everyday OCR reset: it clears saved spots and temporary repeat/scan/verification caches. Release FN and let any current screen read finish before using it. The next Smart Click performs a fresh learn. It does not change profiles, settings, auto-start, or Taught Screen Clicks.
+**OCR Test** (main window) saves what Windows reads on the GSPro screen, for support.
 
 **Factory Reset** is a separate action with explicit confirmation and an optional backup enabled by default. It removes profiles, preferences and the auto-start shortcut, then exits. Backups go beside the Remapper folder under `Remapper Backups`, outside the folder being reset. The program and diagnostic logs remain. Use Windows Add/Remove Programs to uninstall an installed copy.
 
@@ -162,6 +165,8 @@ The main window, Builder and action editor can be resized and scrolled when they
 ---
 
 ## Version History
+
+**v5.3.0** — GSPro 4 only: the older GSPro relief menu's reading and Reset Smart Click Spots are removed. New installs start on Basic Secondary. The cheat sheet is now a real picture of the V2.5 box (round buttons) with the yellow print on it. A light screen watch (a few pixels, no screen reading until something shows up) finds GSPro 4's relief list and the scramble cards: the sheet comes up by itself and says what each button does on that screen, and the buttons work there without FN. Scramble: Reset Aim (tap) / Tee Left / Tee Right / Shot Cam pick card 1-4 (GSPro shows that ball), Aim Right takes it; Auto-Pick takes the box's card at zero.
 
 **v5.2.2** — Mulligan button on GSPro 4's water relief list: it highlighted Mulligan but did not press Enter (the highlighted 4th card was not read: its number circle shifted its line out of the list's column). The highlighted card now always counts, a card without its detail line still counts, text beside the list can't hide a title, the list is read again while GSPro moves the map, and Enter alone takes a Mulligan that is already highlighted.
 

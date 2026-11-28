@@ -1,9 +1,9 @@
-BA REMAPPER 5.2.2 - HOW TO USE
+BA REMAPPER 5.3.0 - HOW TO USE
 BA Custom Products LLC | bacustomproducts.com
 
 1. INSTALL OR UPDATE
 
-Download BARemapper_Setup_v5.2.2.zip from the BA website or:
+Download BARemapper_Setup_v5.3.0.zip from the BA website or:
 https://github.com/DiyGolfGuy/BA-Remapper/releases/latest
 
 Extract the ZIP. If Remapper is running, right-click its green BA tray
@@ -32,9 +32,8 @@ FN + Aim Down:             Move Back
 FN + Aim Left:             Next Option
 FN + Aim Right:            Drop Ball / Rehit
 
-The relief menu must be visible for its Smart Click actions. The first
-successful use reads and learns the menu; later presses verify smaller
-areas at the learned spots for faster response.
+These Smart Click actions work on GSPro 4's relief list (5.3.0 is for
+GSPro 4; the older GSPro relief menu is no longer read).
 
 GSPro 4 shows water and OB relief as a numbered list at the top left
 (RELIEF OPTIONS or YOUR OPTIONS). The same buttons work there:
@@ -51,9 +50,42 @@ GSPro 4 shows water and OB relief as a numbered list at the top left
                      then presses Enter itself (Mulligan's number first
                      if it is not highlighted)
 Preview Lie, rotating or moving the map: use the mouse or keyboard.
-Hold FN there and the cheat sheet follows the list: the top line shows
-the choice picked, and each button says what it does for that choice,
-for example ENTER: FLAG LINE, NEXT: 3 REHIT, CLOSER (F).
+
+NO FN NEEDED ON THE RELIEF LIST (5.3.0): when the water or OB list comes
+up, the cheat sheet appears by itself and the buttons above do their
+relief jobs WITHOUT holding FN - Aim Right takes the highlighted choice,
+Aim Left goes to the next one, Tee Left rehits, and Aim Up / Down move a
+Flag Line drop. The sheet's top line shows the choice picked and each
+button says what it does for that choice, for example ENTER: FLAG LINE,
+NEXT: 3 REHIT, CLOSER. FN still works there too, and FN + Club is still
+Clear View. When the list closes, every button is back to normal.
+
+SCRAMBLE CARDS FROM THE BOX (5.3.0): when the scramble shot cards come
+up, the sheet shows the bottom row as the cards:
+  Reset Aim (tap) = card 1, Tee Left = card 2, Tee Right = card 3,
+  Shot Cam = card 4
+Press one: Remapper frames that card and clicks the player's name, so
+GSPro shows where that ball is. Press another to look at that one.
+Aim Right takes the picked card. With Auto-Pick on, the countdown keeps
+going and takes the card picked on the box at zero.
+On the scramble cards the sheet shows at the top right, clear of the
+cards; everywhere else it is where you placed it (Size and Place).
+
+How Remapper knows the screen: a quick look at a few pixels of the
+GSPro picture (no screen reading) about three times a second while the
+GSPro picture is on screen; one Windows OCR read confirms it when the
+list or the cards appear. It works at any resolution, Windows scale and
+screen count. It keeps working after a click on another screen (a video
+on screen 2), as long as no window covers the GSPro picture.
+Screens: any size from 1024 x 768 to 4K, any shape (4:3, 16:9, 16:10,
+ultrawide) and any Windows scale. On screens smaller than 4K the list
+and the cards are read enlarged so no choice or card is missed.
+Each time the scramble cards are read, Remapper also remembers what
+your GSPro draws there, so it spots them quicker and more surely.
+Main window settings:
+  Show it by itself on the relief list and scramble cards
+  On those screens the buttons work without FN
+Turn either off to go back to holding FN.
 
 FN CHEAT SHEET: hold FN in GSPro and a picture of the control box shows
 (bottom left to start), with each button's yellow function printed under
@@ -65,10 +97,26 @@ main window. The sheet appears over GSPro with a green outline:
   Size slider:          bigger or smaller, live (20% to 80% of the
                         GSPro screen width)
   Drag the sheet:       put it anywhere on the GSPro screen
-  Lock it in:           saves the size and spot; FN shows it there
+  Lock it in:           saves the size and spot; it shows there
                         from now on, also after updates
   Back to bottom left:  moves it back to the starting corner
   Cancel:               keeps what was locked in before
+
+THE BOX ALWAYS GOES TO GSPRO (5.3.0): with mapping ON, every box press
+reaches GSPro, even if you clicked another screen (a video, a stats
+page): Remapper brings the GSPro window back to the front first. Only
+the window in front matters, not where the mouse is.
+The relief list and scramble cards work the same way: the sheet still
+comes up by itself, and the first press does that screen's job.
+How Remapper knows GSPro: by its window - the one with GSPro in its
+title (the biggest, if there are several). It does not go by screen
+number or by where the mouse is. A browser tab, the GSPro Discord, a
+folder or a note with GSPro in its name is not taken for the game.
+Windows cannot tell the box from a keyboard, so with mapping ON the
+letters the box uses (Y U O I K A C V J, the arrows, Ctrl+M) also jump
+to GSPro when typed on a keyboard in another program. To type in
+another program, turn mapping OFF first: Ctrl+F12 (and again to turn it
+back on).
 
 Ctrl+F12 toggles Button Mapping. Turn mapping OFF to type normally.
 Closing the main window keeps the app running in the tray; Exit quits.
@@ -79,7 +127,7 @@ Choose Customize a Copy, then Open Button Builder and click a button:
               (click the box and press the key, with Ctrl / Alt / Shift).
               A * on a Builder button means a custom tap.
   Hold FN:    GSPro Hotkey (list, or Custom key or combo...)
-              Smart Click (relief menu, and for GSPro 4's relief list:
+              Smart Click (GSPro 4's relief list:
                 Choice 1 / 2 / 3 + Enter, Lateral Drop / Flag Line /
                 Mulligan + Enter, Rotate Left / Right, Zoom In / Out,
                 Recenter)
@@ -172,9 +220,9 @@ Double-click the green BA tray icon to open the window.
 
 6. IF SOMETHING LOOKS WRONG
 
-Wrong learned Smart Click: release FN and choose Reset Smart Click
-Spots. The next use reads and learns again. Profiles, preferences and
-Taught Screen Click positions stay. Factory Reset is a separate action.
+A relief button did nothing: the GSPro 4 relief list must be on screen
+(top left). Use OCR Test on the main window and send the saved file
+to BA Custom Products if it still does nothing.
 
 No highlight: check both scramble checkboxes, make GSPro active and
 ensure at least two USE cards are visible. The panel can briefly hide

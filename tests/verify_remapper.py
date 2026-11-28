@@ -42,10 +42,24 @@ def function(source, name):
 
 def static_checks(source, baseline):
     # Compare the production algorithms to the known working release.
+    # v5.3.0 (Bruce, 2026-11-27): GSPro 4 only - the older relief menu's
+    # reading (RunOcrAction, ResolveOcrTarget, FindMenuLattice, FindObPair,
+    # LearnSpots, SpotFastResolve, SpotSlot2Confirm, SaveSpots, LoadSpots,
+    # DpiRepeatClick) and Reset Smart Click Spots were removed on purpose.
+    for gone in ["RunOcrAction(", "FindMenuLattice(", "LearnSpots(", "SpotFastResolve(", "ResetSmartSpots"]:
+        assert gone not in source.replace(";    before (RunOcrAction unchanged).", ""), f"Removed GSPro 3 code still present: {gone}"
+    # v5.3.0 (Bruce, 2026-11-27: "how does the software know what gspro
+    # is? all the time every time"): GsproWinRect leaves out look-alike
+    # titles (a browser tab, Discord, a folder, a note); nothing else in
+    # it changed.
+    look_alike = ("        ; v5.3.0: another program can carry the word too (a GSPro\n"
+                  "        ; video in a browser, the GSPro Discord, a folder): not the game.\n"
+                  "        if (GsproLookAlike(id))\n            continue\n")
+    assert function(source, "GsproWinRect").count(look_alike) == 1, "GsproWinRect skips look-alike titles"
+    assert function(source, "GsproWinRect").replace(look_alike, "") == function(baseline, "GsproWinRect"), "Unexpected core change: GsproWinRect"
+    assert 'if (pn = "GSPro.exe")\n        return false' in function(source, "GsproLookAlike"), "GSPro.exe itself is never a look-alike"
     unchanged = [
-        "RunOcrAction", "ResolveOcrTarget", "FindMenuLattice", "FindObPair",
-        "LearnSpots", "SpotFastResolve", "SpotSlot2Confirm", "SaveSpots",
-        "LoadSpots", "DpiClickAt", "DpiRepeatClick", "GsproWinRect",
+        "DpiClickAt",
         "ClientRectByTitle", "ScrambleDecide", "ScrambleSendPick",
         "ScrambleVoteLeader", "ScrambleCountRead",
         "ScrambleVoteSummary", "ScrambleKeepRead",
@@ -61,7 +75,7 @@ def static_checks(source, baseline):
     assert not early, f"Labels or hotkeys before the end of startup: {early}"
     print("PASS: no labels or hotkeys interrupt the startup section")
     for start, end in [
-        ("TrayOcrDump:", "; Forget this PC's locked Smart Click spots"),
+        ("TrayOcrDump:", "KeyTestShow:"),
         ("ScrambleWork:", "OnOpenFolder:"),
         (";  BOX KEY HOTKEYS", ";  HELP WINDOW"),
         ("ExitLabel:", "; ============================================================================"),
@@ -127,9 +141,8 @@ def static_checks(source, baseline):
     assert 'if (FnIsDown)\n            return' in function(source, "HandleBoxKeyDown")
     assert 'SetKeyDelay, 15, 60' in function(source, "SendSecondaryKey")
     assert 'SendEvent, %keys%' in function(source, "SendSecondaryKey")
-    assert 'gResetSmartSpots, Reset Smart Click Spots' in source
     assert 'gOnCleanup,' not in source
-    print(f"PASS: {len(unchanged)} core functions, diagnostics, hotkeys and exit preserved; preview hooks do not change voting, deadlines, cancellation or shot-key delivery")
+    print(f"PASS: {len(unchanged) + 1} core functions, diagnostics, hotkeys and exit preserved; preview hooks do not change voting, deadlines, cancellation or shot-key delivery")
 
 
 SINK = r'''
@@ -159,6 +172,8 @@ UiSmoke:
     SetTimer, ScrambleTick, Off
     SetTimer, CdTick, Off
     SetTimer, OcrWarmup, Off
+    SetTimer, ScreenWatchTick, Off
+    ScreenWatchOn := false
     try {
         Assert(LaunchHow = "show" && RemapActive, "Opened with /show turns mapping on")
         Assert(DllCall("IsWindowVisible", "Ptr", MainHwnd), "Opened with /show shows the window")
@@ -222,23 +237,6 @@ UiSmoke:
         SetTimer, CloseFnNotice, 100
         ConfigButton("resetaim", "RESET AIM", "A")
         Assert(ConfiguringProfile = "", "FN modifier has no unusable secondary editor")
-
-        Spots := {MoveForward: {x: 5, y: 6, w: 30, h: 12, inferred: 0}}
-        SpotWin := "0,0,1920,1080"
-        SaveSpots()
-        LastActionId := "MoveForward", LastClickX := 123, LastClickY := 456
-        LastFireTick := A_TickCount, LastScanObj := {found: true}, LastScanTick := A_TickCount
-        PendingOcrAction := "MoveForward", VerifyActionId := "DropRehit"
-        FileRead, profileBeforeReset, % ProfilesDir . "\Regression Copy.ini"
-        SaveSettings()
-        Gosub, ResetSmartSpots
-        Assert(SpotWin = "" && Spots.Count() = 0, "Reset clears learned spots")
-        Assert(LastActionId = "" && LastClickX = 0 && LastClickY = 0 && LastFireTick = 0, "Reset clears repeat cache")
-        Assert(LastScanObj = "" && LastScanTick = 0 && PendingOcrAction = "" && VerifyActionId = "", "Reset clears scan and pending caches")
-        FileRead, profileAfterReset, % ProfilesDir . "\Regression Copy.ini"
-        Assert(profileBeforeReset = profileAfterReset && StartupProfile = startupBefore, "OCR reset preserves profile and startup")
-        IniRead, preference, %ConfigFile%, App, ActiveProfile
-        Assert(preference = ActiveProfile, "OCR reset preserves preferences")
 
         WinMove, ahk_id %BuilderHwnd%, , , , 520, 340
         UpdateSettingsScroll(BuilderHwnd)
@@ -335,9 +333,10 @@ UiSmoke:
         gw := ClientRectByTitle(GSProWinNeedle, GSProWinExclude)
         WinGetPos, chx, chy, chw, chh, ahk_id %CheatHwnd%
         Assert(chx >= gw.x && chx <= gw.x + 60 && chy + chh <= gw.y + gw.h + 1 && chy + chh >= gw.y + gw.h - 60 && chw >= 300, "Cheat sheet sits at the bottom left of GSPro: " . chx . "," . chy . " " . chw . "x" . chh . " in " . gw.x . "," . gw.y . " " . gw.w . "x" . gw.h)
-        Assert(Abs(chw - Round(Min(gw.w * 0.6, gw.w - 40, (gw.h - 40) * 940 / 640))) <= 2, "Cheat sheet is the chosen size (60% of GSPro): " . chw . " of " . gw.w)
-        px := CheatPixels(CheatHwnd)
-        Assert(px.yellow >= 40 && px.button >= 400 && px.fnyellow >= 60, "Cheat sheet draws grey buttons, a yellow FN button and yellow print (yellow " . px.yellow . ", button " . px.button . ", FN " . px.fnyellow . ")")
+        Assert(Abs(chw - Round(Min(gw.w * 0.6, gw.w - 40, (gw.h - 40) * 940 / 710))) <= 2, "Cheat sheet is the chosen size (60% of GSPro): " . chw . " of " . gw.w)
+        px := CheatPixels(CheatHwnd, "fn")
+        Assert(px.yellow >= 40 && px.button >= 300 && px.fnyellow >= 10, "Cheat sheet draws the box picture's cream buttons, a yellow ring round FN and yellow print (yellow " . px.yellow . ", button " . px.button . ", FN " . px.fnyellow . ")")
+        Assert(InStr(CheatShownText, "HOLD FN + BUTTON") && InStr(CheatShownText, "clubup=CLEAR VIEW") && InStr(CheatShownText, "resetaim=FN - HOLD") && !InStr(CheatShownText, "(plain)") && FileExist(BoxPicPath), "The sheet is the box picture with the FN print: " . CheatShownText)
         WinGet, cheatEx, ExStyle, ahk_id %CheatHwnd%
         Assert((cheatEx & 0x08000020) = 0x08000020, "Cheat sheet is click-through and never takes focus")
         ; The B fix (FN + Club Down = Clear View) with the sheet up:
@@ -381,7 +380,7 @@ UiSmoke:
         Gosub, CheatAdjSizeMove
         Sleep, 300
         WinGetPos, ax, ay, aw, ah, ahk_id %CheatHwnd%
-        Assert(Abs(aw - Round(Min(Max(gw.w * 0.5, 300), gw.w - 40, (gw.h - 40) * 940 / 640))) <= 2 && CheatSizePct = 50, "The size slider resizes the sheet live: " . aw)
+        Assert(Abs(aw - Round(Min(Max(gw.w * 0.5, 300), gw.w - 40, (gw.h - 40) * 940 / 710))) <= 2 && CheatSizePct = 50, "The size slider resizes the sheet live: " . aw)
         ; FN held while placing neither replaces nor hides it.
         HandleBoxKeyDown("a")
         Sleep, 600
@@ -467,21 +466,100 @@ UiSmoke:
         Gosub, KeepReliefExpect
         HandleBoxKeyDown("a")
         Sleep, 750
-        WinGetText, cheatText, ahk_id %CheatHwnd%
-        Assert(CheatVisible && InStr(cheatText, "ENTER: FLAG LINE") && InStr(cheatText, "CLOSER (F)") && InStr(cheatText, "2 FLAG LINE PICKED"), "Held FN on the relief list: the sheet shows the Flag Line labels")
+        cheatText := CheatShownText
+        Assert(CheatVisible && InStr(cheatText, "ENTER: FLAG LINE") && InStr(cheatText, "up=CLOSER") && InStr(cheatText, "2 FLAG LINE PICKED") && InStr(cheatText, "HOLD FN"), "Held FN on the relief list: the sheet shows the Flag Line labels: " . cheatText)
         ReliefExpectSel := 1
         Sleep, 800
-        WinGetText, cheatText, ahk_id %CheatHwnd%
-        Assert(CheatVisible && InStr(cheatText, "ENTER: LATERAL") && !InStr(cheatText, "CLOSER") && InStr(cheatText, "1 LATERAL PICKED"), "Picking another choice redraws the sheet for it")
+        cheatText := CheatShownText
+        Assert(CheatVisible && InStr(cheatText, "ENTER: LATERAL") && !InStr(cheatText, "CLOSER") && InStr(cheatText, "1 LATERAL PICKED"), "Picking another choice redraws the sheet for it: " . cheatText)
         SetTimer, KeepReliefExpect, Off
         ReliefLast := "", ReliefExpectSel := 0
         Sleep, 800
-        WinGetText, cheatText, ahk_id %CheatHwnd%
-        Assert(CheatVisible && !InStr(cheatText, "RELIEF LIST") && !InStr(cheatText, "ENTER:"), "The list closing puts the printed names back")
+        cheatText := CheatShownText
+        Assert(CheatVisible && !InStr(cheatText, "RELIEF LIST") && !InStr(cheatText, "ENTER:"), "The list closing puts the printed names back: " . cheatText)
         HandleBoxKeyDown("o")
         HandleBoxKeyUp("a")
         OcrBusy := false
         Sleep, 100
+        ; ---- v5.3.0: the screen watch's sheets (no screen reads here) ----
+        ; Relief list confirmed by the watch: relief buttons need no FN,
+        ; Clear View stays on FN (grey), FN prints as FN.
+        fakeRel.at := A_TickCount   ; a fresh read (the sheet uses reads under 4 s old)
+        ReliefLast := fakeRel, ReliefExpectSel := 2, ReliefExpectTick := A_TickCount
+        ReliefWatchUp := true, ReliefNoFn := true
+        wl := {}
+        for i, l in CheatSheetLabels(CheatModel(), CheatReliefState())
+            wl[l.id] := l
+        Assert(wl.right.text = "ENTER: FLAG LINE" && wl.up.text = "CLOSER" && wl.down.text = "FURTHER BACK" && wl.clubup.text = "" && wl.resetaim.text = "" && !wl.resetaim.fn && wl.teeleft.text = "REHIT + ENTER", "Relief list without FN: only the relief jobs (no Clear View, no FN ring) [" . wl.right.text . "|" . wl.up.text . "|" . wl.clubup.text . "|" . wl.resetaim.text . "]")
+        ReliefWatchUp := false, ReliefLast := ""
+        nl := {}
+        for i, l in CheatSheetLabels(CheatModel(), CheatReliefState())
+            nl[l.id] := l
+        Assert(nl.clubup.text = "CLEAR VIEW" && nl.resetaim.text = "FN - HOLD" && nl.resetaim.fn && nl.right.text = "" && nl.left.text = "" && nl.teeleft.text = "", "FN held in play: Clear View and FN only, no relief jobs [" . nl.clubup.text . "|" . nl.right.text . "]")
+        ReliefLast := fakeRel, ReliefWatchUp := true
+        Assert(ReliefNoFnAction("DropRehit") && ReliefNoFnAction("ReliefZoomIn") && !ReliefNoFnAction(""), "Relief jobs are the ones that switch")
+        ReliefWatchUp := false, ReliefLast := "", ReliefExpectSel := 0
+        ; Scramble cards (Auto-Pick off, as the screen watch reads them):
+        ; the bottom row picks, AIM right takes, the sheet says so.
+        ScrambleAutoPick := false
+        WinActivate, GSPro BA Remapper regression target
+        WinWaitActive, GSPro BA Remapper regression target, , 2
+        sinkWin := ClientRectByTitle(GSProWinNeedle, GSProWinExclude)
+        cardUses := [{x: sinkWin.x + 200, y: sinkWin.y + 400, w: 40, h: 16}, {x: sinkWin.x + 500, y: sinkWin.y + 400, w: 40, h: 16}]
+        ScrambleBoxCards := {uses: cardUses, n: 2, hwnd: sinkWin.hwnd, auto: false, id: "b1"}
+        ; no cards on this test window: a press reads the strip, finds no
+        ; button word, and the button keeps its own job (C reaches GSPro? no:
+        ; checked with a harmless key below); then mark them proven
+        ScrambleBoxOkId := "", OcrBusy := false
+        Assert(!ScrambleBoxConfirm(ScrambleBoxCards) && ScrambleBoxCards = "", "Cards known by colour only are checked by a small read at the press: none there, the buttons keep their own jobs")
+        ScrambleBoxRetry := 0
+        ScrambleBoxCards := {uses: cardUses, n: 2, hwnd: sinkWin.hwnd, auto: false, id: "b1"}
+        ScrambleBoxOkId := "b1", ScrambleBoxOkTick := A_TickCount + 600000
+        Assert(IsObject(ScrambleBoxCardsNow()) && ScrambleBoxPickNow(ScrambleBoxCards) = 0, "Scramble cards known, nothing picked yet")
+        HandleBoxKeyDown("c")      ; Tee Left = card 2 (clicks the name, no V/C key)
+        HandleBoxKeyUp("c")
+        Assert(ScrambleBoxPickNow(ScrambleBoxCards) = 2, "Tee Left picks card 2")
+        HandleBoxKeyDown("v")      ; Tee Right = card 3: not on a 2-card screen
+        HandleBoxKeyUp("v")
+        Assert(ScrambleBoxPickNow(ScrambleBoxCards) = 2, "Card 3 on a 2-card screen changes nothing")
+        CheatDraw()
+        cheatText := CheatShownText
+        Assert(CheatVisible && InStr(cheatText, "SCRAMBLE:  CARD 2 PICKED") && InStr(cheatText, "resetaim=CARD 1|") && InStr(cheatText, "teeleft=CARD 2") && InStr(cheatText, "teeright=|") && InStr(cheatText, "right=TAKE CARD 2") && InStr(cheatText, "NO FN NEEDED") && InStr(cheatText, "clubup=|") && InStr(cheatText, "heatmap=|"), "Scramble sheet: cards along the bottom row, TAKE CARD 2 on AIM right: " . cheatText)
+        WinGetPos, scx, scy, scw, , ahk_id %CheatHwnd%
+        sg := CheatGeom(sinkWin)
+        Assert(Abs(scx + scw - (sinkWin.x + sinkWin.w - sg.pad)) <= 2 && Abs(scy - (sinkWin.y + sg.pad)) <= 2 && CheatPosX = 0 && CheatPosY = 1000, "On the scramble cards the sheet sits top right (its saved spot is bottom left): " . scx . "," . scy)
+        px := CheatPixels(CheatHwnd, "scramble")
+        CheatHide()
+        WinActivate, GSPro BA Remapper regression target
+        WinWaitActive, GSPro BA Remapper regression target, , 2
+        HandleBoxKeyDown("a")      ; FN tapped alone = card 1 (no A key)
+        HandleBoxKeyUp("a")
+        Assert(ScrambleBoxPickNow(ScrambleBoxCards) = 1, "Reset Aim tapped picks card 1")
+        SendSecondaryKey("{F6}")    ; markers: F6 / F7 (F10 would open the window menu)
+        HandleBoxKeyDown("Right")  ; AIM right takes card 1: the key 1, no arrow
+        HandleBoxKeyUp("Right")
+        SendSecondaryKey("{F7}")
+        Assert(ScrambleBoxCards = "" && ScrambleBoxPick = 0, "AIM right took the card; the screen is done")
+        ; Learned cards: the saved form is checked; the name is the top
+        ; text line on the card (a lone digit is the card's number badge).
+        lp := ScrambleParsePattern("1609|40000,73000,12882203;45000,73000,12882203;60000,73000,4210752;65000,73000,4210752")
+        Assert(IsObject(lp) && lp.pts.MaxIndex() = 4 && lp.palette.MaxIndex() = 2 && !IsObject(ScrambleParsePattern("abc")) && !IsObject(ScrambleParsePattern("1609|1,2")) && !IsObject(ScrambleParsePattern("1609|200000,1,1;1,1,1;1,1,1;1,1,1")), "Learned scramble spots: saved form checked")
+        nmUses := [{x: 300, y: 600, w: 40, h: 16}, {x: 600, y: 600, w: 40, h: 16}]
+        nmLines := [{text: "1", x: 250, y: 450, w: 10, h: 18}, {text: "AL", x: 300, y: 470, w: 40, h: 30}, {text: "210", x: 300, y: 515, w: 45, h: 28}, {text: "ROUGH 2ND", x: 270, y: 560, w: 110, h: 16}, {text: "BOB", x: 595, y: 470, w: 50, h: 30}, {text: "196 yds", x: 330, y: 300, w: 60, h: 16}]
+        nm := ScrambleNameFromLines(nmLines, nmUses, 1)
+        nm2 := ScrambleNameFromLines(nmLines, nmUses, 2)
+        Assert(IsObject(nm) && nm[1] = 320 && nm[2] = 485 && IsObject(nm2) && nm2[1] = 620 && !IsObject(ScrambleNameFromLines("", nmUses, 1)), "Card name spot from the read: AL at 320,485, BOB at 620,485 (badge and scene text skipped)")
+        ; Auto-Pick on: the box card wins the vote at zero.
+        ScrambleAutoPick := true, ScrambleArmedTick := A_TickCount, ScrambleCoolDown := false, ScrambleMissTicks := 0
+        ScrambleLastUses := [{x: sinkWin.x + 100, y: sinkWin.y + 400, w: 40, h: 16}, {x: sinkWin.x + 300, y: sinkWin.y + 400, w: 40, h: 16}, {x: sinkWin.x + 500, y: sinkWin.y + 400, w: 40, h: 16}]
+        ScrambleLastHwnd := sinkWin.hwnd
+        ScrambleReadsN := {3: 4}, ScrambleVotes := {"3-1": 4}, ScrambleVoteLast := "3-1"
+        Assert(ScrambleVoteLeader() = 1, "Auto-Pick's own choice is card 1")
+        HandleBoxKeyDown("v")      ; Tee Right = card 3
+        HandleBoxKeyUp("v")
+        Assert(ScrambleVoteLeader() = 3 && ScrambleBoxPickNow(ScrambleBoxCardsNow()) = 3, "Card 3 picked on the box is the one Auto-Pick takes at zero")
+        ScrambleAutoPick := false, ScrambleArmedTick := 0, ScrambleLastUses := "", ScrambleResetReads()
+        ScrambleBoxPick := 0
         ; ---- v5.2.1 Mulligan button ----
         ; The box's Ctrl+M reaches GSPro untouched (the sink logs it
         ; between F8 and F9); with no relief list nothing follows it.
@@ -564,9 +642,46 @@ UiSmoke:
         SendEvent, ^m
         SendLevel, 0
         Sleep, 900
-        Assert(MulliganPressTick > mulBefore && WinActive("ahk_exe notepad.exe"), "Ctrl+M with GSPro open behind another program is watched; nothing is pressed without the relief list")
+        Assert(MulliganPressTick > mulBefore && WinActive("GSPro BA Remapper regression target"), "Ctrl+M with GSPro open behind another program goes to GSPro (brought to the front); nothing more without the relief list")
+        ; v5.3.0: a plain box tap with another program in front: GSPro
+        ; comes to the front first and the key lands there (U alone
+        ; between the F3 / F4 markers in the key target's log).
+        SendSecondaryKey("{F3}")
+        WinActivate, ahk_exe notepad.exe
+        WinWaitActive, ahk_exe notepad.exe, , 3
+        awayFront := WinActive("ahk_exe notepad.exe") ? true : false
+        HandleBoxKeyDown("u")      ; tap Putt with Notepad in front
+        HandleBoxKeyUp("u")
+        Sleep, 250
+        Assert(awayFront && WinActive("GSPro BA Remapper regression target"), "A box tap with another program in front brings GSPro to the front first (Notepad was in front: " . awayFront . ")")
+        SendSecondaryKey("{F4}")
         WinKill, ahk_exe notepad.exe   ; Ctrl+M typed a line break: no save prompt
         WinWaitClose, ahk_exe notepad.exe, , 5
+        ; v5.3.0 ("how does the software know what gspro is? all the time
+        ; every time"): another program's window with GSPro in its title is
+        ; not the game.  A note named "GSPro notes" in Notepad, maximized
+        ; (bigger than the game window) and in front: the game is still the
+        ; GSPro window, and a box tap goes there (U alone between F4 / F5).
+        FileAppend, a look-alike window title`n, %A_ScriptDir%\GSPro notes.txt
+        Run, notepad.exe "%A_ScriptDir%\GSPro notes.txt", %A_WinDir%
+        WinWait, GSPro notes ahk_exe notepad.exe, , 10
+        likeHwnd := WinExist("GSPro notes ahk_exe notepad.exe")
+        WinMaximize, ahk_id %likeHwnd%
+        WinActivate, ahk_id %likeHwnd%
+        WinWaitActive, ahk_id %likeHwnd%, , 3
+        WinGetTitle, likeTitle, ahk_id %likeHwnd%
+        sinkHwnd := WinExist("GSPro BA Remapper regression target")
+        likeGame := GsproWinRect(GSProWinNeedle, GSProWinExclude)
+        WinGetPos, , , likeW, likeH, ahk_id %likeHwnd%
+        Assert(likeHwnd && InStr(likeTitle, "GSPro") && GsproLookAlike(likeHwnd) && !GsproIsGame(likeHwnd) && GsproIsGame(sinkHwnd) && !GsproLookAlike(sinkHwnd), "A Notepad window titled '" . likeTitle . "' (" . likeW . " x " . likeH . ") is a look-alike, not the game " . WinNote(likeHwnd, false))
+        Assert(WinActive("ahk_id " . likeHwnd) && !GsproIsFront() && likeGame.found && likeGame.hwnd = sinkHwnd && likeW * likeH > likeGame.w * likeGame.h, "With the bigger look-alike in front, the game is still the GSPro window (found: " . likeGame.title . ")")
+        HandleBoxKeyDown("u")      ; tap Putt with the look-alike in front
+        HandleBoxKeyUp("u")
+        Sleep, 250
+        Assert(WinActive("ahk_id " . sinkHwnd), "A box tap with a look-alike 'GSPro' window in front goes to the real GSPro window")
+        SendSecondaryKey("{F5}")
+        WinKill, ahk_id %likeHwnd%
+        WinWaitClose, ahk_id %likeHwnd%, , 5
         ; Builder test mode: box presses show what they do, nothing is sent.
         Gosub, ShowBuilder
         GuiControl, Builder:, BuilderTest, 1
@@ -679,7 +794,7 @@ Return
 ; Capture the cheat sheet from the screen and count its grey button,
 ; yellow print and yellow FN-button pixels.  Its capture exclusion is
 ; lifted for the capture, the way CapturePreview does it.
-CheatPixels(hwnd) {
+CheatPixels(hwnd, name := "") {
     WinGetPos, wx, wy, w, h, ahk_id %hwnd%
     DllCall("SetWindowDisplayAffinity", "Ptr", hwnd, "UInt", 0)
     DllCall("dwmapi\DwmFlush")
@@ -697,17 +812,28 @@ CheatPixels(hwnd) {
         while (x < w) {
             c := DllCall("GetPixel", "Ptr", mdc, "Int", x, "Int", y, "UInt")
             r := c & 0xFF, g := (c >> 8) & 0xFF, b := (c >> 16) & 0xFF
-            if (r = 0xFF && g = 0xD4 && b = 0x00)
-                out.fnyellow += 1
-            else if (r > 190 && g > 160 && b < 110)
+            if (r > 215 && g > 165 && b < 90) {
                 out.yellow += 1
-            if (Abs(r - 0x3A) < 6 && Abs(g - 0x3F) < 6 && Abs(b - 0x47) < 6)
+                if (x < w * 0.25 && y > h * 0.72)
+                    out.fnyellow += 1
+            }
+            if (r > 200 && g > 190 && b > 165 && r >= b && r - b < 50)
                 out.button += 1
             x += 3
         }
         y += 3
     }
-    DllCall("SelectObject", "Ptr", mdc, "Ptr", old, "Ptr")
+    if (name != "") {
+        ; the sheet as drawn, for the verification artifacts
+        VarSetCapacity(bi, 40, 0)
+        NumPut(40, bi, 0, "UInt"), NumPut(w, bi, 4, "Int"), NumPut(-h, bi, 8, "Int"), NumPut(1, bi, 12, "UShort"), NumPut(32, bi, 14, "UShort")
+        VarSetCapacity(px, w * h * 4, 0)
+        DllCall("SelectObject", "Ptr", mdc, "Ptr", old, "Ptr")
+        DllCall("GetDIBits", "Ptr", mdc, "Ptr", bmp, "UInt", 0, "UInt", h, "Ptr", &px, "Ptr", &bi, "UInt", 0)
+        SaveDibBmp(A_ScriptDir . "\cheat-" . name . ".bmp", &px, w, h)
+    } else {
+        DllCall("SelectObject", "Ptr", mdc, "Ptr", old, "Ptr")
+    }
     DllCall("DeleteObject", "Ptr", bmp)
     DllCall("DeleteDC", "Ptr", mdc)
     DllCall("ReleaseDC", "Ptr", 0, "Ptr", scr)
@@ -835,6 +961,8 @@ ScrambleSmoke:
     SetTimer, ScrambleTick, Off
     SetTimer, CdTick, Off
     SetTimer, OcrWarmup, Off
+    SetTimer, ScreenWatchTick, Off
+    ScreenWatchOn := false
     fails := 0
     try {
         q := Chr(34)
@@ -1086,6 +1214,8 @@ PreviewSmoke:
     SetTimer, ScrambleTick, Off
     SetTimer, CdTick, Off
     SetTimer, OcrWarmup, Off
+    SetTimer, ScreenWatchTick, Off
+    ScreenWatchOn := false
     try {
         ; Geometry uses physical coordinates at 1x/2x and negative
         ; desktop origins, for every card in 2/3/4-player groups.
@@ -1305,6 +1435,8 @@ RealShotSmoke:
     SetTimer, ScrambleTick, Off
     SetTimer, CdTick, Off
     SetTimer, OcrWarmup, Off
+    SetTimer, ScreenWatchTick, Off
+    ScreenWatchOn := false
     fails := 0
     try {
         dir := A_Args[1]
@@ -1402,6 +1534,8 @@ ReliefShotSmoke:
     SetTimer, ScrambleTick, Off
     SetTimer, CdTick, Off
     SetTimer, OcrWarmup, Off
+    SetTimer, ScreenWatchTick, Off
+    ScreenWatchOn := false
     fails := 0
     try {
         dir := A_Args[1]
@@ -1513,6 +1647,566 @@ ReliefShotSmoke:
         ScrambleNote(ok ? "PASS" : "FAIL", "OB with Mulligan: Rehit = 1 Enter, Next Option cycles 1-2, no Flag Line keys; Mulligan button = 2 Enter; labels NEXT: 2 MULLIGAN / ENTER: MULLIGAN")
         if (!ok)
             fails += 1
+        ; ---- v5.3.0 screen watch ----
+        ; The cheap looks on Bruce's screenshots, as captured and at 1920
+        ; wide: the relief panel only on relief screens, the scramble
+        ; cards only on scramble screens.
+        for i, f in ["relief-water-lateral.jpg", "relief-water-flagline.jpg", "relief-ob-rehit.jpg", "relief-water-mulligan-picked.jpg", "gspro-2p.jpg", "gspro-3p.jpg", "gspro-4p-select.jpg"] {
+            src := LoadPicture(dir . "\" . f)
+            VarSetCapacity(bm, 32, 0)
+            DllCall("GetObject", "Ptr", src, "Int", A_PtrSize = 8 ? 32 : 24, "Ptr", &bm)
+            W := NumGet(bm, 4, "Int"), H := NumGet(bm, 8, "Int")
+            isRelief := InStr(f, "relief") ? 1 : 0
+            for k, tw in [W, 1920] {
+                th := Round(H * tw / W)
+                hbm := (tw = W) ? src : ShotScaled(src, W, H, tw, th)
+                dc := DllCall("CreateCompatibleDC", "Ptr", 0, "Ptr")
+                o := DllCall("SelectObject", "Ptr", dc, "Ptr", hbm, "Ptr")
+                lwin := {found: true, x: 0, y: 0, w: tw, h: th}
+                rl := ReliefLook(lwin, dc)
+                sl := ScrambleBoxLook(lwin, dc) ? 1 : 0
+                DllCall("SelectObject", "Ptr", dc, "Ptr", o, "Ptr")
+                DllCall("DeleteDC", "Ptr", dc)
+                ok := ((rl.up ? 1 : 0) = isRelief) && (sl = 1 - isRelief)
+                ScrambleNote(ok ? "PASS" : "FAIL", "screen watch look, " . f . " at " . tw . "x" . th . ": relief panel " . (rl.up ? "seen" : "not seen") . " (panel " . Round(rl.panel * 100) . "%, cards " . Round((rl.card + rl.blue) * 100) . "%), scramble cards " . (sl ? "seen" : "not seen"))
+                if (!ok)
+                    fails += 1
+                if (hbm != src)
+                    DllCall("DeleteObject", "Ptr", hbm)
+            }
+            DllCall("DeleteObject", "Ptr", src)
+        }
+        ; Any scenery: the relief panel cut from the water screenshot and
+        ; laid over fairway, a 4-player scramble screen and OB sand; the
+        ; scramble cards cut from the 3-player screenshot and laid over
+        ; water and sand; and both again under a white grid drawn right
+        ; across the picture (worse than the green's moving grid lines).
+        scen := {}
+        for i, f in ["relief-water-flagline.jpg", "relief-ob-rehit.jpg", "relief-water-lateral.jpg", "gspro-2p.jpg", "gspro-3p.jpg", "gspro-4p-select.jpg"] {
+            src := LoadPicture(dir . "\" . f)
+            VarSetCapacity(bm, 32, 0)
+            DllCall("GetObject", "Ptr", src, "Int", A_PtrSize = 8 ? 32 : 24, "Ptr", &bm)
+            scen[f] := ShotScaled(src, NumGet(bm, 4, "Int"), NumGet(bm, 8, "Int"), 1920, 1196)
+            DllCall("DeleteObject", "Ptr", src)
+        }
+        swin := {found: true, x: 0, y: 0, w: 1920, h: 1196}
+        cases := [["relief", "relief-water-flagline.jpg", "gspro-2p.jpg"], ["relief", "relief-water-flagline.jpg", "gspro-4p-select.jpg"], ["relief", "relief-water-flagline.jpg", "relief-ob-rehit.jpg"]
+            , ["relief", "relief-ob-rehit.jpg", "gspro-3p.jpg"], ["cards", "gspro-3p.jpg", "relief-water-lateral.jpg"], ["cards", "gspro-3p.jpg", "relief-ob-rehit.jpg"], ["cards", "gspro-4p-select.jpg", "relief-water-lateral.jpg"]]
+        for i, cs in cases {
+            for g, grid in [0, 1] {
+                ddc := DllCall("CreateCompatibleDC", "Ptr", 0, "Ptr"), sdc := DllCall("CreateCompatibleDC", "Ptr", 0, "Ptr")
+                scr0 := DllCall("GetDC", "Ptr", 0, "Ptr")
+                work := DllCall("CreateCompatibleBitmap", "Ptr", scr0, "Int", 1920, "Int", 1196, "Ptr")
+                DllCall("ReleaseDC", "Ptr", 0, "Ptr", scr0)
+                od := DllCall("SelectObject", "Ptr", ddc, "Ptr", work, "Ptr")
+                os := DllCall("SelectObject", "Ptr", sdc, "Ptr", scen[cs[3]], "Ptr")
+                DllCall("BitBlt", "Ptr", ddc, "Int", 0, "Int", 0, "Int", 1920, "Int", 1196, "Ptr", sdc, "Int", 0, "Int", 0, "UInt", 0x00CC0020)
+                DllCall("SelectObject", "Ptr", sdc, "Ptr", scen[cs[2]], "Ptr")
+                if (cs[1] = "relief")
+                    px0 := 0, py0 := Round(1196 * 0.115), pw0 := Round(1196 * 0.38), ph0 := Round(1196 * 0.29)
+                else
+                    px0 := Round(1920 * 0.25), py0 := Round(1196 * 0.60), pw0 := Round(1920 * 0.50), ph0 := Round(1196 * 0.20)
+                DllCall("BitBlt", "Ptr", ddc, "Int", px0, "Int", py0, "Int", pw0, "Int", ph0, "Ptr", sdc, "Int", px0, "Int", py0, "UInt", 0x00CC0020)
+                if (grid) {
+                    gx := 0
+                    while (gx < 1920) {
+                        DllCall("PatBlt", "Ptr", ddc, "Int", gx, "Int", 0, "Int", 1, "Int", 1196, "UInt", 0x00FF0062)
+                        gx += 17
+                    }
+                    gy := 0
+                    while (gy < 1196) {
+                        DllCall("PatBlt", "Ptr", ddc, "Int", 0, "Int", gy, "Int", 1920, "Int", 1, "UInt", 0x00FF0062)
+                        gy += 17
+                    }
+                }
+                seen := (cs[1] = "relief") ? (ReliefLook(swin, ddc).up ? 1 : 0) : (ScrambleBoxLook(swin, ddc) ? 1 : 0)
+                DllCall("SelectObject", "Ptr", sdc, "Ptr", os, "Ptr"), DllCall("SelectObject", "Ptr", ddc, "Ptr", od, "Ptr")
+                DllCall("DeleteDC", "Ptr", sdc), DllCall("DeleteDC", "Ptr", ddc), DllCall("DeleteObject", "Ptr", work)
+                ScrambleNote(seen ? "PASS" : "FAIL", "any scenery: " . (cs[1] = "relief" ? "relief panel" : "scramble cards") . " from " . cs[2] . " over " . cs[3] . (grid ? " under a white grid" : "") . ": " . (seen ? "seen" : "NOT seen"))
+                if (!seen)
+                    fails += 1
+            }
+        }
+        ; Other picture shapes and sizes (v5.3.0, "all screens and
+        ; resolutions").  Bruce's screenshots are all about 16:10.  A
+        ; picture of another shape is built from them: scenery stretched
+        ; to the shape, then the real relief panel (4 choices) or the real
+        ; 4 scramble cards laid on it - at the same size against the
+        ; picture's height, and at the size GSPro would give them if it
+        ; sized its panels by the picture's width instead.  Each must be
+        ; seen by the look and read in full.
+        saveLearned2 := ScrambleLearned
+        ScrambleLearned := {}
+        pm := LoadPicture(dir . "\relief-water-mulligan.jpg")
+        VarSetCapacity(bm, 32, 0)
+        DllCall("GetObject", "Ptr", pm, "Int", A_PtrSize = 8 ? 32 : 24, "Ptr", &bm)
+        PW := NumGet(bm, 4, "Int"), PH := NumGet(bm, 8, "Int")
+        pc := LoadPicture(dir . "\gspro-4p-select.jpg")
+        DllCall("GetObject", "Ptr", pc, "Int", A_PtrSize = 8 ? 32 : 24, "Ptr", &bm)
+        CW := NumGet(bm, 4, "Int"), CH := NumGet(bm, 8, "Int")
+        shapes := [["16:9 (1920 x 1080)", 1920, 1080, 1.0], ["16:9, panels sized by width", 1920, 1080, 1.105]
+            , ["4:3 (1440 x 1080)", 1440, 1080, 1.0], ["4:3, panels sized by width", 1440, 1080, 0.829]
+            , ["5:4 (1350 x 1080)", 1350, 1080, 1.0]
+            , ["21:9 (2560 x 1080)", 2560, 1080, 1.0], ["21:9, panels half-way to width", 2560, 1080, 1.22], ["21:9, panels sized by width", 2560, 1080, 1.485]
+            , ["32:9 (3840 x 1080)", 3840, 1080, 1.0]
+            , ["16:10 at 1440 lines (2317 x 1440)", 2317, 1440, 1.0], ["16:10 at 1300 lines (2092 x 1300)", 2092, 1300, 1.0]
+            , ["16:9 at 1440 lines (2560 x 1440)", 2560, 1440, 1.0], ["16:9 at 4K (3840 x 2160)", 3840, 2160, 1.0]
+            , ["16:10 at 900 lines (1448 x 900)", 1448, 900, 1.0], ["16:9 at 768 lines (1366 x 768)", 1366, 768, 1.0], ["4:3 at 768 lines (1024 x 768)", 1024, 768, 1.0]]
+        for i, sp in shapes {
+            tw := sp[2], th := sp[3], us := sp[4]
+            for q, part in ["relief", "cards"] {
+                hb := ShapePicture(part, part = "relief" ? pm : pc, part = "relief" ? PW : CW, part = "relief" ? PH : CH, tw, th, us)
+                dc := DllCall("CreateCompatibleDC", "Ptr", 0, "Ptr")
+                o := DllCall("SelectObject", "Ptr", dc, "Ptr", hb, "Ptr")
+                swin2 := {found: true, x: 0, y: 0, w: tw, h: th, hwnd: 0}
+                if (part = "relief") {
+                    seen := ReliefLook(swin2, dc).up ? 1 : 0
+                    scard := ScrambleBoxLook(swin2, dc) ? 1 : 0
+                    DllCall("SelectObject", "Ptr", dc, "Ptr", o, "Ptr")
+                    rel := ReliefRead(swin2, Func("ShotRead").Bind(hb))
+                    got := ReliefNote(rel)
+                    ok := seen && !scard && (got = "4 choices: 1 LATERAL DROP, 2 FLAG LINE, 3 REHIT, 4 MULLIGAN")
+                    ScrambleNote(ok ? "PASS" : "FAIL", "picture shape " . sp[1] . ": relief list " . (seen ? "seen" : "NOT seen") . " by the look, read as [" . got . "]" . (scard ? ", scramble look fooled" : ""))
+                } else {
+                    seen := ScrambleBoxLook(swin2, dc) ? 1 : 0
+                    srel := ReliefLook(swin2, dc).up ? 1 : 0
+                    DllCall("SelectObject", "Ptr", dc, "Ptr", o, "Ptr")
+                    st := ScrambleCardStrip(swin2)
+                    how := "", nb := 0
+                    for z, fz in (th >= 2000 ? [1] : th < 850 ? [3, 4] : th < 1300 ? [2, 3] : [1, 2]) {
+                        rd := ShotRead(hb, st.x, st.y, st.w, st.h, fz)
+                        nz := ScrambleRowButtons(rd.lines).Length()
+                        how .= fz . "x: " . nz . " "
+                        nb := Max(nb, nz)
+                        if (nb >= 4)
+                            break
+                    }
+                    ok := seen && !srel && nb = 4
+                    ScrambleNote(ok ? "PASS" : "FAIL", "picture shape " . sp[1] . ": 4 scramble cards " . (seen ? "seen" : "NOT seen") . " by the look, " . nb . " read in the strip (" . Trim(how) . ")" . (srel ? ", relief look fooled" : ""))
+                }
+                DllCall("DeleteDC", "Ptr", dc)
+                DllCall("DeleteObject", "Ptr", hb)
+                if (!ok)
+                    fails += 1
+            }
+        }
+        ; A screen left of and above the main one has negative
+        ; coordinates: the same looks through a picture placed there.
+        for q, part in ["relief", "cards"] {
+            hb := ShapePicture(part, part = "relief" ? pm : pc, part = "relief" ? PW : CW, part = "relief" ? PH : CH, 1920, 1080, 1.0)
+            dc := DllCall("CreateCompatibleDC", "Ptr", 0, "Ptr")
+            o := DllCall("SelectObject", "Ptr", dc, "Ptr", hb, "Ptr")
+            DllCall("SetWindowOrgEx", "Ptr", dc, "Int", -1920, "Int", -1200, "Ptr", 0)
+            nwin := {found: true, x: -1920, y: -1200, w: 1920, h: 1080, hwnd: 0}
+            seen := (part = "relief") ? (ReliefLook(nwin, dc).up ? 1 : 0) : (ScrambleBoxLook(nwin, dc) ? 1 : 0)
+            other := (part = "relief") ? (ScrambleBoxLook(nwin, dc) ? 1 : 0) : (ReliefLook(nwin, dc).up ? 1 : 0)
+            blk := ScreenBlock(-1920, -1200, 40, 40, dc)
+            px := ScreenBlockPixel(blk, -1900, -1190)
+            ScreenRowsFree(blk)
+            DllCall("SetWindowOrgEx", "Ptr", dc, "Int", 0, "Int", 0, "Ptr", 0)
+            DllCall("SelectObject", "Ptr", dc, "Ptr", o, "Ptr")
+            DllCall("DeleteDC", "Ptr", dc)
+            DllCall("DeleteObject", "Ptr", hb)
+            ok := seen && !other && px >= 0
+            ScrambleNote(ok ? "PASS" : "FAIL", "a screen left of and above the main one (picture at -1920, -1200): " . (part = "relief" ? "relief list" : "scramble cards") . " " . (seen ? "seen" : "NOT seen") . " by the look" . (other ? ", the other look fooled" : "") . (px < 0 ? ", pixel read failed" : ""))
+            if (!ok)
+                fails += 1
+        }
+        DllCall("DeleteObject", "Ptr", pm)
+        DllCall("DeleteObject", "Ptr", pc)
+        ScrambleLearned := saveLearned2
+        for f, hb in scen
+            DllCall("DeleteObject", "Ptr", hb)
+        ; Learned cards on the real 2-player screenshot at 1920 wide: the
+        ; read's buttons teach the spots; the look then sees these cards
+        ; and not the relief screen; the name spot sits on the card.
+        lsrc := LoadPicture(dir . "\gspro-2p.jpg")
+        VarSetCapacity(bm, 32, 0)
+        DllCall("GetObject", "Ptr", lsrc, "Int", A_PtrSize = 8 ? 32 : 24, "Ptr", &bm)
+        LW := NumGet(bm, 4, "Int"), LH := NumGet(bm, 8, "Int"), lth := Round(LH * 1920 / LW)
+        lhbm := ShotScaled(lsrc, LW, LH, 1920, lth)
+        DllCall("DeleteObject", "Ptr", lsrc)
+        lwin := {found: true, x: 0, y: 0, w: 1920, h: lth}
+        lb := ScrambleCardBand(lwin)
+        lread := ShotRead(lhbm, lb.x, lb.y, lb.w, lb.h, 2)
+        luses := ScrambleButtons({found: true, win: lwin, lines: lread.lines, text: lread.text, lc: LowerStr(lread.text)})
+        ldc := DllCall("CreateCompatibleDC", "Ptr", 0, "Ptr")
+        lo := DllCall("SelectObject", "Ptr", ldc, "Ptr", lhbm, "Ptr")
+        saveLearned := ScrambleLearned, ScrambleLearned := {}
+        learnedOk := (luses.MaxIndex() = 2) && ScrambleLearn({uses: luses, n: 2, auto: false, lines: lread.lines}, lwin, ldc)
+        seesCards := ScrambleLearnedLook(lwin, ldc)
+        lnm := ScrambleNameFromLines(lread.lines, luses, 2)
+        DllCall("SelectObject", "Ptr", ldc, "Ptr", lo, "Ptr")
+        DllCall("DeleteDC", "Ptr", ldc)
+        DllCall("DeleteObject", "Ptr", lhbm)
+        rsrc := LoadPicture(dir . "\relief-water-lateral.jpg")
+        VarSetCapacity(bm, 32, 0)
+        DllCall("GetObject", "Ptr", rsrc, "Int", A_PtrSize = 8 ? 32 : 24, "Ptr", &bm)
+        rhbm := ShotScaled(rsrc, NumGet(bm, 4, "Int"), NumGet(bm, 8, "Int"), 1920, lth)
+        DllCall("DeleteObject", "Ptr", rsrc)
+        rdc := DllCall("CreateCompatibleDC", "Ptr", 0, "Ptr")
+        ro := DllCall("SelectObject", "Ptr", rdc, "Ptr", rhbm, "Ptr")
+        seesRelief := ScrambleLearnedLook(lwin, rdc)
+        DllCall("SelectObject", "Ptr", rdc, "Ptr", ro, "Ptr")
+        DllCall("DeleteDC", "Ptr", rdc)
+        DllCall("DeleteObject", "Ptr", rhbm)
+        u2 := luses[2]
+        nameOk := IsObject(lnm) && IsObject(u2) && Abs(lnm[1] - (u2.x + u2.w / 2)) < 60 && lnm[2] < u2.y - 4 * u2.h && lnm[2] > u2.y - 11 * u2.h
+        ok := learnedOk && seesCards = 2 && !seesRelief && nameOk
+        ScrambleNote(ok ? "PASS" : "FAIL", "learned scramble spots (gspro-2p at 1920 wide): learned " . learnedOk . ", sees the cards " . seesCards . ", sees the relief screen " . seesRelief . "; card 2's name at " . (IsObject(lnm) ? lnm[1] . "," . lnm[2] : "none") . " (USE at " . (IsObject(u2) ? Round(u2.x + u2.w / 2) . "," . u2.y : "?") . ")")
+        if (!ok)
+            fails += 1
+        ScrambleLearned := saveLearned
+        ; The whole thing on screen, timer running as in the program:
+        ; a screenshot in a window named like GSPro.
+        LoadProfile("Basic Secondary")
+        RemapActive := true, ReliefAutoSheet := true, ReliefNoFn := true, ScrambleAutoPick := false
+        ScrambleNote(A_ScreenHeight >= 1000 ? "PASS" : "FAIL", "on screen: test screen " . A_ScreenWidth . "x" . A_ScreenHeight . " at " . Round(A_ScreenDPI * 100 / 96) . "% Windows scale (needs 1080 lines, like a bay)")
+        if (A_ScreenHeight < 1000)
+            fails += 1
+        ; Shots 3 and 4 (v5.3.0): the same two screens with another
+        ; program clicked last - a video on a second screen - while
+        ; GSPro's picture stays uncovered.
+        ; Shots 5 and 6: the 3- and 4-player cards (GSPro 4's word,
+        ; Select), the window not at the screen's corner; every card's
+        ; name click checked against where the name is.  Shots 7 and
+        ; 8: a small picture (1280 wide) - noted, not required.
+        ; Shot 9: Auto-Pick on - its own read may leave a card out at
+        ; this size; the box's cards must still be all four.
+        for j, shotFile in ["relief-water-flagline.jpg", "gspro-2p.jpg", "relief-water-flagline.jpg", "gspro-2p.jpg", "gspro-3p-select.jpg", "gspro-4p-select.jpg", "relief-water-flagline.jpg", "gspro-4p-select.jpg", "gspro-4p-select.jpg", "gspro-4p-select.jpg", "gspro-4p-select.jpg", "gspro-2p.jpg", "relief-water-flagline.jpg", "gspro-4p-select.jpg"] {
+            away := (j = 3 || j = 4)
+            small := (j = 7 || j = 8 || j = 11)
+            tiny := (j = 13 || j = 14)   ; shots 13, 14: a 1024 x 637 picture
+            tall := (j = 10)    ; shot 10: the full 1080 lines of the screen, like full-screen 1080p
+            autoOn := (j = 9 || j = 11 || j = 12)   ; Auto-Pick on: 4 cards, 4 cards small, 2 cards
+            sw := A_ScreenWidth - 20, sh := Round(sw * 2137 / 3438)
+            if (sh > A_ScreenHeight - 60)
+                sh := A_ScreenHeight - 60, sw := Round(sh * 3438 / 2137)
+            sx := 0, sy := 0
+            if (small)
+                sw := 1280, sh := 796
+            if (tiny)
+                sw := 1024, sh := 637
+            if (tall)
+                sh := A_ScreenHeight, sw := Round(sh * 3438 / 2137)
+            if (j >= 5 && !tall)
+                sx := Min(170, A_ScreenWidth - sw), sy := Min(36, A_ScreenHeight - sh)
+            ; shrunk smoothly first (like GSPro drawing at this size), so
+            ; the window shows clean text rather than a jagged resize
+            src := LoadPicture(dir . "\" . shotFile)
+            VarSetCapacity(bm, 32, 0)
+            DllCall("GetObject", "Ptr", src, "Int", A_PtrSize = 8 ? 32 : 24, "Ptr", &bm)
+            showBmp := ShotScaled(src, NumGet(bm, 4, "Int"), NumGet(bm, 8, "Int"), sw, sh)
+            DllCall("DeleteObject", "Ptr", src)
+            Gui, Shot:New, -Caption +ToolWindow -DPIScale +HwndShotHwnd, GSPro screen watch test
+            Gui, Shot:Margin, 0, 0
+            Gui, Shot:Add, Picture, x0 y0 w%sw% h%sh%, HBITMAP:%showBmp%
+            if (away) {
+                ; shot 3: the other program is a look-alike - a note
+                ; named GSPro - which must not be taken for the game
+                if (j = 3) {
+                    if (!FileExist(A_ScriptDir . "\GSPro notes.txt"))
+                        FileAppend, a look-alike window title`n, %A_ScriptDir%\GSPro notes.txt
+                    Run, notepad.exe "%A_ScriptDir%\GSPro notes.txt", %A_WinDir%
+                } else {
+                    Run, notepad.exe, %A_WinDir%
+                }
+                WinWait, ahk_exe notepad.exe, , 10
+                WinRestore, ahk_exe notepad.exe
+                WinMove, ahk_exe notepad.exe, , % A_ScreenWidth - 420, 0, 400, 240
+                Gui, Shot:Show, x0 y0 w%sw% h%sh% NA
+                WinActivate, ahk_exe notepad.exe
+                WinWaitActive, ahk_exe notepad.exe, , 3
+            } else {
+                Gui, Shot:Show, x%sx% y%sy% w%sw% h%sh%
+                WinActivate, ahk_id %ShotHwnd%
+                WinWaitActive, ahk_id %ShotHwnd%, , 3
+            }
+            if (autoOn) {
+                ScrambleAutoPick := true, ScrambleArmedTick := 0, ScrambleCoolDown := false, ScrambleMissTicks := 0, ScrambleBoxPick := 0
+                ScrambleResetReads()
+                SetTimer, ScrambleTick, 2000
+            }
+            ScreenWatchOn := true
+            SetTimer, ScreenWatchTick, 400
+            t0 := A_TickCount
+            if (autoOn) {
+                ; Auto-Pick's own read must have every card and its pick
+                ; must be the best shot (4 cards: DON, 173, card 4) - at
+                ; this size its plain read alone leaves the highlighted
+                ; card out.
+                nWant := (j = 12) ? 2 : 4
+                lc9 := "", lead := 0
+                while (A_TickCount - t0 < 16000) {
+                    lc9 := ScrambleBoxCardsNow()
+                    lead := ScrambleVoteLeader()
+                    if (IsObject(lc9) && lc9.n = nWant && CheatVisible && lead > 0 && IsObject(ScrambleLastUses) && ScrambleLastUses.Length() = nWant && InStr(CheatShownText, "right=TAKE CARD " . lead))
+                        break
+                    Sleep, 100
+                }
+                seenMs := A_TickCount - t0
+                ownN := IsObject(ScrambleLastUses) ? ScrambleLastUses.Length() : 0
+                ok := IsObject(lc9) && lc9.auto && lc9.n = nWant && ownN = nWant && CheatVisible && (nWant = 4 ? (lead = 4 && InStr(CheatShownText, "shotcam=CARD 4") && InStr(CheatShownText, "right=TAKE CARD 4")) : (lead >= 1 && lead <= 2 && InStr(CheatShownText, "teeleft=CARD 2")))
+                ScrambleNote(ok ? "PASS" : "FAIL", "on screen " . sw . "x" . sh . ", Auto-Pick ON, " . nWant . " cards: Auto-Pick's own read has " . ownN . " buttons and its pick is card " . lead . (nWant = 4 ? " (best: card 4, DON 173)" : "") . " after " . seenMs . " ms; the box has " . (IsObject(lc9) ? lc9.n : 0) . " cards [" . CheatShownText . "]")
+                if (!ok)
+                    fails += 1
+                pickKey := (nWant = 4) ? "v" : "c", pickCard := (nWant = 4) ? 3 : 2
+                HandleBoxKeyDown(pickKey)   ; Tee Right = card 3 (Tee Left = card 2 on the 2-card screen)
+                HandleBoxKeyUp(pickKey)
+                Sleep, 2300                 ; an Auto-Pick read after the pick
+                lc9 := ScrambleBoxCardsNow()
+                pt9 := IsObject(lc9) ? ScrambleNamePoint(lc9, pickCard) : ""
+                u9 := IsObject(lc9) ? lc9.uses[pickCard] : ""
+                ok := (ScrambleBoxPick = pickCard) && IsObject(lc9) && lc9.n = nWant && IsObject(pt9) && IsObject(u9) && Abs(pt9[1] - (u9.x + u9.w / 2)) < sw * 0.02 && ScrambleBoxTakeCard(lc9) = pickCard
+                ScrambleNote(ok ? "PASS" : "FAIL", "Auto-Pick ON, " . nWant . " cards: the box picked card " . pickCard . " and the cards stay " . nWant . " after the next read (pick " . ScrambleBoxPick . ", cards " . (IsObject(lc9) ? lc9.n : 0) . ", to take " . (IsObject(lc9) ? ScrambleBoxTakeCard(lc9) : 0) . ")")
+                if (!ok)
+                    fails += 1
+                HandleBoxKeyDown("Right")   ; AIM right takes it
+                HandleBoxKeyUp("Right")
+                Sleep, 300
+                ok := ScrambleCoolDown && !CheatVisible
+                ScrambleNote(ok ? "PASS" : "FAIL", "Auto-Pick ON, " . nWant . " cards: AIM right took the box's card (Auto-Pick stood down: " . ScrambleCoolDown . ", sheet gone: " . !CheatVisible . ")")
+                if (!ok)
+                    fails += 1
+                ScrambleAutoPick := false
+                SetTimer, ScrambleTick, Off
+                SetTimer, ScrambleZero, Off
+                ScrambleArmedTick := 0, ScrambleCoolDown := false
+                ScrambleResetReads()
+                ScrambleHidePreview()
+                ParkMouse()
+            } else if (away) {
+                if (j = 3) {
+                    while (!(ReliefWatchUp && CheatVisible) && A_TickCount - t0 < 9000)
+                        Sleep, 100
+                } else {
+                    while (!(IsObject(ScrambleBoxCards) && CheatVisible) && A_TickCount - t0 < 12000)
+                        Sleep, 100
+                }
+                seenMs := A_TickCount - t0
+                npFront := WinActive("ahk_exe notepad.exe") ? 1 : 0
+                w3 := ReliefWatchWin()
+                WinGetTitle, npTitle, ahk_exe notepad.exe
+                if (j = 3)
+                    ok := npFront && InStr(npTitle, "GSPro") && ReliefWatchUp && CheatVisible && InStr(CheatShownText, "NO FN NEEDED") && InStr(CheatShownText, "right=ENTER: FLAG LINE") && w3.found && !w3.front && w3.hwnd = ShotHwnd
+                else
+                    ok := npFront && IsObject(ScrambleBoxCards) && ScrambleBoxCards.n = 2 && CheatVisible && InStr(CheatShownText, "SCRAMBLE:") && InStr(CheatShownText, "teeleft=CARD 2") && w3.found && !w3.front && w3.hwnd = ShotHwnd
+                ScrambleNote(ok ? "PASS" : "FAIL", "another program in front" . (j = 3 ? " (titled '" . npTitle . "', not taken for the game)" : "") . ", GSPro uncovered: the " . (j = 3 ? "water list" : "2 scramble cards") . " seen in " . seenMs . " ms and the sheet came up by itself (Notepad still in front: " . npFront . ", watch " . (w3.found ? (w3.front ? "front" : "not in front") : "no window") . ") [" . CheatShownText . "]")
+                if (!ok)
+                    fails += 1
+                if (j = 3) {
+                    ; what the extra check costs: the game window and its six
+                    ; cover points, no screen read
+                    tc0 := 0, tc1 := 0, tcf := 0, k0 := 0, u0 := 0, k1 := 0, u1 := 0, cr := 0, ex := 0
+                    DllCall("QueryPerformanceFrequency", "Int64*", tcf)
+                    DllCall("QueryPerformanceCounter", "Int64*", tc0)
+                    Loop, 50
+                        ReliefWatchWin()
+                    DllCall("QueryPerformanceCounter", "Int64*", tc1)
+                    awayWin := (tc1 - tc0) * 1000 / tcf / 50
+                    DllCall("GetProcessTimes", "Ptr", -1, "Int64*", cr, "Int64*", ex, "Int64*", k0, "Int64*", u0)
+                    DllCall("QueryPerformanceCounter", "Int64*", tc0)
+                    Loop, 20 {
+                        w5 := ReliefWatchWin()
+                        ReliefLook(w5)
+                        ScrambleBoxLook(w5)
+                    }
+                    DllCall("QueryPerformanceCounter", "Int64*", tc1)
+                    DllCall("GetProcessTimes", "Ptr", -1, "Int64*", cr, "Int64*", ex, "Int64*", k1, "Int64*", u1)
+                    awayCpu := ((k1 - k0) + (u1 - u0)) / 10000 / 20
+                    ok := awayWin < 3 && awayCpu < 12
+                    ScrambleNote(ok ? "PASS" : "FAIL", "watch cost with another program in front: window + cover check " . Round(awayWin, 3) . " ms; " . Round((tc1 - tc0) * 1000 / tcf / 20, 2) . " ms wall / " . Round(awayCpu, 2) . " ms CPU per look (the same looks as with GSPro in front)")
+                    if (!ok)
+                        fails += 1
+                    ; the first press: GSPro forward, then the list's job
+                    ReliefLastAct := ""
+                    HandleBoxKeyDown("Left")    ; no FN: Aim Left = Next Option
+                    HandleBoxKeyUp("Left")
+                    Sleep, 200
+                    ok := (ReliefLastAct = "NextOption") && WinActive("ahk_id " . ShotHwnd)
+                    ScrambleNote(ok ? "PASS" : "FAIL", "first press with another program in front: Aim Left without FN ran Next Option and GSPro came to the front [" . ReliefLastAct . "]")
+                    if (!ok)
+                        fails += 1
+                } else {
+                    ScrambleBoxPick := 0
+                    HandleBoxKeyDown("c")       ; no FN: Tee Left = card 2
+                    HandleBoxKeyUp("c")
+                    Sleep, 200
+                    ok := (ScrambleBoxPick = 2) && WinActive("ahk_id " . ShotHwnd)
+                    ScrambleNote(ok ? "PASS" : "FAIL", "first press with another program in front: Tee Left picked card 2 and GSPro came to the front [pick " . ScrambleBoxPick . "]")
+                    if (!ok)
+                        fails += 1
+                    ParkMouse()
+                }
+                ; another window over the game: nothing to watch, the sheet goes
+                WinActivate, ahk_exe notepad.exe
+                WinWaitActive, ahk_exe notepad.exe, , 3
+                WinMaximize, ahk_exe notepad.exe
+                t1 := A_TickCount
+                while ((ReliefWatchUp || IsObject(ScrambleBoxCards) || CheatVisible) && A_TickCount - t1 < 5000)
+                    Sleep, 100
+                w4 := ReliefWatchWin()
+                ok := !ReliefWatchUp && !IsObject(ScrambleBoxCards) && !CheatVisible && !w4.found
+                ScrambleNote(ok ? "PASS" : "FAIL", "another program covering GSPro: the watch stops and the sheet goes (" . (A_TickCount - t1) . " ms; watch " . ReliefWatchUp . ", cards " . IsObject(ScrambleBoxCards) . ", sheet " . CheatVisible . ", window " . w4.found . ", FN " . FnIsDown . ") [" . CheatShownText . "]")
+                if (!ok)
+                    fails += 1
+                WinKill, ahk_exe notepad.exe
+                WinWaitClose, ahk_exe notepad.exe, , 5
+            } else if (j >= 5) {
+                if (j = 7 || j = 13) {
+                    while (!(ReliefWatchUp && CheatVisible) && A_TickCount - t0 < 9000)
+                        Sleep, 100
+                    ok := ReliefWatchUp && CheatVisible && InStr(CheatShownText, "right=ENTER: FLAG LINE") && InStr(CheatShownText, "up=CLOSER")
+                    seenMs := A_TickCount - t0
+                    w7 := ReliefWatchWin()
+                    ScrambleNote(ok ? "PASS" : "FAIL", "small picture " . sw . "x" . sh . " at " . sx . "," . sy . ": the water list " . (ok ? "was seen in " . seenMs . " ms" : "was NOT confirmed (look " . ((w7.found && ReliefLook(w7).up) ? "sees the panel" : "does not see the panel") . "; read: " . (IsObject(ReliefLast) ? ReliefNote(ReliefLast) : "none") . ")") . " [" . CheatShownText . "]")
+                    if (!ok)
+                        fails += 1
+                } else {
+                    nCards := (j = 5) ? 3 : 4
+                    want := (nCards = 3) ? ["AL", "BOB", "DON"] : ["AL", "SAM", "BOB", "DON"]
+                    Sleep, 300      ; the sheet for these cards (a look may have started before the clock)
+                    while (!(IsObject(ScrambleBoxCards) && CheatVisible) && A_TickCount - t0 < 12000)
+                        Sleep, 100
+                    seenMs := A_TickCount - t0
+                    okCards := IsObject(ScrambleBoxCards) && ScrambleBoxCards.n = nCards && CheatVisible && InStr(CheatShownText, "resetaim=CARD 1") && InStr(CheatShownText, "teeleft=CARD 2") && InStr(CheatShownText, "teeright=CARD 3") && (nCards = 4 ? InStr(CheatShownText, "shotcam=CARD 4") : !InStr(CheatShownText, "shotcam=CARD")) && !ReliefWatchUp
+                    ; the sheet sits at the top right of the picture, clear of the cards
+                    WinGetPos, chx, chy, chw, chh, ahk_id %CheatHwnd%
+                    okSpot := okCards && chx + chw <= sx + sw && chx + chw > sx + sw - 60 && chy >= sy && chy < sy + 60 && chy + chh < sy + Round(sh * 0.60)
+                    ; each card's click lands on that player's name: over
+                    ; its Select word, above it, and the reader finds the name there
+                    nameNote := "", okNames := okCards
+                    if (okCards) {
+                        c := ScrambleBoxCards
+                        for k, nm in want {
+                            pt := ScrambleNamePoint(c, k)
+                            u := c.uses[k]
+                            hit := ""
+                            if (IsObject(pt)) {
+                                OcrLockTake()
+                                o := OcrRegionScaled(pt[1] - Round(sh * 0.07), pt[2] - Round(sh * 0.022), Round(sh * 0.14), Round(sh * 0.044), 3)
+                                OcrBusy := false
+                                hit := Trim(RegExReplace(o.text, "\s+", " "))
+                            }
+                            geo := IsObject(pt) && Abs(pt[1] - (u.x + u.w / 2)) < sw * 0.02 && pt[2] < u.y - sh * 0.05 && pt[2] > u.y - sh * 0.13 && pt[1] > sx && pt[2] > sy
+                            nameNote .= k . ": " . (IsObject(pt) ? pt[1] . "," . pt[2] : "none") . " reads '" . hit . "'" . (geo ? "" : " (off the card)") . "  "
+                            ; a two-letter name alone is too little print for the
+                            ; reader's check here; its place is checked like the others
+                            if (!geo || (StrLen(nm) >= 3 && !InStr(hit, nm)))
+                                okNames := false
+                        }
+                    }
+                    ok := okCards && okSpot && okNames
+                    readHow := IsObject(ScrambleBoxCards) ? ScrambleBoxCards.how : "no cards"
+                    if (small || tiny) {
+                        ScrambleNote(ok ? "PASS" : "FAIL", "small picture " . sw . "x" . sh . " at " . sx . "," . sy . ": " . nCards . " scramble cards " . (okCards ? "seen in " . seenMs . " ms" : "NOT seen") . " (reads " . readHow . "), sheet top right " . okSpot . ", names " . nameNote . "[" . CheatShownText . "]")
+                        if (!ok)
+                            fails += 1
+                    } else {
+                        ScrambleNote(ok ? "PASS" : "FAIL", "on screen " . sw . "x" . sh . " at " . sx . "," . sy . ", Auto-Pick off: the " . nCards . " scramble cards (Select) seen in " . seenMs . " ms, CARD 1-" . nCards . " on the sheet (reads " . readHow . "; top right: " . okSpot . " at " . chx . "," . chy . " " . chw . "x" . chh . "); name clicks " . nameNote . "[" . CheatShownText . "]")
+                        if (!ok)
+                            fails += 1
+                    }
+                }
+            } else if (j = 1) {
+                while (!(ReliefWatchUp && CheatVisible) && A_TickCount - t0 < 9000)
+                    Sleep, 100
+                ok := ReliefWatchUp && CheatVisible && InStr(CheatShownText, "NO FN NEEDED") && InStr(CheatShownText, "right=ENTER: FLAG LINE") && InStr(CheatShownText, "up=CLOSER") && InStr(CheatShownText, "clubup=|")
+                ScrambleNote(ok ? "PASS" : "FAIL", "on screen " . sw . "x" . sh . ": the water list was seen in " . (A_TickCount - t0) . " ms and the sheet came up by itself [" . CheatShownText . "]")
+                if (!ok)
+                    fails += 1
+                if (CheatVisible)
+                    CheatPixels(CheatHwnd, "relief")
+                ; What the watch costs: the window check and both looks,
+                ; 50 times, on this 1080p screen.
+                tc0 := 0, tc1 := 0, tcf := 0, k0 := 0, u0 := 0, k1 := 0, u1 := 0, cr := 0, ex := 0
+                DllCall("QueryPerformanceFrequency", "Int64*", tcf)
+                DllCall("GetProcessTimes", "Ptr", -1, "Int64*", cr, "Int64*", ex, "Int64*", k0, "Int64*", u0)
+                DllCall("QueryPerformanceCounter", "Int64*", tc0)
+                Loop, 20 {
+                    w2 := ReliefWatchWin()
+                    ReliefLook(w2)
+                    ScrambleBoxLook(w2)
+                }
+                DllCall("QueryPerformanceCounter", "Int64*", tc1)
+                DllCall("GetProcessTimes", "Ptr", -1, "Int64*", cr, "Int64*", ex, "Int64*", k1, "Int64*", u1)
+                perLook := (tc1 - tc0) * 1000 / tcf / 20
+                cpuLook := ((k1 - k0) + (u1 - u0)) / 10000 / 20   ; 100 ns units -> ms
+                ; parts, for the record: each look alone, the window check,
+                ; one copy of a single row, of the panel corner, of the whole
+                ; game picture
+                parts := ""
+                for pk, part in ["win", "relief", "scramble", "row", "corner", "full"] {
+                    DllCall("QueryPerformanceCounter", "Int64*", tc0)
+                    Loop, 10 {
+                        if (part = "win")
+                            ReliefWatchWin()
+                        else if (part = "relief")
+                            ReliefLook(w2)
+                        else if (part = "scramble")
+                            ScrambleBoxLook(w2)
+                        else if (part = "row")
+                            ScreenRowsFree(ScreenBlock(w2.x, w2.y + 100, Round(w2.h * 0.5), 1))
+                        else if (part = "corner")
+                            ScreenRowsFree(ScreenBlock(w2.x, w2.y + Round(w2.h * 0.08), Round(w2.h * 0.5), Round(w2.h * 0.2)))
+                        else
+                            ScreenRowsFree(ScreenBlock(w2.x, w2.y, w2.w, w2.h))
+                    }
+                    DllCall("QueryPerformanceCounter", "Int64*", tc1)
+                    parts .= part . " " . Round((tc1 - tc0) * 1000 / tcf / 10, 2) . " ms, "
+                }
+                ; the cost per 400 ms tick: relief look every tick, scramble
+                ; look every other tick (Auto-Pick off)
+                ok := w2.found && cpuLook < 12
+                ScrambleNote(ok ? "PASS" : "FAIL", "watch cost: " . Round(perLook, 2) . " ms wall / " . Round(cpuLook, 2) . " ms CPU per look (window check + relief look + scramble look); CPU use about " . Round(cpuLook / 4, 2) . "% of one core at most [" . parts . "]")
+                if (!ok)
+                    fails += 1
+                ReliefLastAct := ""
+                HandleBoxKeyDown("Right")   ; no FN: Drop Ball = Enter on Flag Line
+                HandleBoxKeyUp("Right")
+                ok := (ReliefLastAct = "DropRehit")
+                ScrambleNote(ok ? "PASS" : "FAIL", "AIM right without FN on the relief list ran Drop Ball (Enter): [" . ReliefLastAct . "]")
+                if (!ok)
+                    fails += 1
+                Sleep, 2500
+                ok := ReliefWatchUp && IsObject(ReliefLast) && ReliefLast.found
+                ScrambleNote(ok ? "PASS" : "FAIL", "the list still up after Enter was read again (Flag Line shows the lie with the list up)")
+                if (!ok)
+                    fails += 1
+            } else {
+                while (!(IsObject(ScrambleBoxCards) && CheatVisible) && A_TickCount - t0 < 12000)
+                    Sleep, 100
+                ok := IsObject(ScrambleBoxCards) && ScrambleBoxCards.n = 2 && CheatVisible && InStr(CheatShownText, "SCRAMBLE:") && InStr(CheatShownText, "teeleft=CARD 2") && InStr(CheatShownText, "teeright=|") && !ReliefWatchUp && IsObject(ScrambleLearned[2])
+                sw2 := ReliefWatchWin()
+                diag := ""
+                if (!ok) {
+                    OcrLockTake()
+                    dscan := ScanWinClient(GSProWinNeedle, GSProWinExclude)
+                    OcrBusy := false
+                    duses := dscan.found ? ScrambleButtons(ScrambleRecoverCards(dscan)) : ""
+                    dtext := dscan.found ? SubStr(RegExReplace(dscan.text, "\s+", " "), 1, 300) : ""
+                    diag := " read now: found " . dscan.found . ", " . (dscan.found ? dscan.lines.MaxIndex() : 0) . " lines, " . (IsObject(duses) ? duses.MaxIndex() : 0) . " USE/Select; hits " . ScrambleBoxHits . ", wait " . ScrambleBoxWait . " [" . dtext . "]"
+                }
+                ScrambleNote(ok ? "PASS" : "FAIL", "on screen, Auto-Pick off: the 2 scramble cards were seen in " . (A_TickCount - t0) . " ms and the sheet shows the bottom row [" . CheatShownText . "] (look " . (sw2.found ? (ScrambleBoxLook(sw2) ? "sees the cards" : "does not see the cards") : "no GSPro window") . ")" . diag)
+                if (!ok)
+                    fails += 1
+                if (CheatVisible)
+                    CheatPixels(CheatHwnd, "scramble-screen")
+            }
+            ; shots 1 and 2: the sheet's own timer stopped (as when a hide
+            ; lands in the middle of a redraw) - the screen watch alone
+            ; must still take the sheet away
+            if (j <= 2)
+                SetTimer, CheatTick, Off
+            Gui, Shot:Destroy
+            Sleep, 1200
+            ok := !ReliefWatchUp && !IsObject(ScrambleBoxCards) && !CheatVisible && !(CheatHwnd && DllCall("IsWindowVisible", "Ptr", CheatHwnd))
+            ScrambleNote(ok ? "PASS" : "FAIL", "screen gone" . (j <= 2 ? " (the sheet's own timer stopped)" : "") . ": sheet and box jobs back to normal (watch " . ReliefWatchUp . ", cards " . IsObject(ScrambleBoxCards) . ", sheet " . CheatVisible . ", FN " . FnIsDown . ")")
+            if (!ok)
+                fails += 1
+        }
+        SetTimer, ScreenWatchTick, Off
+        ScreenWatchOn := false
         FileAppend, % (fails ? "FAIL: " . fails . " relief checks failed" : "PASS: GSPro 4 relief screens read and planned") . "`n", % A_ScriptDir . "\result.txt"
         ExitApp, % fails ? 1 : 0
     } catch failure {
@@ -1520,6 +2214,46 @@ ReliefShotSmoke:
         ExitApp, 1
     }
 Return
+
+; A picture of another shape: sky over grass, tw x th, then one part
+; of the real screenshot `src` (SW x SH) laid on it, `us` times its size against the picture's height: the relief
+; panel in the top left corner, or the scramble cards in the middle
+; above the bottom edge.
+ShapePicture(part, src, SW, SH, tw, th, us) {
+    scr := DllCall("GetDC", "Ptr", 0, "Ptr")
+    out := DllCall("CreateCompatibleBitmap", "Ptr", scr, "Int", tw, "Int", th, "Ptr")
+    ddc := DllCall("CreateCompatibleDC", "Ptr", scr, "Ptr")
+    sdc := DllCall("CreateCompatibleDC", "Ptr", scr, "Ptr")
+    DllCall("ReleaseDC", "Ptr", 0, "Ptr", scr)
+    od := DllCall("SelectObject", "Ptr", ddc, "Ptr", out, "Ptr")
+    for i, band in [[0, Round(th * 0.45), 0xD2A078], [Round(th * 0.45), th, 0x326E3C]] {   ; sky, grass (0x00BBGGRR)
+        br := DllCall("CreateSolidBrush", "UInt", band[3], "Ptr")
+        ob := DllCall("SelectObject", "Ptr", ddc, "Ptr", br, "Ptr")
+        DllCall("PatBlt", "Ptr", ddc, "Int", 0, "Int", band[1], "Int", tw, "Int", band[2] - band[1], "UInt", 0x00F00021)
+        DllCall("SelectObject", "Ptr", ddc, "Ptr", ob, "Ptr")
+        DllCall("DeleteObject", "Ptr", br)
+    }
+    os := DllCall("SelectObject", "Ptr", sdc, "Ptr", src, "Ptr")
+    DllCall("SetStretchBltMode", "Ptr", ddc, "Int", 4)
+    DllCall("SetBrushOrgEx", "Ptr", ddc, "Int", 0, "Int", 0, "Ptr", 0)
+    k := us * th / SH
+    if (part = "relief") {
+        ; the panel with a little of what is around it: 0 to 0.40
+        ; heights across, 0.10 to 0.47 heights down
+        cropX := 0, cropY := Round(SH * 0.10), cropW := Round(SH * 0.40), cropH := Round(SH * 0.37)
+        dx := 0, dy := Round(cropY * k)
+    } else {
+        ; the cards: the middle 44% of the width, 0.60 to 0.82 heights down
+        cropX := Round(SW * 0.28), cropY := Round(SH * 0.60), cropW := Round(SW * 0.44), cropH := Round(SH * 0.22)
+        dx := Round((tw - cropW * k) / 2), dy := th - Round((SH - cropY) * k)
+    }
+    DllCall("StretchBlt", "Ptr", ddc, "Int", dx, "Int", dy, "Int", Round(cropW * k), "Int", Round(cropH * k), "Ptr", sdc, "Int", cropX, "Int", cropY, "Int", cropW, "Int", cropH, "UInt", 0x00CC0020)
+    DllCall("SelectObject", "Ptr", sdc, "Ptr", os, "Ptr")
+    DllCall("SelectObject", "Ptr", ddc, "Ptr", od, "Ptr")
+    DllCall("DeleteDC", "Ptr", sdc)
+    DllCall("DeleteDC", "Ptr", ddc)
+    return out
+}
 
 ; A picture shrunk or grown to tw x th (HALFTONE, like a smaller window).
 ShotScaled(src, W, H, tw, th) {
@@ -1644,6 +2378,7 @@ def runtime_checks(source, ahk):
     assert digest == "effdea83c6b7a1dc2ce9e9d40e91dfd59bed9fcbd580903423648b7ca97d9696", "Use official AutoHotkey v1.1.37.02 Unicode 64-bit"
     with tempfile.TemporaryDirectory(prefix="BA-Remapper-tests-") as directory:
         work = Path(directory)
+        shutil.copytree(ROOT / "assets", work / "assets")
         # Parse the exact production source without running its startup section.
         syntax = subprocess.run([str(ahk), "/ErrorStdOut", "/iLib", str(work / "includes.ahk"), str(ROOT / "BARemapper.ahk")], capture_output=True, text=True, timeout=40)
         assert syntax.returncode == 0, syntax.stdout + syntax.stderr
@@ -1693,6 +2428,18 @@ def runtime_checks(source, ahk):
         between = downs[downs.index(0x77) + 1:downs.index(0x78)]
         assert 0x4D in between and 0x0D not in between and not any(0x30 <= key <= 0x39 for key in between), f"Mulligan button without the relief list: Ctrl+M only, got {between}"
         print("PASS: the box's Ctrl+M reached the game untouched; no number or Enter followed it without the relief list")
+        assert 0x75 in downs and 0x76 in downs, f"F6 / F7 markers around the scramble take: {downs}"
+        take = downs[downs.index(0x75) + 1:downs.index(0x76)]
+        assert take == [0x31], f"Scramble screen: AIM right sent the card's number 1 and nothing else, got {take}"
+        print("PASS: scramble cards from the box: Tee Left / Reset Aim tap picked, AIM right sent 1; no A, V or arrow leaked")
+        assert 0x72 in downs and 0x73 in downs, f"F3 / F4 markers around the tap with another program in front: {downs}"
+        away = downs[downs.index(0x72) + 1:downs.index(0x73)]
+        assert away == [0x55], f"Putt tapped with another program in front: U reached GSPro and nothing else, got {away}"
+        print("PASS: a box tap with another program in front: GSPro was brought to the front and got the key (U)")
+        assert 0x74 in downs, f"F5 marker after the tap with a look-alike title in front: {downs}"
+        like = downs[downs.index(0x73) + 1:downs.index(0x74)]
+        assert like == [0x55], f"Putt tapped with a look-alike 'GSPro' title in front: U reached the real GSPro window and nothing else, got {like}"
+        print("PASS: a look-alike window title (a note named GSPro, maximized, in front) is not taken for the game: the tap reached the real GSPro window")
         relief_downs = [key for _, message, key in rows if message in (0x100, 0x104) and key in (0x32, 0x33, 0x0D, 0x34, 0x71, 0x58)]
         assert relief_downs[:6] == [0x32, 0x33, 0x0D, 0x34, 0x71, 0x58], f"Panel keys 2, 3, Enter; sequence 4, F2; custom tap X: {relief_downs}"
         assert not any(key in (0x59, 0x56, 0x4F) for _, _, key in rows), f"Heat Map / Tee Right / Flyover leaked their printed keys: {rows}"
@@ -1805,7 +2552,7 @@ def runtime_checks(source, ahk):
             script = work / "ReliefShotSmoke.ahk"
             script.write_text(candidate + "\n" + SMOKE + "\n" + SCRAMBLE + "\n" + REALSHOT + "\n" + RELIEF, encoding="utf-8-sig")
             try:
-                check = subprocess.run([str(ahk), "/ErrorStdOut", str(script), str(ROOT / "tests" / "fixtures" / "gspro")], capture_output=True, text=True, timeout=240)
+                check = subprocess.run([str(ahk), "/ErrorStdOut", str(script), str(ROOT / "tests" / "fixtures" / "gspro")], capture_output=True, text=True, timeout=480)
                 returncode, output = check.returncode, check.stdout + check.stderr
             except subprocess.TimeoutExpired:
                 returncode, output = -1, "timed out"
@@ -1813,17 +2560,60 @@ def runtime_checks(source, ahk):
             print(notes)
             annotate("notice", "GSPro 4 relief screenshots", notes)
             report = (work / "result.txt").read_text() if (work / "result.txt").exists() else "No result"
-            assert returncode == 0 and report.startswith("PASS:"), "ReliefShotSmoke: " + report + output
+            failed = "\n".join(line for line in notes.splitlines() if line.startswith("FAIL") or "on screen" in line or "watch cost" in line or "another program" in line)
+            assert returncode == 0 and report.startswith("PASS:"), "ReliefShotSmoke: " + report + failed + output
             print("PASS: GSPro 4 relief screenshots: panel, choices, highlighted choice and the keys for every box button")
+            for line in notes.splitlines():
+                if "watch cost" in line or "on screen" in line or "another program" in line:
+                    print(line)
+                    annotate("notice", "Screen watch", line)
 
+
+
+def screen_watch_only(source, ahk):
+    """The on-screen screen-watch checks alone (ReliefShotSmoke), for a
+    second run at another Windows display scale."""
+    assert os.name == "nt", "AutoHotkey runtime checks require Windows"
+    with tempfile.TemporaryDirectory(prefix="BA-Remapper-scale-") as directory:
+        work = Path(directory)
+        shutil.copytree(ROOT / "assets", work / "assets")
+        isolated = source.replace('ConfigDir    := DocsRoot . "\\BA Custom Products\\Remapper"', 'ConfigDir    := A_ScriptDir . "\\data"')
+        isolated = isolated.replace('TriggerFile  := A_Temp . "\\baremapper_show.tmp"', 'TriggerFile  := A_ScriptDir . "\\show.tmp"')
+        isolated = isolated.replace("BARemapper_BACustomProducts_SingleInstance", "BARemapper_Regression_" + work.name)
+        isolated = isolated.replace("\nMigrateLegacyFiles()\n", "\n; migration disabled in isolated test\n")
+        isolated = isolated.replace("\nRefreshAutoStartPath()\n", "\n; startup repair disabled in isolated test\n")
+        marker = "SetTimer, OcrWarmup, -3000\nReturn"
+        assert marker in isolated
+        candidate = isolated.replace(marker, "SetTimer, ReliefShotSmoke, -50\nReturn", 1)
+        script = work / "ReliefShotSmoke.ahk"
+        script.write_text(candidate + "\n" + SMOKE + "\n" + SCRAMBLE + "\n" + REALSHOT + "\n" + RELIEF, encoding="utf-8-sig")
+        try:
+            check = subprocess.run([str(ahk), "/ErrorStdOut", str(script), str(ROOT / "tests" / "fixtures" / "gspro")], capture_output=True, text=True, timeout=480)
+            returncode, output = check.returncode, check.stdout + check.stderr
+        except subprocess.TimeoutExpired:
+            returncode, output = -1, "timed out"
+        notes = (work / "scramble-checks.txt").read_text(encoding="utf-8-sig") if (work / "scramble-checks.txt").exists() else "No notes recorded"
+        shown = [line for line in notes.splitlines() if line.startswith("FAIL") or any(word in line for word in ("on screen", "watch cost", "another program", "small picture", "Auto-Pick ON", "screen gone", "picture shape", "a screen left"))]
+        for line in shown:
+            print("SCALE RUN " + line)
+        report = (work / "result.txt").read_text() if (work / "result.txt").exists() else "No result"
+        assert returncode == 0 and report.startswith("PASS:"), "Scale run: " + report + output
+        print("PASS: the on-screen screen-watch checks passed at this Windows display scale")
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--baseline", type=Path)
     parser.add_argument("--ahk", type=Path)
+    parser.add_argument("--screen-watch-only", action="store_true")
     args = parser.parse_args()
     source = (ROOT / "BARemapper.ahk").read_text(encoding="utf-8-sig")
+    if args.screen_watch_only:
+        for stream in (sys.stdout, sys.stderr):
+            if hasattr(stream, "reconfigure"):
+                stream.reconfigure(encoding="utf-8", errors="replace")
+        screen_watch_only(source, args.ahk.resolve())
+        return
     baseline = args.baseline.read_text(encoding="utf-8-sig") if args.baseline else subprocess.check_output(["git", "show", BASE + ":BARemapper.ahk"], cwd=ROOT).decode("utf-8-sig")
     # The scramble checks print feet/inch marks (curly quotes, primes) that
     # the Windows console code page cannot encode.
