@@ -1783,13 +1783,16 @@ ReliefShotSmoke:
         ; Select), the window not at the screen's corner; every card's
         ; name click checked against where the name is.  Shots 7 and
         ; 8: a small picture (1280 wide) - noted, not required.
-        for j, shotFile in ["relief-water-flagline.jpg", "gspro-2p.jpg", "relief-water-flagline.jpg", "gspro-2p.jpg", "gspro-3p-select.jpg", "gspro-4p-select.jpg", "relief-water-flagline.jpg", "gspro-4p-select.jpg"] {
+        ; Shot 9: Auto-Pick on - its own read may leave a card out at
+        ; this size; the box's cards must still be all four.
+        for j, shotFile in ["relief-water-flagline.jpg", "gspro-2p.jpg", "relief-water-flagline.jpg", "gspro-2p.jpg", "gspro-3p-select.jpg", "gspro-4p-select.jpg", "relief-water-flagline.jpg", "gspro-4p-select.jpg", "gspro-4p-select.jpg"] {
             away := (j = 3 || j = 4)
+            small := (j = 7 || j = 8)
             sw := A_ScreenWidth - 20, sh := Round(sw * 2137 / 3438)
             if (sh > A_ScreenHeight - 60)
                 sh := A_ScreenHeight - 60, sw := Round(sh * 3438 / 2137)
             sx := 0, sy := 0
-            if (j >= 7)
+            if (small)
                 sw := 1280, sh := 796
             if (j >= 5)
                 sx := Min(170, A_ScreenWidth - sw), sy := Min(36, A_ScreenHeight - sh)
@@ -1824,10 +1827,53 @@ ReliefShotSmoke:
                 WinActivate, ahk_id %ShotHwnd%
                 WinWaitActive, ahk_id %ShotHwnd%, , 3
             }
+            if (j = 9) {
+                ScrambleAutoPick := true, ScrambleArmedTick := 0, ScrambleCoolDown := false, ScrambleMissTicks := 0, ScrambleBoxPick := 0
+                ScrambleResetReads()
+                SetTimer, ScrambleTick, 2000
+            }
             ScreenWatchOn := true
             SetTimer, ScreenWatchTick, 400
             t0 := A_TickCount
-            if (away) {
+            if (j = 9) {
+                lc9 := ""
+                while (A_TickCount - t0 < 14000) {
+                    lc9 := ScrambleBoxCardsNow()
+                    if (IsObject(lc9) && lc9.n = 4 && CheatVisible)
+                        break
+                    Sleep, 100
+                }
+                seenMs := A_TickCount - t0
+                ownN := IsObject(ScrambleLastUses) ? ScrambleLastUses.Length() : 0
+                ok := IsObject(lc9) && lc9.auto && lc9.n = 4 && CheatVisible && InStr(CheatShownText, "teeright=CARD 3") && InStr(CheatShownText, "shotcam=CARD 4")
+                ScrambleNote(ok ? "PASS" : "FAIL", "on screen " . sw . "x" . sh . ", Auto-Pick ON: the box has all 4 cards after " . seenMs . " ms (Auto-Pick's own read: " . ownN . " buttons; the box's enlarged read: " . ScrambleBoxDeepHow . ") [" . CheatShownText . "]")
+                if (!ok)
+                    fails += 1
+                HandleBoxKeyDown("v")       ; Tee Right = card 3
+                HandleBoxKeyUp("v")
+                Sleep, 2300                 ; an Auto-Pick read after the pick
+                lc9 := ScrambleBoxCardsNow()
+                pt9 := IsObject(lc9) ? ScrambleNamePoint(lc9, 3) : ""
+                u9 := IsObject(lc9) ? lc9.uses[3] : ""
+                ok := (ScrambleBoxPick = 3) && IsObject(lc9) && lc9.n = 4 && IsObject(pt9) && IsObject(u9) && Abs(pt9[1] - (u9.x + u9.w / 2)) < sw * 0.02 && ScrambleBoxTakeCard(lc9) = 3
+                ScrambleNote(ok ? "PASS" : "FAIL", "Auto-Pick ON: Tee Right picked card 3 and the cards stay 4 after the next read (pick " . ScrambleBoxPick . ", cards " . (IsObject(lc9) ? lc9.n : 0) . ", to take " . (IsObject(lc9) ? ScrambleBoxTakeCard(lc9) : 0) . ")")
+                if (!ok)
+                    fails += 1
+                HandleBoxKeyDown("Right")   ; AIM right takes it
+                HandleBoxKeyUp("Right")
+                Sleep, 300
+                ok := ScrambleCoolDown && !CheatVisible
+                ScrambleNote(ok ? "PASS" : "FAIL", "Auto-Pick ON: AIM right took the box's card (Auto-Pick stood down: " . ScrambleCoolDown . ", sheet gone: " . !CheatVisible . ")")
+                if (!ok)
+                    fails += 1
+                ScrambleAutoPick := false
+                SetTimer, ScrambleTick, Off
+                SetTimer, ScrambleZero, Off
+                ScrambleArmedTick := 0, ScrambleCoolDown := false
+                ScrambleResetReads()
+                ScrambleHidePreview()
+                ParkMouse()
+            } else if (away) {
                 if (j = 3) {
                     while (!(ReliefWatchUp && CheatVisible) && A_TickCount - t0 < 9000)
                         Sleep, 100
@@ -1905,7 +1951,6 @@ ReliefShotSmoke:
                 WinKill, ahk_exe notepad.exe
                 WinWaitClose, ahk_exe notepad.exe, , 5
             } else if (j >= 5) {
-                small := (j >= 7)
                 if (j = 7) {
                     while (!(ReliefWatchUp && CheatVisible) && A_TickCount - t0 < 9000)
                         Sleep, 100
@@ -1945,10 +1990,11 @@ ReliefShotSmoke:
                         }
                     }
                     ok := okCards && okSpot && okNames
+                    readHow := IsObject(ScrambleBoxCards) ? ScrambleBoxCards.how : "no cards"
                     if (small)
-                        ScrambleNote(ok ? "PASS" : "NOTE", "small picture " . sw . "x" . sh . " at " . sx . "," . sy . ": " . nCards . " scramble cards " . (okCards ? "seen in " . seenMs . " ms" : "NOT seen") . ", sheet top right " . okSpot . ", names " . nameNote . "[" . CheatShownText . "]")
+                        ScrambleNote(ok ? "PASS" : "NOTE", "small picture " . sw . "x" . sh . " at " . sx . "," . sy . ": " . nCards . " scramble cards " . (okCards ? "seen in " . seenMs . " ms" : "NOT seen") . " (reads " . readHow . "), sheet top right " . okSpot . ", names " . nameNote . "[" . CheatShownText . "]")
                     else {
-                        ScrambleNote(ok ? "PASS" : "FAIL", "on screen " . sw . "x" . sh . " at " . sx . "," . sy . ", Auto-Pick off: the " . nCards . " scramble cards (Select) seen in " . seenMs . " ms, CARD 1-" . nCards . " on the sheet (top right: " . okSpot . " at " . chx . "," . chy . " " . chw . "x" . chh . "); name clicks " . nameNote . "[" . CheatShownText . "]")
+                        ScrambleNote(ok ? "PASS" : "FAIL", "on screen " . sw . "x" . sh . " at " . sx . "," . sy . ", Auto-Pick off: the " . nCards . " scramble cards (Select) seen in " . seenMs . " ms, CARD 1-" . nCards . " on the sheet (reads " . readHow . "; top right: " . okSpot . " at " . chx . "," . chy . " " . chw . "x" . chh . "); name clicks " . nameNote . "[" . CheatShownText . "]")
                         if (!ok)
                             fails += 1
                     }

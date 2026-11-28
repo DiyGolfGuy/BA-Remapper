@@ -721,6 +721,8 @@ WatchGameSeek := 0           ; ... looked up again not before this tick
 WatchSeenHwnd := 0           ; the game window the screen watch saw uncovered ...
 WatchSeenTick := 0           ; ... and when (GsproShown)
 ScreenWatchFast := 0         ; quick looks left after a press (see ScreenWatchHurry)
+ScrambleBoxBest := ""        ; Auto-Pick on: the fullest read of the cards on screen {id, uses, lines}
+ScrambleBoxDeepId := ""      ; ... and the cards the box has read enlarged itself (small pictures)
 ScrambleAutoSeenId := ""     ; Auto-Pick's cards the cheap look has seen ...
 ScrambleAutoGoneId := ""     ; ... and then saw gone (picked by mouse): sheet and frame go at once
 ScrambleAutoMiss := 0
@@ -2950,8 +2952,26 @@ ScreenWatchStep() {
     WatchSeenHwnd := win.hwnd, WatchSeenTick := A_TickCount
     ReliefWatchLook(win)
     ScrambleBoxWatchStep(win)
-    global ScrambleLearnedId
+    global ScrambleLearnedId, ScrambleBoxDeepId, ScrambleBoxDeepHow, OcrBusy, ScrambleBusy
     lc := ScrambleBoxCardsNow()
+    ; Auto-Pick on, a picture under 1300 px high: its reads can leave
+    ; out the highlighted card (see ScrambleBoxRead).  The box reads
+    ; the enlarged card strip itself, once for these cards; Auto-Pick's
+    ; own reads and its choice are not touched.
+    if (IsObject(lc) && lc.auto && ReliefNoFn && ScrambleBoxDeepId != lc.id && lc.n < 4 && win.h < 1300 && !OcrBusy && !ScrambleBusy) {
+        ScrambleBoxDeepId := lc.id
+        OcrLockTake()
+        try {
+            rd := ScrambleBoxRead(win)
+            ScrambleBoxKeepBest(rd.uses, rd.lines)
+            ScrambleBoxDeepHow := rd.how
+            OcrTrace("scramble (Auto-Pick on): the box read " . rd.n . " cards (" . rd.how . "; picture " . win.w . " x " . win.h . ")")
+        } catch appErr {
+            LogAppError("ScrambleBoxDeep", appErr)
+        }
+        OcrBusy := false
+        lc := ScrambleBoxCardsNow()
+    }
     if (IsObject(lc) && lc.auto && ScrambleLearnedId != lc.id) {
         ScrambleLearnedId := lc.id
         ScrambleLearn(lc, win)
@@ -3150,13 +3170,33 @@ ScrambleBoxCardsNow() {
         return ""
     if (ScrambleAutoPick) {
         u := ScrambleLastUses
-        global ScrambleAutoGoneId
-        if (ScrambleArmedTick > 0 && !ScrambleCoolDown && ScrambleMissTicks = 0 && IsObject(u) && u.MaxIndex() >= 2 && ScrambleAutoGoneId != "a" . ScrambleArmedTick)
-            return {uses: u, n: Min(u.MaxIndex(), 4), hwnd: ScrambleLastHwnd, auto: true, id: "a" . ScrambleArmedTick}
+        global ScrambleAutoGoneId, ScrambleBoxBest
+        if (ScrambleArmedTick > 0 && !ScrambleCoolDown && ScrambleMissTicks = 0 && IsObject(u) && u.MaxIndex() >= 2 && ScrambleAutoGoneId != "a" . ScrambleArmedTick) {
+            ; The fullest read of these cards counts and stays (a later
+            ; read can leave out the card whose button turned blue when
+            ; the box picked it - the numbers must not shift).
+            id := "a" . ScrambleArmedTick, ln := ""
+            bb := ScrambleBoxBest
+            if (IsObject(bb) && bb.id = id && bb.uses.Length() >= u.Length())
+                u := bb.uses, ln := bb.lines
+            return {uses: u, n: Min(u.Length(), 4), hwnd: ScrambleLastHwnd, auto: true, id: id, lines: ln}
+        }
         return ""
     }
     c := ScrambleBoxCards
     return (IsObject(c) && c.n >= 2) ? c : ""
+}
+
+; Auto-Pick on: the fullest read of the cards now on screen, for the
+; box (never fewer cards than an earlier read of the same cards).
+ScrambleBoxKeepBest(uses, lines) {
+    global ScrambleBoxBest, ScrambleArmedTick
+    if (!ScrambleArmedTick || !IsObject(uses) || uses.Length() < 2 || uses.Length() > 4)
+        return
+    id := "a" . ScrambleArmedTick
+    uses := ScrambleFillGaps(uses)
+    if (!IsObject(ScrambleBoxBest) || ScrambleBoxBest.id != id || uses.Length() > ScrambleBoxBest.uses.Length())
+        ScrambleBoxBest := {id: id, uses: uses, lines: lines}
 }
 
 ; The card picked on the box for these cards (0 = none yet).
@@ -3358,43 +3398,113 @@ ScrambleBoxWatchStep(win) {
     if (IsObject(ScrambleBoxCards) || ScrambleBoxHits < 2 || A_TickCount < ScrambleBoxRetry || OcrBusy)
         return
     OcrLockTake()
-    uses := ""
+    uses := "", readLines := "", readHow := ""
     try {
-        scan := ScanWinClient(GSProWinNeedle, GSProWinExclude)
-        readLines := ""
-        if (scan.found) {
-            rscan := ScrambleRecoverCards(scan)
-            uses := ScrambleButtons(rscan)
-            readLines := rscan.lines
-        }
-        if (scan.found && (!IsObject(uses) || uses.MaxIndex() < 2)) {
-            ; Small or soft text (1080p and below: the test PC's reader
-            ; missed the blue button's USE there): the card strip again,
-            ; enlarged 2x, then 3x.  Only when the cards first show up.
-            band := ScrambleCardBand(scan.win)
-            for i, f in [2, 3] {
-                o := OcrRegionScaled(band.x, band.y, band.w, band.h, f)
-                u2 := ScrambleButtons({found: true, win: scan.win, lines: o.lines, text: o.text, lc: LowerStr(o.text)})
-                if (u2.MaxIndex() >= 2 && u2.MaxIndex() <= 4) {
-                    uses := u2
-                    readLines := o.lines
-                    break
-                }
-            }
-        }
+        rd := ScrambleBoxRead(win)
+        uses := rd.uses, readLines := rd.lines, readHow := rd.how
     } catch appErr {
         LogAppError("ScrambleBoxWatch", appErr)
     }
     OcrBusy := false
-    if (IsObject(uses) && uses.MaxIndex() >= 2) {
-        ScrambleBoxCards := {uses: uses, n: Min(uses.MaxIndex(), 4), hwnd: win.hwnd, auto: false, id: "b" . A_TickCount, lines: readLines}
+    if (IsObject(uses) && uses.Length() >= 2) {
+        ScrambleBoxCards := {uses: uses, n: Min(uses.Length(), 4), hwnd: win.hwnd, auto: false, id: "b" . A_TickCount, lines: readLines, how: readHow}
         ScrambleBoxWait := 0
         ScrambleLearn(ScrambleBoxCards, win)
-        OcrTrace("scramble watch: " . uses.MaxIndex() . " cards on screen")
+        OcrTrace("scramble watch: " . uses.Length() . " cards on screen (" . readHow . "; picture " . win.w . " x " . win.h . ")")
     } else {
         ScrambleBoxWait := Min(30000, ScrambleBoxWait ? ScrambleBoxWait * 2 : 3000)
         ScrambleBoxRetry := A_TickCount + ScrambleBoxWait
     }
+}
+
+; The card buttons for the box, every one of them (v5.3.0).  One read
+; can leave a card out: Windows' reader loses small white print on the
+; highlighted card's blue button first (1641 x 1020: 2 of 3 and 3 of 4
+; cards; 1280 x 796: 2 of 4).  A card left out would shift the numbers,
+; so on a picture under 1300 px high the card strip is read again
+; enlarged (2x and 3x; 3x and 4x under 850 px) and the read with the
+; most buttons in one row counts.  Once, when the cards show up.
+; {uses: [left to right], lines, n, how}
+ScrambleBoxRead(win) {
+    global GSProWinNeedle, GSProWinExclude
+    best := [], bestLines := "", how := ""
+    scan := ScanWinClient(GSProWinNeedle, GSProWinExclude)
+    if (!scan.found)
+        return {uses: best, lines: "", n: 0, how: "no window"}
+    rscan := ScrambleRecoverCards(scan)
+    best := ScrambleRowButtons(rscan.lines), bestLines := rscan.lines
+    how := "1x: " . best.Length()
+    if (best.Length() < 4 && win.h < 1300) {
+        band := ScrambleCardBand(scan.win)
+        for i, f in (win.h < 850 ? [3, 4] : [2, 3]) {
+            o := OcrRegionScaled(band.x, band.y, band.w, band.h, f)
+            u2 := ScrambleRowButtons(o.lines)
+            how .= ", " . f . "x: " . u2.Length()
+            if (u2.Length() > best.Length() && u2.Length() <= 4)
+                best := u2, bestLines := o.lines
+            if (best.Length() >= 4)
+                break
+        }
+    }
+    best := ScrambleFillGaps(best)
+    return {uses: best, lines: bestLines, n: best.Length(), how: how}
+}
+
+; The USE / Select words of one read that share a row, left to right.
+; A stray word elsewhere on the screen is not a card; a word read
+; twice counts once.
+ScrambleRowButtons(lines) {
+    all := ScrambleButtons({lines: lines})
+    row := []
+    for i, a in all {
+        r := []
+        for j, b in all {
+            if (Abs((b.y + b.h / 2) - (a.y + a.h / 2)) <= 1.2 * Max(a.h, 1))
+                r.Push(b)
+        }
+        if (r.Length() > row.Length())
+            row := r
+    }
+    out := []
+    Loop, % row.Length() {
+        pick := 0
+        for i, b in row {
+            if (!pick || b.x < row[pick].x)
+                pick := i
+        }
+        b := row.RemoveAt(pick)
+        last := out.Length() ? out[out.Length()] : ""
+        if (IsObject(last) && Abs((b.x + b.w / 2) - (last.x + last.w / 2)) < Max(b.h, last.h))
+            continue
+        out.Push(b)
+    }
+    return out
+}
+
+; Cards stand in an even row.  Three buttons with one double-wide gap
+; mean a card between them was not read: it gets its place.
+ScrambleFillGaps(uses) {
+    n := uses.Length()
+    if (n < 3 || n >= 4)
+        return uses
+    pitch := 0
+    Loop, % n - 1 {
+        d := (uses[A_Index + 1].x + uses[A_Index + 1].w / 2) - (uses[A_Index].x + uses[A_Index].w / 2)
+        pitch := pitch ? Min(pitch, d) : d
+    }
+    if (pitch <= 0)
+        return uses
+    out := []
+    for i, u in uses {
+        out.Push(u)
+        if (i < n) {
+            gap := (uses[i + 1].x + uses[i + 1].w / 2) - (u.x + u.w / 2)
+            m := Round(gap / pitch)
+            if (m = 2 && Abs(gap - 2 * pitch) <= 0.15 * pitch)
+                out.Push({x: Round(u.x + gap / 2), y: u.y, w: u.w, h: u.h, text: "(between)"})
+        }
+    }
+    return (out.Length() <= 4) ? out : uses
 }
 
 ; The chosen scramble card's colours in the card strip: 80 samples
@@ -3551,7 +3661,7 @@ ScrambleNamePoint(c, k) {
     u := c.uses[k]
     if (!IsObject(u))
         return ""
-    lines := c.auto ? ScrambleLastLines : c.lines
+    lines := IsObject(c.lines) ? c.lines : ScrambleLastLines
     pt := ScrambleNameFromLines(lines, c.uses, k)
     return IsObject(pt) ? pt : [Round(u.x + u.w / 2), Round(u.y - 7.8 * u.h)]
 }
@@ -3649,7 +3759,10 @@ ReliefRegion(win) {
 
 ReliefRead(win, reader := "") {
     r := ReliefRegion(win)
-    sc := (win.h < 1300) ? 2 : 1
+    ; The titles are about 1.5% of the picture's height: read them at
+    ; 30 px or more (v5.3.0: 3x under 950 px - at 1280 x 800 a 2x read
+    ; lost the second word of FLAG LINE - and 4x under 640 px).
+    sc := (win.h >= 1300) ? 1 : (win.h >= 950) ? 2 : (win.h >= 640) ? 3 : 4
     if (IsObject(reader))
         o := reader.Call(r.x, r.y, r.w, r.h, sc)
     else if (sc > 1)
@@ -5341,6 +5454,7 @@ ScrambleSendPick(pick, when) {
 ScrambleRememberPreview(scan, uses) {
     global ScramblePreviewRead, ScrambleLastRead, ScrambleLastLines
     ScrambleLastLines := scan.lines   ; v5.3.0: where the names are (box picks)
+    ScrambleBoxKeepBest(ScrambleRowButtons(scan.lines), scan.lines)
     ScramblePreviewRead := ""
     lr := ScrambleLastRead
     if (!scan.HasKey("win") || !scan.win.found || !IsObject(lr) || lr.winner <= 0)
