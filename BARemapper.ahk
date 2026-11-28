@@ -1245,7 +1245,13 @@ CheatReliefState() {
     rel := ReliefLast
     if (!IsObject(rel) || !rel.found || (A_TickCount - rel.at) >= 4000)
         return {on: false, sel: 0, key: "off"}
-    sel := ReliefSelected(rel)
+    ; v5.3.0: the sheet asks several times a second while the list is
+    ; up - one copy of the cards' corner instead of a screen read per
+    ; sample point keeps that light
+    blk := ReliefCardsBlock(rel)
+    sel := IsObject(blk) ? ReliefSelected(rel, Func("ScreenBlockPixel").Bind(blk)) : ReliefSelected(rel)
+    if (IsObject(blk))
+        ScreenRowsFree(blk)
     if (ReliefExpectSel && (A_TickCount - ReliefExpectTick) < 700)
         sel := ReliefExpectSel
     names := ""
@@ -2647,6 +2653,31 @@ ScreenRows(srcDC, x0, w, ys) {
     return {ok: ok, bits: bits, w: w, rows: n, mdc: mdc, dib: dib, old: old}
 }
 
+; One 1:1 copy of a screen rectangle (a single BitBlt), freed with
+; ScreenRowsFree.  {ok, bits, w, rows, x, y}.
+ScreenBlock(x, y, w, h) {
+    VarSetCapacity(bi, 40, 0)
+    NumPut(40, bi, 0, "UInt"), NumPut(w, bi, 4, "Int"), NumPut(-h, bi, 8, "Int")
+    NumPut(1, bi, 12, "UShort"), NumPut(32, bi, 14, "UShort")
+    bits := 0
+    sdc := DllCall("GetDC", "Ptr", 0, "Ptr")
+    mdc := DllCall("CreateCompatibleDC", "Ptr", sdc, "Ptr")
+    dib := DllCall("CreateDIBSection", "Ptr", mdc, "Ptr", &bi, "UInt", 0, "Ptr*", bits, "Ptr", 0, "UInt", 0, "Ptr")
+    old := DllCall("SelectObject", "Ptr", mdc, "Ptr", dib, "Ptr")
+    ok := dib && bits && DllCall("BitBlt", "Ptr", mdc, "Int", 0, "Int", 0, "Int", w, "Int", h, "Ptr", sdc, "Int", x, "Int", y, "UInt", 0x00CC0020)
+    DllCall("ReleaseDC", "Ptr", 0, "Ptr", sdc)
+    return {ok: ok, bits: bits, w: w, rows: h, x: x, y: y, mdc: mdc, dib: dib, old: old}
+}
+
+; A pixel of a ScreenBlock in GetPixel's 0x00BBGGRR form (-1 outside).
+ScreenBlockPixel(blk, x, y) {
+    x -= blk.x, y -= blk.y
+    if (!blk.ok || x < 0 || y < 0 || x >= blk.w || y >= blk.rows)
+        return -1
+    c := NumGet(blk.bits + 0, (y * blk.w + x) * 4, "UInt")
+    return ((c >> 16) & 0xFF) | (c & 0xFF00) | ((c & 0xFF) << 16)
+}
+
 ScreenRowsFree(o) {
     DllCall("SelectObject", "Ptr", o.mdc, "Ptr", o.old, "Ptr")
     DllCall("DeleteObject", "Ptr", o.dib)
@@ -3365,6 +3396,21 @@ ReliefSelected(rel, pixFn := "") {
         }
     }
     return (best && bestV >= 50 && bestV - secondV >= 25) ? best : 0
+}
+
+; One copy of the screen under every point ReliefSelected samples.
+ReliefCardsBlock(rel) {
+    x0 := "", y0 := "", x1 := "", y1 := ""
+    for i, o in rel.opts {
+        h := o.h
+        ax := Floor(o.x - h * 0.45) - 1, bx := Ceil(o.x + h * 2.6) + 2
+        ay := Floor(o.y + h * 0.3) - 1, by := Ceil(o.y + h * 1.25) + 2
+        x0 := (x0 = "") ? ax : Min(x0, ax), x1 := (x1 = "") ? bx : Max(x1, bx)
+        y0 := (y0 = "") ? ay : Min(y0, ay), y1 := (y1 = "") ? by : Max(y1, by)
+    }
+    if (x0 = "" || x1 - x0 < 2 || y1 - y0 < 2 || (x1 - x0) * (y1 - y0) > 4000000)
+        return ""
+    return ScreenBlock(x0, y0, x1 - x0, y1 - y0)
 }
 
 ReliefScreenPixel(x, y) {
