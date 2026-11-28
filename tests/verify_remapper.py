@@ -1741,7 +1741,11 @@ ReliefShotSmoke:
         ScrambleNote(A_ScreenHeight >= 1000 ? "PASS" : "FAIL", "on screen: test screen " . A_ScreenWidth . "x" . A_ScreenHeight . " (needs 1080 lines, like a bay)")
         if (A_ScreenHeight < 1000)
             fails += 1
-        for j, shotFile in ["relief-water-flagline.jpg", "gspro-2p.jpg"] {
+        ; Shots 3 and 4 (v5.3.0): the same two screens with another
+        ; program clicked last - a video on a second screen - while
+        ; GSPro's picture stays uncovered.
+        for j, shotFile in ["relief-water-flagline.jpg", "gspro-2p.jpg", "relief-water-flagline.jpg", "gspro-2p.jpg"] {
+            away := (j > 2)
             sw := A_ScreenWidth - 20, sh := Round(sw * 2137 / 3438)
             if (sh > A_ScreenHeight - 60)
                 sh := A_ScreenHeight - 60, sw := Round(sh * 3438 / 2137)
@@ -1755,13 +1759,99 @@ ReliefShotSmoke:
             Gui, Shot:New, -Caption +ToolWindow +HwndShotHwnd, GSPro screen watch test
             Gui, Shot:Margin, 0, 0
             Gui, Shot:Add, Picture, x0 y0 w%sw% h%sh%, HBITMAP:%showBmp%
-            Gui, Shot:Show, x0 y0 w%sw% h%sh%
-            WinActivate, ahk_id %ShotHwnd%
-            WinWaitActive, ahk_id %ShotHwnd%, , 3
+            if (away) {
+                Run, notepad.exe, %A_WinDir%
+                WinWait, ahk_exe notepad.exe, , 10
+                WinRestore, ahk_exe notepad.exe
+                WinMove, ahk_exe notepad.exe, , % A_ScreenWidth - 420, 0, 400, 240
+                Gui, Shot:Show, x0 y0 w%sw% h%sh% NA
+                WinActivate, ahk_exe notepad.exe
+                WinWaitActive, ahk_exe notepad.exe, , 3
+            } else {
+                Gui, Shot:Show, x0 y0 w%sw% h%sh%
+                WinActivate, ahk_id %ShotHwnd%
+                WinWaitActive, ahk_id %ShotHwnd%, , 3
+            }
             ScreenWatchOn := true
             SetTimer, ScreenWatchTick, 400
             t0 := A_TickCount
-            if (j = 1) {
+            if (away) {
+                if (j = 3) {
+                    while (!(ReliefWatchUp && CheatVisible) && A_TickCount - t0 < 9000)
+                        Sleep, 100
+                } else {
+                    while (!(IsObject(ScrambleBoxCards) && CheatVisible) && A_TickCount - t0 < 12000)
+                        Sleep, 100
+                }
+                seenMs := A_TickCount - t0
+                npFront := WinActive("ahk_exe notepad.exe") ? 1 : 0
+                w3 := ReliefWatchWin()
+                if (j = 3)
+                    ok := npFront && ReliefWatchUp && CheatVisible && InStr(CheatShownText, "NO FN NEEDED") && InStr(CheatShownText, "right=ENTER: FLAG LINE") && w3.found && !w3.front
+                else
+                    ok := npFront && IsObject(ScrambleBoxCards) && ScrambleBoxCards.n = 2 && CheatVisible && InStr(CheatShownText, "SCRAMBLE:") && InStr(CheatShownText, "teeleft=CARD 2") && w3.found && !w3.front
+                ScrambleNote(ok ? "PASS" : "FAIL", "another program in front, GSPro uncovered: the " . (j = 3 ? "water list" : "2 scramble cards") . " seen in " . seenMs . " ms and the sheet came up by itself (Notepad still in front: " . npFront . ", watch " . (w3.found ? (w3.front ? "front" : "not in front") : "no window") . ") [" . CheatShownText . "]")
+                if (!ok)
+                    fails += 1
+                if (j = 3) {
+                    ; what the extra check costs: the game window and its six
+                    ; cover points, no screen read
+                    tc0 := 0, tc1 := 0, tcf := 0, k0 := 0, u0 := 0, k1 := 0, u1 := 0, cr := 0, ex := 0
+                    DllCall("QueryPerformanceFrequency", "Int64*", tcf)
+                    DllCall("QueryPerformanceCounter", "Int64*", tc0)
+                    Loop, 50
+                        ReliefWatchWin()
+                    DllCall("QueryPerformanceCounter", "Int64*", tc1)
+                    awayWin := (tc1 - tc0) * 1000 / tcf / 50
+                    DllCall("GetProcessTimes", "Ptr", -1, "Int64*", cr, "Int64*", ex, "Int64*", k0, "Int64*", u0)
+                    DllCall("QueryPerformanceCounter", "Int64*", tc0)
+                    Loop, 20 {
+                        w5 := ReliefWatchWin()
+                        ReliefLook(w5)
+                        ScrambleBoxLook(w5)
+                    }
+                    DllCall("QueryPerformanceCounter", "Int64*", tc1)
+                    DllCall("GetProcessTimes", "Ptr", -1, "Int64*", cr, "Int64*", ex, "Int64*", k1, "Int64*", u1)
+                    awayCpu := ((k1 - k0) + (u1 - u0)) / 10000 / 20
+                    ok := awayWin < 3 && awayCpu < 12
+                    ScrambleNote(ok ? "PASS" : "FAIL", "watch cost with another program in front: window + cover check " . Round(awayWin, 3) . " ms; " . Round((tc1 - tc0) * 1000 / tcf / 20, 2) . " ms wall / " . Round(awayCpu, 2) . " ms CPU per look (the same looks as with GSPro in front)")
+                    if (!ok)
+                        fails += 1
+                    ; the first press: GSPro forward, then the list's job
+                    ReliefLastAct := ""
+                    HandleBoxKeyDown("Left")    ; no FN: Aim Left = Next Option
+                    HandleBoxKeyUp("Left")
+                    Sleep, 200
+                    ok := (ReliefLastAct = "NextOption") && WinActive("ahk_id " . ShotHwnd)
+                    ScrambleNote(ok ? "PASS" : "FAIL", "first press with another program in front: Aim Left without FN ran Next Option and GSPro came to the front [" . ReliefLastAct . "]")
+                    if (!ok)
+                        fails += 1
+                } else {
+                    ScrambleBoxPick := 0
+                    HandleBoxKeyDown("c")       ; no FN: Tee Left = card 2
+                    HandleBoxKeyUp("c")
+                    Sleep, 200
+                    ok := (ScrambleBoxPick = 2) && WinActive("ahk_id " . ShotHwnd)
+                    ScrambleNote(ok ? "PASS" : "FAIL", "first press with another program in front: Tee Left picked card 2 and GSPro came to the front [pick " . ScrambleBoxPick . "]")
+                    if (!ok)
+                        fails += 1
+                    ParkMouse()
+                }
+                ; another window over the game: nothing to watch, the sheet goes
+                WinActivate, ahk_exe notepad.exe
+                WinWaitActive, ahk_exe notepad.exe, , 3
+                WinMaximize, ahk_exe notepad.exe
+                t1 := A_TickCount
+                while ((ReliefWatchUp || IsObject(ScrambleBoxCards) || CheatVisible) && A_TickCount - t1 < 5000)
+                    Sleep, 100
+                w4 := ReliefWatchWin()
+                ok := !ReliefWatchUp && !IsObject(ScrambleBoxCards) && !CheatVisible && !w4.found
+                ScrambleNote(ok ? "PASS" : "FAIL", "another program covering GSPro: the watch stops and the sheet goes (" . (A_TickCount - t1) . " ms)")
+                if (!ok)
+                    fails += 1
+                WinKill, ahk_exe notepad.exe
+                WinWaitClose, ahk_exe notepad.exe, , 5
+            } else if (j = 1) {
                 while (!(ReliefWatchUp && CheatVisible) && A_TickCount - t0 < 9000)
                     Sleep, 100
                 ok := ReliefWatchUp && CheatVisible && InStr(CheatShownText, "NO FN NEEDED") && InStr(CheatShownText, "right=ENTER: FLAG LINE") && InStr(CheatShownText, "up=CLOSER") && InStr(CheatShownText, "clubup=|")
@@ -2156,7 +2246,7 @@ def runtime_checks(source, ahk):
             script = work / "ReliefShotSmoke.ahk"
             script.write_text(candidate + "\n" + SMOKE + "\n" + SCRAMBLE + "\n" + REALSHOT + "\n" + RELIEF, encoding="utf-8-sig")
             try:
-                check = subprocess.run([str(ahk), "/ErrorStdOut", str(script), str(ROOT / "tests" / "fixtures" / "gspro")], capture_output=True, text=True, timeout=240)
+                check = subprocess.run([str(ahk), "/ErrorStdOut", str(script), str(ROOT / "tests" / "fixtures" / "gspro")], capture_output=True, text=True, timeout=300)
                 returncode, output = check.returncode, check.stdout + check.stderr
             except subprocess.TimeoutExpired:
                 returncode, output = -1, "timed out"
@@ -2164,11 +2254,11 @@ def runtime_checks(source, ahk):
             print(notes)
             annotate("notice", "GSPro 4 relief screenshots", notes)
             report = (work / "result.txt").read_text() if (work / "result.txt").exists() else "No result"
-            failed = "\n".join(line for line in notes.splitlines() if line.startswith("FAIL") or "on screen" in line or "watch cost" in line)
+            failed = "\n".join(line for line in notes.splitlines() if line.startswith("FAIL") or "on screen" in line or "watch cost" in line or "another program" in line)
             assert returncode == 0 and report.startswith("PASS:"), "ReliefShotSmoke: " + report + failed + output
             print("PASS: GSPro 4 relief screenshots: panel, choices, highlighted choice and the keys for every box button")
             for line in notes.splitlines():
-                if "watch cost" in line or "on screen" in line:
+                if "watch cost" in line or "on screen" in line or "another program" in line:
                     print(line)
                     annotate("notice", "Screen watch", line)
 

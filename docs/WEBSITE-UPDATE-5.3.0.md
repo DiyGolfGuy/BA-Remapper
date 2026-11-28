@@ -34,7 +34,7 @@ Bullets:
 - **Light on the PC.** It looks at a few pixels of the GSPro picture about three times a second; Windows' own OCR reads the screen only once, when the list or the cards appear.
 - Both are on by default and can be turned off on the main window.
 - **Only what works on that screen.** The sheet shows just that screen's jobs: relief jobs on the relief list, CARD 1-4 and TAKE CARD on the scramble cards, Clear View (and anything you add) when FN is held during play.
-- **The box always goes to GSPro.** After a click on another screen (a video, a stats page), the next box press brings GSPro back to the front first. To type in another program, turn mapping off with Ctrl+F12.
+- **The box always goes to GSPro.** After a click on another screen (a video, a stats page), the next box press brings GSPro back to the front first, and the sheet still comes up by itself on the relief list and scramble cards. To type in another program, turn mapping off with Ctrl+F12.
 - **Builder on the box picture**, with every GSPro hotkey listed by name.
 - **GSPro 4 only.** The older GSPro relief menu is no longer read; the Reset Smart Click Spots button is gone. New installs start on Basic Secondary.
 
@@ -56,7 +56,7 @@ Add:
 **FAQ.** Add:
 
 - *Do I still need FN?* For Clear View (FN + Club) and the other yellow jobs during play, yes. On the water / OB relief list and the scramble cards, no: the buttons do that screen's jobs by themselves.
-- *Does watching the screen slow the PC down?* It checks a few pixels about three times a second while GSPro is in front, and reads the screen with Windows OCR only when the list or the cards appear. Nothing is uploaded.
+- *Does watching the screen slow the PC down?* It checks a few pixels of the GSPro picture about three times a second, and reads the screen with Windows OCR only when the list or the cards appear. Nothing is uploaded.
 - *Can I turn it off?* Yes, two checkboxes on the main window: the sheet coming up by itself, and the buttons working without FN.
 
 ## Sharing (Bruce, 2026-11-27)

@@ -37,6 +37,10 @@ DllCall("SetProcessDPIAware")
 ;    name so GSPro shows the ball), AIM right takes it.  Auto-Pick
 ;    keeps counting; a box pick is the card it takes at zero.
 ;  - Main window: two new settings for the screen watch.
+;  - The watch follows GSPro's picture whenever nothing covers it,
+;    also after a click on another screen (a video on screen 2): the
+;    sheet still comes up by itself and the first box press brings
+;    GSPro forward and does that screen's job.  Same look, same pace.
 ;
 ;  CHANGES IN v5.2.2  (Bruce, Nov 24 2026)
 ;  - Mulligan button on GSPro 4's water relief list: it highlighted
@@ -709,6 +713,10 @@ ReliefWatchHits := 0         ; looks in a row that saw the panel
 ReliefWatchMiss := 0         ; looks in a row that did not
 ReliefWatchRetry := 0        ; an OCR read found no list: next read not before this tick
 ScreenWatchOn := true        ; the screen watch timer runs (tests switch it off)
+WatchGameHwnd := 0           ; the GSPro game window while another program is in front ...
+WatchGameSeek := 0           ; ... looked up again not before this tick
+WatchSeenHwnd := 0           ; the game window the screen watch saw uncovered ...
+WatchSeenTick := 0           ; ... and when (GsproShown)
 ScreenWatchFast := 0         ; quick looks left after a press (see ScreenWatchHurry)
 ScrambleAutoSeenId := ""     ; Auto-Pick's cards the cheap look has seen ...
 ScrambleAutoGoneId := ""     ; ... and then saw gone (picked by mouse): sheet and frame go at once
@@ -1382,7 +1390,7 @@ CheatDraw(adjust := false) {
     global ActiveProfile, CheatVisible, CheatExcluded, CheatShownFor, FnIsDown, CheatAuto
     global CheatPanelW, CheatPanelH, CheatHwnd, CheatAdjHwnd, CheatShownKey, CheatWinAdjust, CheatShownText
     win := CheatArea(adjust)
-    if (!win.found || (!adjust && !WinActive("ahk_id " . win.hwnd))) {
+    if (!win.found || (!adjust && !GsproShown(win.hwnd))) {
         CheatHide(adjust)
         return
     }
@@ -2687,8 +2695,9 @@ ReliefOnlyAction(actionId) {
 ;  hazard"; "the only thing we would need FN for would be the clear
 ;  view")
 ;
-;  Cheap on purpose: while mapping is on and GSPro is the window in
-;  front, about three times a second ReliefLook copies 64 x 24
+;  Cheap on purpose: while mapping is on and GSPro's picture is on
+;  screen (in front, or uncovered behind a click on another screen),
+;  about three times a second ReliefLook copies 64 x 24
 ;  pixels of GSPro's panel corner in one go - no OCR, no text.
 ;  GSPro 4's relief panel is a solid dark navy block (R11 G17 B31)
 ;  with its cards on it; a round has little of that colour there
@@ -2705,25 +2714,98 @@ ReliefOnlyAction(actionId) {
 ;  number of screens reads the same (the panel is anchored there).
 ; ------------------------------------------------------------
 
-; The GSPro game window when it is the one in front, else found: false.
+; The GSPro game window when its picture can be seen, else found:
+; false.  In front: one check of the window in front, nothing else.
+; Another program clicked last (Bruce, 2026-11-27: "most of us sim
+; golfers have 2 or 3 screens"): the game window is still watched as
+; long as nothing covers it, so the sheet comes up by itself and the
+; first box press does that screen's job.  front: true / false.
 ReliefWatchWin() {
-    global GSProWinNeedle, GSProWinExclude
-    ; Only the window in front is looked at - no search through every
-    ; window - so the watch costs nothing while GSPro is not in front.
+    global GSProWinNeedle, GSProWinExclude, WatchGameHwnd, WatchGameSeek
     h := DllCall("GetForegroundWindow", "Ptr")
-    if (!h)
+    if (h && WatchIsGame(h)) {
+        win := WatchClient(h)
+        if (win.found) {
+            win.front := true
+            return win
+        }
+    }
+    ; Not in front.  The game window is looked up (a walk through
+    ; the open windows) at most every 2 s; in between only this one
+    ; window is checked.
+    g := WatchGameHwnd
+    if (A_TickCount >= WatchGameSeek || (g && (!DllCall("IsWindow", "Ptr", g) || !WatchIsGame(g)))) {
+        WatchGameSeek := A_TickCount + 2000
+        found := GsproWinRect(GSProWinNeedle, GSProWinExclude)
+        g := WatchGameHwnd := found.found ? found.hwnd : 0
+    }
+    if (!g || !DllCall("IsWindowVisible", "Ptr", g) || DllCall("IsIconic", "Ptr", g))
         return {found: false}
+    win := WatchClient(g)
+    if (!win.found || !WatchUncovered(win))
+        return {found: false}
+    win.front := false
+    return win
+}
+
+; A window titled like the GSPro game (not its configuration window).
+WatchIsGame(h) {
+    global GSProWinNeedle, GSProWinExclude
     WinGetTitle, at, ahk_id %h%
-    if (at = "" || !InStr(at, GSProWinNeedle) || (GSProWinExclude != "" && InStr(at, GSProWinExclude)))
-        return {found: false}
+    return (at != "" && InStr(at, GSProWinNeedle) && !(GSProWinExclude != "" && InStr(at, GSProWinExclude)))
+}
+
+; A window's picture (client area) on the screen: {found, hwnd, x, y,
+; w, h}.  Not GSPro's small connector or a minimized window.
+WatchClient(h) {
     VarSetCapacity(rc, 16, 0), VarSetCapacity(pt, 8, 0)
     if (!DllCall("GetClientRect", "Ptr", h, "Ptr", &rc) || !DllCall("ClientToScreen", "Ptr", h, "Ptr", &pt))
         return {found: false}
     cw := NumGet(rc, 8, "Int"), ch := NumGet(rc, 12, "Int")
-    ; the game picture, not GSPro's small connector or a minimized window
     if (cw < 640 || ch < 400)
         return {found: false}
     return {found: true, hwnd: h, x: NumGet(pt, 0, "Int"), y: NumGet(pt, 4, "Int"), w: cw, h: ch}
+}
+
+; Is the game picture uncovered where the watch looks (the relief
+; panel's corner and the scramble card strip)?  Six points: the
+; window Windows would hand a click to there must be the game.  No
+; message is sent to any program and nothing is read from the screen.
+; Click-through pictures (this program's sheet and card frame, a
+; graphics card's overlay) and this program's own tips do not count.
+WatchUncovered(win) {
+    static pts := [[0.05, 0.10, 1], [0.25, 0.18, 1], [0.45, 0.27, 1], [0.25, 0.62, 0], [0.50, 0.72, 0], [0.75, 0.82, 0]]
+    own := DllCall("GetCurrentProcessId")
+    for i, p in pts {
+        x := win.x + Round((p[3] ? win.h : win.w) * p[1]), y := win.y + Round(win.h * p[2])
+        top := DllCall("WindowFromPoint", "Int64", (x & 0xFFFFFFFF) | (y << 32), "Ptr")
+        root := top ? DllCall("GetAncestor", "Ptr", top, "UInt", 2, "Ptr") : 0
+        if (root = win.hwnd)
+            continue
+        if (!root)
+            return false
+        WinGet, ex, ExStyle, ahk_id %root%
+        if (ex & 0x20)
+            continue
+        WinGet, rpid, PID, ahk_id %root%
+        WinGet, st, Style, ahk_id %root%
+        if (rpid = own && !(st & 0xC00000))
+            continue
+        return false
+    }
+    return true
+}
+
+; GSPro's picture is there for the sheet and the box: its window is
+; in front, or the screen watch has just seen it uncovered (another
+; program was clicked last, on another screen).
+GsproShown(hwnd) {
+    global WatchSeenHwnd, WatchSeenTick
+    if (!hwnd)
+        return false
+    if (WinActive("ahk_id " . hwnd))
+        return true
+    return (WatchSeenHwnd = hwnd && A_TickCount - WatchSeenTick < 3000)
 }
 
 ; Some pixel rows of the screen (or srcDC): ONE 1:1 copy of the band
@@ -2845,15 +2927,18 @@ ScreenWatchStep() {
         ScrambleBoxCards := ""
         return
     }
+    global WatchSeenHwnd, WatchSeenTick
     win := ReliefWatchWin()
     if (!win.found) {
-        ; GSPro not in front: nothing to watch (it is looked at again
-        ; the moment it is)
+        ; GSPro's picture is not on screen (closed, minimized or
+        ; covered): nothing to watch until it is back
+        WatchSeenHwnd := 0
         ReliefWatchHits := 0
         ReliefWatchSet(false)
         ScrambleBoxCards := ""
         return
     }
+    WatchSeenHwnd := win.hwnd, WatchSeenTick := A_TickCount
     ReliefWatchLook(win)
     ScrambleBoxWatchStep(win)
     global ScrambleLearnedId
@@ -3086,12 +3171,16 @@ ScrambleBoxPress(btnId) {
     if (!ReliefNoFn || (!cardOf.HasKey(btnId) && btnId != "right"))
         return false
     c := ScrambleBoxCardsNow()
-    if (!IsObject(c) || (c.hwnd && !WinActive("ahk_id " . c.hwnd)))
+    if (!IsObject(c) || (c.hwnd && !GsproShown(c.hwnd)))
         return false
     ; The colour check alone never moves a tee button's job: before a
     ; press counts, one small read proves the cards are still there.
     if (!ScrambleBoxConfirm(c))
         return false
+    ; Another program was clicked last: GSPro first, so the click on
+    ; the name and the card's number land in the game.
+    if (c.hwnd && !WinActive("ahk_id " . c.hwnd))
+        GsproToFront()
     if (btnId = "right") {
         k := ScrambleBoxTakeCard(c)
         if (!k) {
@@ -7363,7 +7452,7 @@ CheatTick:
         CheatHide()
         Return
     }
-    if (!WinActive("ahk_id " . CheatShownFor)) {
+    if (!GsproShown(CheatShownFor)) {
         CheatHide()
         Return
     }

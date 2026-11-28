@@ -72,9 +72,11 @@ On the scramble cards the sheet shows at the top right, clear of the
 cards; everywhere else it is where you placed it (Size and Place).
 
 How Remapper knows the screen: a quick look at a few pixels of the
-GSPro picture (no screen reading) about three times a second while GSPro
-is in front; one Windows OCR read confirms it when the list or the cards
-appear. It works at any resolution, Windows scale and screen count.
+GSPro picture (no screen reading) about three times a second while the
+GSPro picture is on screen; one Windows OCR read confirms it when the
+list or the cards appear. It works at any resolution, Windows scale and
+screen count. It keeps working after a click on another screen (a video
+on screen 2), as long as no window covers the GSPro picture.
 Each time the scramble cards are read, Remapper also remembers what
 your GSPro draws there, so it spots them quicker and more surely.
 Main window settings:
@@ -101,6 +103,8 @@ THE BOX ALWAYS GOES TO GSPRO (5.3.0): with mapping ON, every box press
 reaches GSPro, even if you clicked another screen (a video, a stats
 page): Remapper brings the GSPro window back to the front first. Only
 the window in front matters, not where the mouse is.
+The relief list and scramble cards work the same way: the sheet still
+comes up by itself, and the first press does that screen's job.
 Windows cannot tell the box from a keyboard, so with mapping ON the
 letters the box uses (Y U O I K A C V J, the arrows, Ctrl+M) also jump
 to GSPro when typed on a keyboard in another program. To type in
