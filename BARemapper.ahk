@@ -3069,6 +3069,20 @@ ScrambleBoxWatchStep(win) {
         scan := ScanWinClient(GSProWinNeedle, GSProWinExclude)
         if (scan.found)
             uses := ScrambleButtons(ScrambleRecoverCards(scan))
+        if (scan.found && (!IsObject(uses) || uses.MaxIndex() < 2)) {
+            ; Small or soft text (1080p and below: the test PC's reader
+            ; missed the blue button's USE there): the card strip again,
+            ; enlarged 2x, then 3x.  Only when the cards first show up.
+            band := ScrambleCardBand(scan.win)
+            for i, f in [2, 3] {
+                o := OcrRegionScaled(band.x, band.y, band.w, band.h, f)
+                u2 := ScrambleButtons({found: true, win: scan.win, lines: o.lines, text: o.text, lc: LowerStr(o.text)})
+                if (u2.MaxIndex() >= 2 && u2.MaxIndex() <= 4) {
+                    uses := u2
+                    break
+                }
+            }
+        }
     } catch appErr {
         LogAppError("ScrambleBoxWatch", appErr)
     }

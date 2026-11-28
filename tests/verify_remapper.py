@@ -2036,9 +2036,13 @@ def runtime_checks(source, ahk):
             print(notes)
             annotate("notice", "GSPro 4 relief screenshots", notes)
             report = (work / "result.txt").read_text() if (work / "result.txt").exists() else "No result"
-            failed = "\n".join(line for line in notes.splitlines() if line.startswith("FAIL") or "on screen" in line)
+            failed = "\n".join(line for line in notes.splitlines() if line.startswith("FAIL") or "on screen" in line or "watch cost" in line)
             assert returncode == 0 and report.startswith("PASS:"), "ReliefShotSmoke: " + report + failed + output
             print("PASS: GSPro 4 relief screenshots: panel, choices, highlighted choice and the keys for every box button")
+            for line in notes.splitlines():
+                if "watch cost" in line or "on screen" in line:
+                    print(line)
+                    annotate("notice", "Screen watch", line)
 
 
 
