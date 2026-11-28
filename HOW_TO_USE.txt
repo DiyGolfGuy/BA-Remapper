@@ -95,6 +95,16 @@ main window. The sheet appears over GSPro with a green outline:
   Back to bottom left:  moves it back to the starting corner
   Cancel:               keeps what was locked in before
 
+THE BOX ALWAYS GOES TO GSPRO (5.3.0): with mapping ON, every box press
+reaches GSPro, even if you clicked another screen (a video, a stats
+page): Remapper brings the GSPro window back to the front first. Only
+the window in front matters, not where the mouse is.
+Windows cannot tell the box from a keyboard, so with mapping ON the
+letters the box uses (Y U O I K A C V J, the arrows, Ctrl+M) also jump
+to GSPro when typed on a keyboard in another program. To type in
+another program, turn mapping OFF first: Ctrl+F12 (and again to turn it
+back on).
+
 Ctrl+F12 toggles Button Mapping. Turn mapping OFF to type normally.
 Closing the main window keeps the app running in the tray; Exit quits.
 

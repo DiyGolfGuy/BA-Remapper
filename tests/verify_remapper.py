@@ -620,7 +620,7 @@ UiSmoke:
         SendEvent, ^m
         SendLevel, 0
         Sleep, 900
-        Assert(MulliganPressTick > mulBefore && WinActive("ahk_exe notepad.exe"), "Ctrl+M with GSPro open behind another program is watched; nothing is pressed without the relief list")
+        Assert(MulliganPressTick > mulBefore && WinActive("GSPro BA Remapper regression target"), "Ctrl+M with GSPro open behind another program goes to GSPro (brought to the front); nothing more without the relief list")
         WinKill, ahk_exe notepad.exe   ; Ctrl+M typed a line break: no save prompt
         WinWaitClose, ahk_exe notepad.exe, , 5
         ; Builder test mode: box presses show what they do, nothing is sent.

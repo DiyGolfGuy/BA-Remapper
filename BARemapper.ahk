@@ -5831,14 +5831,14 @@ Gui, Main:Add, Text, x25 y788 w345 h30, OCR Test saves what Windows reads on the
 Gui, Main:Font, s9 c000000 Normal, Segoe UI
 Gui, Main:Add, Button, x385 y786 w150 h27 gShowFactoryReset, Factory Reset...
 Gui, Main:Font, s9 cAAAAAA Normal, Segoe UI
-Gui, Main:Add, Text, x20 y828 w520 Center, Ctrl+F12 toggles button mapping. Turn mapping OFF to type normally.
+Gui, Main:Add, Text, x20 y826 w520 h32 Center, With mapping ON the box always goes to GSPro, even after you click another screen.`nTo type in another program, turn mapping OFF first (Ctrl+F12).
 Gui, Main:Font, s10 c000000 Normal, Segoe UI
-Gui, Main:Add, Button, x125 y856 w150 h35 gMinimizeMain, Minimize to Tray
-Gui, Main:Add, Button, x285 y856 w150 h35 gDoFullExit, Exit
+Gui, Main:Add, Button, x125 y866 w150 h35 gMinimizeMain, Minimize to Tray
+Gui, Main:Add, Button, x285 y866 w150 h35 gDoFullExit, Exit
 RefreshProfileActions()
 UpdateMainStatus()
 LoadWindowPos(wx, wy)
-ShowSettingsWindow("Main", MainHwnd, 560, 908, launchHidden, wx, wy)
+ShowSettingsWindow("Main", MainHwnd, 560, 918, launchHidden, wx, wy)
 
 ; ============================================================
 ;  STARTUP-LAUNCH FLOW
@@ -6431,6 +6431,17 @@ Return
 ; while another window has the focus; the follow-up brings GSPro to
 ; the front before it presses anything.  Never from the Remapper's
 ; own windows.
+GsproIsFront() {
+    global GSProWinNeedle, GSProWinExclude
+    WinGetTitle, ft, A
+    return (ft != "" && InStr(ft, GSProWinNeedle) && !(GSProWinExclude != "" && InStr(ft, GSProWinExclude)))
+}
+
+MulliganToGspro() {
+    if (SendSecondaryKey("^m"))
+        MulliganPressed()
+}
+
 MulliganWatchWanted() {
     global GSProWinNeedle, GSProWinExclude
     WinGetTitle, t, A
@@ -6867,6 +6878,13 @@ Return
 ;  more is sent, so Enter never takes a drop or rehit by mistake.
 ;  Mapping OFF, or GSPro not the active window: not watched at all.
 ; ============================================================
+; v5.3.0 (Bruce, 2026-11-27): another window in front (a video or a
+; stats page on another screen) - the box's Ctrl+M goes to GSPro: GSPro
+; is brought forward and gets the Ctrl+M as a held keypress, then the
+; same relief follow-up.  (Windows cannot tell the box from a keyboard:
+; with mapping ON, Ctrl+M typed in another program does this too.)
+#If (RemapActive && MulliganWatchWanted() && !GsproIsFront())
+^m::MulliganToGspro()
 #If (RemapActive && MulliganWatchWanted())
 ~^m::MulliganPressed()
 #If
