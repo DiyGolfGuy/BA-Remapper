@@ -1325,25 +1325,31 @@ CheatGeom(win) {
 }
 
 ; What the sheet prints for each button: [{id, text, dim, fn}].
-; With the relief buttons working without FN, a button that keeps
-; its own key there shows its FN job as "FN: ..." in grey.
+; Only what the buttons can do on the screen that is up right now
+; (Bruce, 2026-11-27: "the options are only what they can do on that
+; specific screen at that time"):
+;  - GSPro 4's relief list: the relief jobs (and Mulligan when it is a
+;    choice), nothing else; the FN ring only when FN is still needed.
+;  - anywhere else (FN held in play): the FN jobs that work in play -
+;    Clear View, a custom key, a key sequence, a screen click - and not
+;    the relief jobs, which only do something on the relief list.
 CheatSheetLabels(model, st) {
     global SecType, SecValue
     noFn := st.on && ReliefNoFnActive()
     out := []
     for i, m in model {
-        t := m.yellow, dim := false
+        t := "", isFn := m.fn
+        relJob := (SecType[m.id] = "ocr" && ReliefNoFnAction(SecValue[m.id]))
         if (m.fn) {
-            t := noFn ? "FN" : "FN - HOLD"
-        } else if (t != "") {
-            ; GSPro's own bar names the keys; the picture keeps it short
-            t := RegExReplace(t, " \((F|B)\)$")
-            if (noFn && m.id != "mulligan" && !(SecType[m.id] = "ocr" && ReliefNoFnAction(SecValue[m.id]))) {
-                t := "FN: " . t
-                dim := true
-            }
+            t := noFn ? "" : "FN - HOLD"
+            isFn := !noFn
+        } else if (st.on) {
+            if (m.id = "mulligan" || relJob)
+                t := RegExReplace(m.yellow, " \((F|B)\)$")   ; GSPro's own bar names the keys
+        } else if (!relJob && m.id != "mulligan") {
+            t := m.yellow
         }
-        out.Push({id: m.id, text: t, dim: dim, fn: m.fn})
+        out.Push({id: m.id, text: t, dim: false, fn: isFn})
     }
     return out
 }
@@ -3326,23 +3332,21 @@ ScrambleNameFromLines(lines, uses, k) {
     return IsObject(best) ? [Round(best.x + best.w / 2), Round(best.y + best.h / 2)] : ""
 }
 
-; The sheet's labels on the scramble screen: the bottom row's cards,
-; AIM right takes, every other FN job in grey (FN still does it).
+; The sheet's labels on the scramble screen: only the cards there are
+; (bottom row) and AIM right to take one - nothing else, no FN ring.
 CheatScrambleLabels(model, c) {
     static cardOf := {resetaim: 1, teeleft: 2, teeright: 3, shotcam: 4}
     k := ScrambleBoxTakeCard(c)
     out := []
     for i, m in model {
-        t := "", dim := false
+        t := ""
         if (cardOf.HasKey(m.id)) {
             if (cardOf[m.id] <= c.n)
-                t := "CARD " . cardOf[m.id] . (m.fn ? " (TAP)" : "")
+                t := "CARD " . cardOf[m.id]
         } else if (m.id = "right") {
             t := k ? "TAKE CARD " . k : "TAKE CARD"
-        } else if (!m.fn && m.yellow != "" && m.id != "mulligan") {
-            t := "FN: " . RegExReplace(m.yellow, " \((F|B)\)$"), dim := true
         }
-        out.Push({id: m.id, text: t, dim: dim, fn: m.fn})
+        out.Push({id: m.id, text: t, dim: false, fn: false})
     }
     return out
 }

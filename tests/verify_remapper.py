@@ -479,7 +479,13 @@ UiSmoke:
         wl := {}
         for i, l in CheatSheetLabels(CheatModel(), CheatReliefState())
             wl[l.id] := l
-        Assert(wl.right.text = "ENTER: FLAG LINE" && !wl.right.dim && wl.up.text = "CLOSER" && wl.down.text = "FURTHER BACK" && wl.clubup.text = "FN: CLEAR VIEW" && wl.clubup.dim && wl.resetaim.text = "FN" && wl.teeleft.text = "REHIT + ENTER", "Relief list without FN: ENTER: FLAG LINE, CLOSER / FURTHER BACK, FN: CLEAR VIEW in grey, FN [" . wl.right.text . "|" . wl.up.text . "|" . wl.clubup.text . "|" . wl.resetaim.text . "]")
+        Assert(wl.right.text = "ENTER: FLAG LINE" && wl.up.text = "CLOSER" && wl.down.text = "FURTHER BACK" && wl.clubup.text = "" && wl.resetaim.text = "" && !wl.resetaim.fn && wl.teeleft.text = "REHIT + ENTER", "Relief list without FN: only the relief jobs (no Clear View, no FN ring) [" . wl.right.text . "|" . wl.up.text . "|" . wl.clubup.text . "|" . wl.resetaim.text . "]")
+        ReliefWatchUp := false, ReliefLast := ""
+        nl := {}
+        for i, l in CheatSheetLabels(CheatModel(), CheatReliefState())
+            nl[l.id] := l
+        Assert(nl.clubup.text = "CLEAR VIEW" && nl.resetaim.text = "FN - HOLD" && nl.resetaim.fn && nl.right.text = "" && nl.left.text = "" && nl.teeleft.text = "", "FN held in play: Clear View and FN only, no relief jobs [" . nl.clubup.text . "|" . nl.right.text . "]")
+        ReliefLast := fakeRel, ReliefWatchUp := true
         Assert(ReliefNoFnAction("DropRehit") && ReliefNoFnAction("ReliefZoomIn") && !ReliefNoFnAction(""), "Relief jobs are the ones that switch")
         ReliefWatchUp := false, ReliefLast := "", ReliefExpectSel := 0
         ; Scramble cards (Auto-Pick off, as the screen watch reads them):
@@ -499,7 +505,7 @@ UiSmoke:
         Assert(ScrambleBoxPickNow(ScrambleBoxCards) = 2, "Card 3 on a 2-card screen changes nothing")
         CheatDraw()
         cheatText := CheatShownText
-        Assert(CheatVisible && InStr(cheatText, "SCRAMBLE:  CARD 2 PICKED") && InStr(cheatText, "resetaim=CARD 1 (TAP)") && InStr(cheatText, "teeleft=CARD 2") && InStr(cheatText, "teeright=|") && InStr(cheatText, "right=TAKE CARD 2") && InStr(cheatText, "NO FN NEEDED"), "Scramble sheet: cards along the bottom row, TAKE CARD 2 on AIM right: " . cheatText)
+        Assert(CheatVisible && InStr(cheatText, "SCRAMBLE:  CARD 2 PICKED") && InStr(cheatText, "resetaim=CARD 1|") && InStr(cheatText, "teeleft=CARD 2") && InStr(cheatText, "teeright=|") && InStr(cheatText, "right=TAKE CARD 2") && InStr(cheatText, "NO FN NEEDED") && InStr(cheatText, "clubup=|") && InStr(cheatText, "heatmap=|"), "Scramble sheet: cards along the bottom row, TAKE CARD 2 on AIM right: " . cheatText)
         px := CheatPixels(CheatHwnd, "scramble")
         CheatHide()
         WinActivate, GSPro BA Remapper regression target
@@ -1676,7 +1682,7 @@ ReliefShotSmoke:
             if (j = 1) {
                 while (!(ReliefWatchUp && CheatVisible) && A_TickCount - t0 < 9000)
                     Sleep, 100
-                ok := ReliefWatchUp && CheatVisible && InStr(CheatShownText, "NO FN NEEDED") && InStr(CheatShownText, "right=ENTER: FLAG LINE") && InStr(CheatShownText, "up=CLOSER") && InStr(CheatShownText, "clubup=FN: CLEAR VIEW")
+                ok := ReliefWatchUp && CheatVisible && InStr(CheatShownText, "NO FN NEEDED") && InStr(CheatShownText, "right=ENTER: FLAG LINE") && InStr(CheatShownText, "up=CLOSER") && InStr(CheatShownText, "clubup=|")
                 ScrambleNote(ok ? "PASS" : "FAIL", "on screen " . sw . "x" . sh . ": the water list was seen in " . (A_TickCount - t0) . " ms and the sheet came up by itself [" . CheatShownText . "]")
                 if (!ok)
                     fails += 1
