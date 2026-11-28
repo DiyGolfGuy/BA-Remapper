@@ -709,6 +709,7 @@ CheatHwnd := 0
 CheatAuto := false           ; the sheet on screen came up by itself on the relief list (v5.3.0)
 CheatWinAdjust := -1         ; the sheet's window: -1 none, 0 over GSPro, 1 Size and Place
 CheatShownText := ""         ; what the sheet on screen says (title | chip | print), for the trace and tests
+CheatTickLast := 0           ; when the sheet's own timer last ran (the screen watch restarts it if it stopped)
 ReliefAutoSheet := true      ; v5.3.0: show the sheet by itself on GSPro 4's relief list (settings.ini [App] ReliefSheet)
 ReliefNoFn := true           ; ... and its relief buttons work there without FN (settings.ini [App] ReliefNoFn)
 ReliefWatchUp := false       ; relief watch: the list is on screen (panel colours seen + one OCR read)
@@ -1391,7 +1392,20 @@ CheatSheetLabels(model, st) {
 ; adjust = Size and place mode: drawn over GSPro even when it is
 ; not the active window (or over the screen with GSPro closed), not
 ; click-through so it can be dragged, with a green outline.
+;
+; Drawing and hiding are each done in one piece (v5.3.0): no timer
+; or key press can cut in between their steps.  A hide that landed
+; in the middle of a redraw left the sheet on screen with nothing
+; watching it (seen once in the Windows tests, when a window covered
+; the game just as the sheet was being redrawn).
 CheatDraw(adjust := false) {
+    wasCritical := A_IsCritical
+    Critical, On
+    CheatDrawNow(adjust)
+    Critical, % wasCritical ? wasCritical : "Off"
+}
+
+CheatDrawNow(adjust := false) {
     global ActiveProfile, CheatVisible, CheatExcluded, CheatShownFor, FnIsDown, CheatAuto
     global CheatPanelW, CheatPanelH, CheatHwnd, CheatAdjHwnd, CheatShownKey, CheatWinAdjust, CheatShownText
     win := CheatArea(adjust)
@@ -1480,6 +1494,13 @@ CheatDraw(adjust := false) {
 ; force: also hides the sheet being placed (Size and place mode);
 ; FN release, mapping off and OCR reads leave that one alone.
 CheatHide(force := false) {
+    wasCritical := A_IsCritical
+    Critical, On
+    CheatHideNow(force)
+    Critical, % wasCritical ? wasCritical : "Off"
+}
+
+CheatHideNow(force := false) {
     global CheatVisible, CheatAdjusting, CheatWinAdjust, CheatAuto, CheatShownText
     if (CheatAdjusting && !force)
         return
@@ -2931,6 +2952,7 @@ ScreenWatchStep() {
     if (!RemapActive || (!ReliefAutoSheet && !ReliefNoFn)) {
         ReliefWatchSet(false)
         ScrambleBoxCards := ""
+        CheatWatchCheck()
         return
     }
     global WatchSeenHwnd, WatchSeenTick
@@ -2942,6 +2964,7 @@ ScreenWatchStep() {
         ReliefWatchHits := 0
         ReliefWatchSet(false)
         ScrambleBoxCards := ""
+        CheatWatchCheck()
         return
     }
     static notedWin := ""
@@ -2998,6 +3021,7 @@ ScreenWatchStep() {
     }
     if (CheatAutoWanted() && !CheatVisible && !FnIsDown)
         CheatAutoShow()
+    CheatWatchCheck()
 }
 
 ReliefWatchLook(win) {
@@ -3063,6 +3087,21 @@ ReliefWatchSet(up) {
     ReliefExpectSel := 0
     if (!FnIsDown)
         CheatHide()
+}
+
+; The sheet may only be up by itself while its screen is.  The
+; screen watch checks that at every look, whatever became of the
+; sheet's own timer, so a sheet can never be left standing.
+CheatWatchCheck() {
+    global CheatVisible, CheatHwnd, FnIsDown, CheatAdjusting, CheatTickLast
+    if (FnIsDown || CheatAdjusting)
+        return
+    if (!CheatVisible && !(CheatHwnd && DllCall("IsWindowVisible", "Ptr", CheatHwnd)))
+        return
+    if (!CheatAutoWanted())
+        CheatHide()
+    else if (A_TickCount - CheatTickLast > 1500)
+        SetTimer, CheatTick, 250
 }
 
 ReliefNoFnActive() {
@@ -7616,6 +7655,7 @@ ScrambleBoxTakeLater:
 Return
 
 CheatTick:
+    CheatTickLast := A_TickCount
     if (!CheatVisible || !(FnIsDown || CheatAutoWanted())) {
         CheatHide()
         Return
@@ -7644,6 +7684,8 @@ CheatTick:
     } else if (cheatNowKey = CheatPendingKey) {
         CheatPendingKey := ""
         CheatDraw()
+        if (CheatVisible)
+            SetTimer, CheatTick, 250
     } else {
         CheatPendingKey := cheatNowKey
     }

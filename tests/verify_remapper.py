@@ -1948,7 +1948,7 @@ ReliefShotSmoke:
                     Sleep, 100
                 w4 := ReliefWatchWin()
                 ok := !ReliefWatchUp && !IsObject(ScrambleBoxCards) && !CheatVisible && !w4.found
-                ScrambleNote(ok ? "PASS" : "FAIL", "another program covering GSPro: the watch stops and the sheet goes (" . (A_TickCount - t1) . " ms)")
+                ScrambleNote(ok ? "PASS" : "FAIL", "another program covering GSPro: the watch stops and the sheet goes (" . (A_TickCount - t1) . " ms; watch " . ReliefWatchUp . ", cards " . IsObject(ScrambleBoxCards) . ", sheet " . CheatVisible . ", window " . w4.found . ", FN " . FnIsDown . ") [" . CheatShownText . "]")
                 if (!ok)
                     fails += 1
                 WinKill, ahk_exe notepad.exe
@@ -2094,10 +2094,15 @@ ReliefShotSmoke:
                 if (CheatVisible)
                     CheatPixels(CheatHwnd, "scramble-screen")
             }
+            ; shots 1 and 2: the sheet's own timer stopped (as when a hide
+            ; lands in the middle of a redraw) - the screen watch alone
+            ; must still take the sheet away
+            if (j <= 2)
+                SetTimer, CheatTick, Off
             Gui, Shot:Destroy
             Sleep, 1200
-            ok := !ReliefWatchUp && !IsObject(ScrambleBoxCards) && !CheatVisible
-            ScrambleNote(ok ? "PASS" : "FAIL", "screen gone: sheet and box jobs back to normal")
+            ok := !ReliefWatchUp && !IsObject(ScrambleBoxCards) && !CheatVisible && !(CheatHwnd && DllCall("IsWindowVisible", "Ptr", CheatHwnd))
+            ScrambleNote(ok ? "PASS" : "FAIL", "screen gone" . (j <= 2 ? " (the sheet's own timer stopped)" : "") . ": sheet and box jobs back to normal (watch " . ReliefWatchUp . ", cards " . IsObject(ScrambleBoxCards) . ", sheet " . CheatVisible . ", FN " . FnIsDown . ")")
             if (!ok)
                 fails += 1
         }
