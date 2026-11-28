@@ -2626,15 +2626,17 @@ ReliefWatchWin() {
     return {found: true, hwnd: h, x: NumGet(pt, 0, "Int"), y: NumGet(pt, 4, "Int"), w: cw, h: ch}
 }
 
-; A few one-pixel rows of the screen (or srcDC) copied 1:1 into a
-; small memory picture: x0..x0+w, one row per screen y in ys.  1:1
-; copies only - a shrinking copy straight from the screen was
-; measured at 0.8 s on the test PC.  {bits, w, rows} + handles;
+; Some pixel rows of the screen (or srcDC): ONE 1:1 copy of the band
+; from the first row to the last (x0..x0+w), read back row by row.
+; Every screen copy has a fixed cost (on the test PC a stretched copy
+; took 0.8 s and a copy per row added up), so a look makes exactly
+; one.  {ok, bits, w, off: [byte offset of each row]} + handles;
 ; ScreenRowsFree releases them.
 ScreenRows(srcDC, x0, w, ys) {
-    n := ys.MaxIndex()
+    y0 := ys[1], y1 := ys[ys.MaxIndex()]
+    h := y1 - y0 + 1
     VarSetCapacity(bi, 40, 0)
-    NumPut(40, bi, 0, "UInt"), NumPut(w, bi, 4, "Int"), NumPut(-n, bi, 8, "Int")
+    NumPut(40, bi, 0, "UInt"), NumPut(w, bi, 4, "Int"), NumPut(-h, bi, 8, "Int")
     NumPut(1, bi, 12, "UShort"), NumPut(32, bi, 14, "UShort")
     bits := 0
     screenDC := 0
@@ -2643,14 +2645,13 @@ ScreenRows(srcDC, x0, w, ys) {
     mdc := DllCall("CreateCompatibleDC", "Ptr", srcDC, "Ptr")
     dib := DllCall("CreateDIBSection", "Ptr", mdc, "Ptr", &bi, "UInt", 0, "Ptr*", bits, "Ptr", 0, "UInt", 0, "Ptr")
     old := DllCall("SelectObject", "Ptr", mdc, "Ptr", dib, "Ptr")
-    ok := (dib && bits)
-    for i, y in ys {
-        if (ok && !DllCall("BitBlt", "Ptr", mdc, "Int", 0, "Int", i - 1, "Int", w, "Int", 1, "Ptr", srcDC, "Int", x0, "Int", y, "UInt", 0x00CC0020))
-            ok := false
-    }
+    ok := (dib && bits && h > 0 && DllCall("BitBlt", "Ptr", mdc, "Int", 0, "Int", 0, "Int", w, "Int", h, "Ptr", srcDC, "Int", x0, "Int", y0, "UInt", 0x00CC0020))
     if (screenDC)
         DllCall("ReleaseDC", "Ptr", 0, "Ptr", screenDC)
-    return {ok: ok, bits: bits, w: w, rows: n, mdc: mdc, dib: dib, old: old}
+    off := []
+    for i, y in ys
+        off.Push((y - y0) * w * 4)
+    return {ok: ok, bits: bits, w: w, off: off, rows: ys.MaxIndex(), mdc: mdc, dib: dib, old: old}
 }
 
 ; One 1:1 copy of a screen rectangle (a single BitBlt), freed with
@@ -2704,7 +2705,7 @@ ReliefLook(win, srcDC := 0) {
     panel := 0, card := 0, blue := 0, n := 0
     if (o.ok) {
         Loop, % o.rows {
-            row := (A_Index - 1) * w * 4
+            row := o.off[A_Index]
             Loop, 64 {
                 c := NumGet(o.bits + 0, row + Floor((A_Index - 0.5) * w / 64) * 4, "UInt")
                 b := c & 0xFF, g := (c >> 8) & 0xFF, r := (c >> 16) & 0xFF
@@ -3098,7 +3099,7 @@ ScrambleBoxLook(win, srcDC := 0) {
     navy := 0, n := 0
     if (o.ok) {
         Loop, % o.rows {
-            row := (A_Index - 1) * w * 4
+            row := o.off[A_Index]
             Loop, 80 {
                 c := NumGet(o.bits + 0, row + Floor((A_Index - 0.5) * w / 80) * 4, "UInt")
                 b := c & 0xFF, g := (c >> 8) & 0xFF, r := (c >> 16) & 0xFF

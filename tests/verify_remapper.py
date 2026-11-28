@@ -1652,19 +1652,20 @@ ReliefShotSmoke:
                 tc0 := 0, tc1 := 0, tcf := 0
                 DllCall("QueryPerformanceFrequency", "Int64*", tcf)
                 DllCall("QueryPerformanceCounter", "Int64*", tc0)
-                Loop, 50 {
+                Loop, 20 {
                     w2 := ReliefWatchWin()
                     ReliefLook(w2)
                     ScrambleBoxLook(w2)
                 }
                 DllCall("QueryPerformanceCounter", "Int64*", tc1)
-                perLook := (tc1 - tc0) * 1000 / tcf / 50
-                ; parts, for the record: each look alone, one screen row,
-                ; and one copy of the whole panel corner
+                perLook := (tc1 - tc0) * 1000 / tcf / 20
+                ; parts, for the record: each look alone, the window check,
+                ; one copy of a single row, of the panel corner, of the whole
+                ; game picture
                 parts := ""
-                for pk, part in ["win", "relief", "scramble", "row", "block"] {
+                for pk, part in ["win", "relief", "scramble", "row", "corner", "full"] {
                     DllCall("QueryPerformanceCounter", "Int64*", tc0)
-                    Loop, 20 {
+                    Loop, 10 {
                         if (part = "win")
                             ReliefWatchWin()
                         else if (part = "relief")
@@ -1672,16 +1673,14 @@ ReliefShotSmoke:
                         else if (part = "scramble")
                             ScrambleBoxLook(w2)
                         else if (part = "row")
-                            ScreenRowsFree(ScreenRows(0, w2.x, Round(w2.h * 0.5), [w2.y + 100]))
-                        else {
-                            bys := []
-                            Loop, % Round(w2.h * 0.24)
-                                bys.Push(w2.y + A_Index)
-                            ScreenRowsFree(ScreenRows(0, w2.x, Round(w2.h * 0.5), bys))
-                        }
+                            ScreenRowsFree(ScreenBlock(w2.x, w2.y + 100, Round(w2.h * 0.5), 1))
+                        else if (part = "corner")
+                            ScreenRowsFree(ScreenBlock(w2.x, w2.y + Round(w2.h * 0.08), Round(w2.h * 0.5), Round(w2.h * 0.2)))
+                        else
+                            ScreenRowsFree(ScreenBlock(w2.x, w2.y, w2.w, w2.h))
                     }
                     DllCall("QueryPerformanceCounter", "Int64*", tc1)
-                    parts .= part . " " . Round((tc1 - tc0) * 1000 / tcf / 20, 2) . " ms, "
+                    parts .= part . " " . Round((tc1 - tc0) * 1000 / tcf / 10, 2) . " ms, "
                 }
                 ok := w2.found && perLook < 25
                 ScrambleNote(ok ? "PASS" : "FAIL", "watch cost: " . Round(perLook, 2) . " ms per look (window check + relief look + scramble look) = " . Round(perLook / 4, 2) . "% of one CPU core at one look every 400 ms [" . parts . "]")
