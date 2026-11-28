@@ -464,12 +464,17 @@ GSProActions := "None|"
     . "U - Putt Toggle|V - Tee Right|W - Minimap Zoom In|"
     . "Y - Heat Map|Z - 3D Grass Toggle|"
     . "1 - Select Shot 1|2 - Select Shot 2|3 - Select Shot 3|4 - Select Shot 4|"
+    . "5 - Camera Go To Ball|6 - Camera Fly To Ball|"
+    . "8 - Go To Ball (practice)|9 - Previous Hole (practice)|0 - Next Hole (practice)|"
     . "F1 - Clear Tracer|F3 - Aimpoint|F5 - Free Look|"
-    . "Tab - Shortcuts|Ctrl+M - Mulligan|Space - Fast Forward|"
+    . "F8 - Console (short)|F9 - Console (tall)|F11 - Fullscreen|"
+    . "Tab - Shortcuts / Keyboard|Ctrl+M - Mulligan|Space - Fast Forward|"
+    . "Esc - Show UI|- (Minus) - Sound Off|= (Equals / Plus) - Sound On|"
+    . "E - Rotate Map (relief list)|"
     . "Up Arrow|Down Arrow|Left Arrow|Right Arrow|"
-    . "Enter|Escape|Backspace|"
-    . "E|M|X|- (Minus)|= (Equals / Plus)|"
-    . "F2|F4|F6|F7|F8|F9|F10|F11|F12|"
+    . "Enter|Backspace|"
+    . "M|X|"
+    . "F2|F4|F6|F7|F10|F12|"
     . "Home|End|Page Up|Page Down|Insert|Delete"
 GSProCustomEntry := "Custom key or combo..."
 
@@ -502,10 +507,18 @@ GSProKeyMap["1 - Select Shot 1"]     := "1"
 GSProKeyMap["2 - Select Shot 2"]     := "2"
 GSProKeyMap["3 - Select Shot 3"]     := "3"
 GSProKeyMap["4 - Select Shot 4"]     := "4"
+GSProKeyMap["5 - Camera Go To Ball"] := "5"
+GSProKeyMap["6 - Camera Fly To Ball"] := "6"
+GSProKeyMap["8 - Go To Ball (practice)"] := "8"
+GSProKeyMap["9 - Previous Hole (practice)"] := "9"
+GSProKeyMap["0 - Next Hole (practice)"] := "0"
+GSProKeyMap["F8 - Console (short)"]  := "{F8}"
+GSProKeyMap["F9 - Console (tall)"]   := "{F9}"
+GSProKeyMap["F11 - Fullscreen"]      := "{F11}"
 GSProKeyMap["F1 - Clear Tracer"]     := "{F1}"
 GSProKeyMap["F3 - Aimpoint"]         := "{F3}"
 GSProKeyMap["F5 - Free Look"]        := "{F5}"
-GSProKeyMap["Tab - Shortcuts"]       := "{Tab}"
+GSProKeyMap["Tab - Shortcuts / Keyboard"] := "{Tab}"
 GSProKeyMap["Ctrl+M - Mulligan"]     := "^m"
 GSProKeyMap["Space - Fast Forward"]  := "{Space}"
 GSProKeyMap["Up Arrow"]              := "{Up}"
@@ -513,14 +526,14 @@ GSProKeyMap["Down Arrow"]            := "{Down}"
 GSProKeyMap["Left Arrow"]            := "{Left}"
 GSProKeyMap["Right Arrow"]           := "{Right}"
 GSProKeyMap["Enter"]                 := "{Enter}"
-GSProKeyMap["Escape"]                := "{Escape}"
+GSProKeyMap["Esc - Show UI"]         := "{Escape}"
 GSProKeyMap["Backspace"]             := "{Backspace}"
-GSProKeyMap["E"]                     := "e"
+GSProKeyMap["E - Rotate Map (relief list)"] := "e"
 GSProKeyMap["M"]                     := "m"
 GSProKeyMap["X"]                     := "x"
-GSProKeyMap["- (Minus)"]             := "-"
-GSProKeyMap["= (Equals / Plus)"]     := "="
-for i, fk in ["F2","F4","F6","F7","F8","F9","F10","F11","F12"]
+GSProKeyMap["- (Minus) - Sound Off"] := "-"
+GSProKeyMap["= (Equals / Plus) - Sound On"] := "="
+for i, fk in ["F2","F4","F6","F7","F10","F12"]
     GSProKeyMap[fk] := "{" . fk . "}"
 GSProKeyMap["Home"]                  := "{Home}"
 GSProKeyMap["End"]                   := "{End}"
@@ -2445,8 +2458,10 @@ HandleBoxKeyDown(keyName) {
     pk := BoxTapKey(btnId)
     if (AnyOcrSecondary())
         OcrTrace("key " . keyName . " (" . btnId . ") down, FN not held -> sent " . pk)
-    if (pk != "")
+    if (pk != "") {
+        GsproToFront()
         Send, %pk%
+    }
 }
 
 HandleBoxKeyUp(keyName) {
@@ -2517,6 +2532,40 @@ FireSecondary(btnId) {
         OcrTrace("secondary fired: " . btnId . " -> " . SecValue[btnId])
         SmartAction(SecValue[btnId])
     }
+}
+
+; v5.3.0 (Bruce: "make sure ... the gspro screen has to be in focus"):
+; a box tap goes to GSPro.  If GSPro is open but another window is in
+; front, GSPro is brought forward first (about 0.1-0.3 s, only then);
+; with GSPro already in front this is one quick check.  Never when
+; GSPro is not open, never from the Remapper's own windows (typing
+; there gets plain keys before this point), never while a GSPro
+; window is minimized by the player.
+GsproToFront() {
+    global GSProWinNeedle, GSProWinExclude
+    h := DllCall("GetForegroundWindow", "Ptr")
+    if (h) {
+        WinGetTitle, ft, ahk_id %h%
+        if (InStr(ft, GSProWinNeedle) && !(GSProWinExclude != "" && InStr(ft, GSProWinExclude)))
+            return true
+        WinGet, fpid, PID, ahk_id %h%
+        if (fpid = DllCall("GetCurrentProcessId"))
+            return false
+    }
+    game := GsproWinRect(GSProWinNeedle, GSProWinExclude)
+    if (!game.found)
+        return false
+    g := game.hwnd
+    WinGet, mm, MinMax, ahk_id %g%
+    if (mm = -1)
+        return false
+    WinActivate, ahk_id %g%
+    ; a short wait loop, not WinWaitActive (no ErrorLevel: it would
+    ; throw if this ever runs inside a try)
+    t0 := A_TickCount
+    while (!WinActive("ahk_id " . g) && A_TickCount - t0 < 600)
+        Sleep, 20
+    return WinActive("ahk_id " . g) ? true : false
 }
 
 ; Frame-polled game input can miss an instantaneous SendInput
@@ -7557,11 +7606,13 @@ ConfigButton(btnIdVal, displayName, primaryKey) {
     Gui, Cfg:Font, s10 cWhite Normal, Segoe UI
     Gui, Cfg:Add, Radio, x15 y468 w430 vCfgTypeNone gCfgTypeChanged, None - no FN function
     Gui, Cfg:Font, s10 cFFD400 Normal, Segoe UI
-    Gui, Cfg:Add, Text, x15 y498 w430 h60 vCfgPreview,
+    Gui, Cfg:Add, Text, x15 y498 w430 h48 vCfgPreview,
 
+    Gui, Cfg:Font, s8 cAAAAAA Normal, Segoe UI
+    Gui, Cfg:Add, Text, x15 y548 w430 h16, GSPro hotkeys only work in the GSPro window - BA Remapper brings it to the front first.
     Gui, Cfg:Font, s10 c000000 Normal, Segoe UI
-    Gui, Cfg:Add, Button, x90 y566 w120 h32 gCfgOK Default, Save
-    Gui, Cfg:Add, Button, x240 y566 w120 h32 gCfgCancel, Cancel
+    Gui, Cfg:Add, Button, x90 y570 w120 h32 gCfgOK Default, Save
+    Gui, Cfg:Add, Button, x240 y570 w120 h32 gCfgCancel, Cancel
 
     ; Preselect the tap key
     if (ProfPrimary.HasKey(btnIdVal)) {
