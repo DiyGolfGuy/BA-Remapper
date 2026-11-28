@@ -1649,8 +1649,9 @@ ReliefShotSmoke:
                     CheatPixels(CheatHwnd, "relief")
                 ; What the watch costs: the window check and both looks,
                 ; 50 times, on this 1080p screen.
-                tc0 := 0, tc1 := 0, tcf := 0
+                tc0 := 0, tc1 := 0, tcf := 0, k0 := 0, u0 := 0, k1 := 0, u1 := 0, cr := 0, ex := 0
                 DllCall("QueryPerformanceFrequency", "Int64*", tcf)
+                DllCall("GetProcessTimes", "Ptr", -1, "Int64*", cr, "Int64*", ex, "Int64*", k0, "Int64*", u0)
                 DllCall("QueryPerformanceCounter", "Int64*", tc0)
                 Loop, 20 {
                     w2 := ReliefWatchWin()
@@ -1658,7 +1659,9 @@ ReliefShotSmoke:
                     ScrambleBoxLook(w2)
                 }
                 DllCall("QueryPerformanceCounter", "Int64*", tc1)
+                DllCall("GetProcessTimes", "Ptr", -1, "Int64*", cr, "Int64*", ex, "Int64*", k1, "Int64*", u1)
                 perLook := (tc1 - tc0) * 1000 / tcf / 20
+                cpuLook := ((k1 - k0) + (u1 - u0)) / 10000 / 20   ; 100 ns units -> ms
                 ; parts, for the record: each look alone, the window check,
                 ; one copy of a single row, of the panel corner, of the whole
                 ; game picture
@@ -1682,8 +1685,10 @@ ReliefShotSmoke:
                     DllCall("QueryPerformanceCounter", "Int64*", tc1)
                     parts .= part . " " . Round((tc1 - tc0) * 1000 / tcf / 10, 2) . " ms, "
                 }
-                ok := w2.found && perLook < 25
-                ScrambleNote(ok ? "PASS" : "FAIL", "watch cost: " . Round(perLook, 2) . " ms per look (window check + relief look + scramble look) = " . Round(perLook / 4, 2) . "% of one CPU core at one look every 400 ms [" . parts . "]")
+                ; the cost per 400 ms tick: relief look every tick, scramble
+                ; look every other tick (Auto-Pick off)
+                ok := w2.found && cpuLook < 12
+                ScrambleNote(ok ? "PASS" : "FAIL", "watch cost: " . Round(perLook, 2) . " ms wall / " . Round(cpuLook, 2) . " ms CPU per look (window check + relief look + scramble look); CPU use about " . Round(cpuLook / 4, 2) . "% of one core at most [" . parts . "]")
                 if (!ok)
                     fails += 1
                 ReliefLastAct := ""
@@ -1703,7 +1708,16 @@ ReliefShotSmoke:
                     Sleep, 100
                 ok := IsObject(ScrambleBoxCards) && ScrambleBoxCards.n = 2 && CheatVisible && InStr(CheatShownText, "SCRAMBLE:") && InStr(CheatShownText, "teeleft=CARD 2") && InStr(CheatShownText, "teeright=|") && !ReliefWatchUp
                 sw2 := ReliefWatchWin()
-                ScrambleNote(ok ? "PASS" : "FAIL", "on screen, Auto-Pick off: the 2 scramble cards were seen in " . (A_TickCount - t0) . " ms and the sheet shows the bottom row [" . CheatShownText . "] (look " . (sw2.found ? (ScrambleBoxLook(sw2) ? "sees the cards" : "does not see the cards") : "no GSPro window") . ")")
+                diag := ""
+                if (!ok) {
+                    OcrLockTake()
+                    dscan := ScanWinClient(GSProWinNeedle, GSProWinExclude)
+                    OcrBusy := false
+                    duses := dscan.found ? ScrambleButtons(ScrambleRecoverCards(dscan)) : ""
+                    dtext := dscan.found ? SubStr(RegExReplace(dscan.text, "\s+", " "), 1, 300) : ""
+                    diag := " read now: found " . dscan.found . ", " . (dscan.found ? dscan.lines.MaxIndex() : 0) . " lines, " . (IsObject(duses) ? duses.MaxIndex() : 0) . " USE/Select; hits " . ScrambleBoxHits . ", wait " . ScrambleBoxWait . " [" . dtext . "]"
+                }
+                ScrambleNote(ok ? "PASS" : "FAIL", "on screen, Auto-Pick off: the 2 scramble cards were seen in " . (A_TickCount - t0) . " ms and the sheet shows the bottom row [" . CheatShownText . "] (look " . (sw2.found ? (ScrambleBoxLook(sw2) ? "sees the cards" : "does not see the cards") : "no GSPro window") . ")" . diag)
                 if (!ok)
                     fails += 1
                 if (CheatVisible)
