@@ -698,6 +698,9 @@ ScreenJobHeld := {}          ; buttons pressed for a screen job, held down (one 
 ReliefWatchWait := 0         ; back-off after a look the OCR read did not confirm
 ScrambleBoxWait := 0
 ScrambleBoxTick := false     ; the scramble look runs every other watch tick
+ScrambleLearned := {}        ; what this PC's GSPro draws at the cards' buttons, per card count (settings.ini [Scramble])
+ScrambleLearnedId := ""
+ScrambleLastLines := ""      ; Auto-Pick's last read of the cards (for the name spots)
 ScrambleBoxCards := ""        ; v5.3.0 Auto-Pick off: the scramble cards the screen watch read
 ScrambleBoxPick := 0         ; card picked on the box (1-4) ...
 ScrambleBoxFor := ""         ; ... for these cards (ScrambleBoxCardsNow().id)
@@ -1865,6 +1868,13 @@ LoadSettings() {
     ShowFnCheat := (fcVal + 0) ? true : false
     IniRead, fsVal,          %ConfigFile%, App, FnCheatSize, 35
     CheatSizePct := CheatSizeValid(fsVal) ? fsVal + 0 : 35
+    global ScrambleLearned
+    for i, cn in [2, 3, 4] {
+        IniRead, lpVal, %ConfigFile%, Scramble, Cards%cn%, %A_Space%
+        lp := ScrambleParsePattern(lpVal)
+        if (IsObject(lp))
+            ScrambleLearned[cn] := lp
+    }
     IniRead, rsVal,          %ConfigFile%, App, ReliefSheet, 1
     ReliefAutoSheet := (rsVal + 0) ? true : false
     IniRead, rnVal,          %ConfigFile%, App, ReliefNoFn, 1
@@ -2656,17 +2666,18 @@ ScreenRows(srcDC, x0, w, ys) {
 
 ; One 1:1 copy of a screen rectangle (a single BitBlt), freed with
 ; ScreenRowsFree.  {ok, bits, w, rows, x, y}.
-ScreenBlock(x, y, w, h) {
+ScreenBlock(x, y, w, h, srcDC := 0) {
     VarSetCapacity(bi, 40, 0)
     NumPut(40, bi, 0, "UInt"), NumPut(w, bi, 4, "Int"), NumPut(-h, bi, 8, "Int")
     NumPut(1, bi, 12, "UShort"), NumPut(32, bi, 14, "UShort")
     bits := 0
-    sdc := DllCall("GetDC", "Ptr", 0, "Ptr")
+    sdc := srcDC ? srcDC : DllCall("GetDC", "Ptr", 0, "Ptr")
     mdc := DllCall("CreateCompatibleDC", "Ptr", sdc, "Ptr")
     dib := DllCall("CreateDIBSection", "Ptr", mdc, "Ptr", &bi, "UInt", 0, "Ptr*", bits, "Ptr", 0, "UInt", 0, "Ptr")
     old := DllCall("SelectObject", "Ptr", mdc, "Ptr", dib, "Ptr")
     ok := dib && bits && DllCall("BitBlt", "Ptr", mdc, "Int", 0, "Int", 0, "Int", w, "Int", h, "Ptr", sdc, "Int", x, "Int", y, "UInt", 0x00CC0020)
-    DllCall("ReleaseDC", "Ptr", 0, "Ptr", sdc)
+    if (!srcDC)
+        DllCall("ReleaseDC", "Ptr", 0, "Ptr", sdc)
     return {ok: ok, bits: bits, w: w, rows: h, x: x, y: y, mdc: mdc, dib: dib, old: old}
 }
 
@@ -2746,6 +2757,12 @@ ScreenWatchStep() {
     }
     ReliefWatchLook(win)
     ScrambleBoxWatchStep(win)
+    global ScrambleLearnedId
+    lc := ScrambleBoxCardsNow()
+    if (IsObject(lc) && lc.auto && ScrambleLearnedId != lc.id) {
+        ScrambleLearnedId := lc.id
+        ScrambleLearn(lc, win)
+    }
     if (CheatAutoWanted() && !CheatVisible && !FnIsDown)
         CheatAutoShow()
 }
@@ -2980,9 +2997,9 @@ ScrambleBoxPress(btnId) {
     ; Left-click the player's name: GSPro shows where that ball is.
     ; The name sits 7.8 USE-text heights above the top of its USE /
     ; Select text, centred over it (Bruce's real screens).
-    u := c.uses[k]
-    if (IsObject(u)) {
-        DpiClickAt(Round(u.x + u.w / 2), Round(u.y - 7.8 * u.h))
+    pt := ScrambleNamePoint(c, k)
+    if (IsObject(pt)) {
+        DpiClickAt(pt[1], pt[2])
         ParkMouse()
     }
     return true
@@ -3067,8 +3084,12 @@ ScrambleBoxWatchStep(win) {
     uses := ""
     try {
         scan := ScanWinClient(GSProWinNeedle, GSProWinExclude)
-        if (scan.found)
-            uses := ScrambleButtons(ScrambleRecoverCards(scan))
+        readLines := ""
+        if (scan.found) {
+            rscan := ScrambleRecoverCards(scan)
+            uses := ScrambleButtons(rscan)
+            readLines := rscan.lines
+        }
         if (scan.found && (!IsObject(uses) || uses.MaxIndex() < 2)) {
             ; Small or soft text (1080p and below: the test PC's reader
             ; missed the blue button's USE there): the card strip again,
@@ -3079,6 +3100,7 @@ ScrambleBoxWatchStep(win) {
                 u2 := ScrambleButtons({found: true, win: scan.win, lines: o.lines, text: o.text, lc: LowerStr(o.text)})
                 if (u2.MaxIndex() >= 2 && u2.MaxIndex() <= 4) {
                     uses := u2
+                    readLines := o.lines
                     break
                 }
             }
@@ -3088,8 +3110,9 @@ ScrambleBoxWatchStep(win) {
     }
     OcrBusy := false
     if (IsObject(uses) && uses.MaxIndex() >= 2) {
-        ScrambleBoxCards := {uses: uses, n: Min(uses.MaxIndex(), 4), hwnd: win.hwnd, auto: false, id: "b" . A_TickCount}
+        ScrambleBoxCards := {uses: uses, n: Min(uses.MaxIndex(), 4), hwnd: win.hwnd, auto: false, id: "b" . A_TickCount, lines: readLines}
         ScrambleBoxWait := 0
+        ScrambleLearn(ScrambleBoxCards, win)
         OcrTrace("scramble watch: " . uses.MaxIndex() . " cards on screen")
     } else {
         ScrambleBoxWait := Min(30000, ScrambleBoxWait ? ScrambleBoxWait * 2 : 3000)
@@ -3103,6 +3126,8 @@ ScrambleBoxWatchStep(win) {
 ; or bigger, 15% darker or brighter); his relief screens: 0.2% at
 ; most.  srcDC (tests): a DC holding a screenshot.
 ScrambleBoxLook(win, srcDC := 0) {
+    if (ScrambleLearnedLook(win, srcDC))
+        return true
     w := Round(win.w * 0.70)
     if (w < 80 || win.h < 100)
         return false
@@ -3125,6 +3150,162 @@ ScrambleBoxLook(win, srcDC := 0) {
     }
     ScreenRowsFree(o)
     return (n && navy / n >= 0.007)
+}
+
+; ---- Learned scramble cards (v5.3.0, "make it smarter to work every
+; time") ----
+; Every confirmed read of the cards teaches the cheap look what THIS
+; PC's GSPro draws: the colour just left and right of each USE /
+; Select word (inside its button) at that spot, as shares of the
+; game picture.  Kept in settings.ini per number of cards, so any
+; GSPro look, theme or display is recognised with a handful of pixels
+; from then on.  A spot matches any button colour learned with it, so
+; the highlight moving to another card does not hide the cards.
+ScrambleLearn(c, win, srcDC := 0) {
+    global ScrambleLearned, ConfigFile
+    n := c.n
+    if (n < 2 || n > 4 || win.w <= 0 || win.h <= 0)
+        return false
+    spots := []
+    for k, u in c.uses {
+        if (k > 4)
+            break
+        yy := Round(u.y + u.h / 2)
+        spots.Push([Round(u.x - 0.6 * u.h), yy, Round(u.x + u.w + 0.6 * u.h)])
+    }
+    x0 := 999999, x1 := -999999, y0 := 999999, y1 := -999999
+    for i, sp in spots
+        x0 := Min(x0, sp[1]), x1 := Max(x1, sp[3]), y0 := Min(y0, sp[2]), y1 := Max(y1, sp[2])
+    if (x1 - x0 > 8000 || y1 - y0 > 2000)
+        return false
+    blk := ScreenBlock(x0, y0, x1 - x0 + 1, y1 - y0 + 1, srcDC)
+    pts := [], good := 0
+    for i, sp in spots {
+        cl := ScreenBlockPixel(blk, sp[1], sp[2]), cr := ScreenBlockPixel(blk, sp[3], sp[2])
+        if (cl < 0 || cr < 0 || ColorGap(cl, cr) > 24)
+            continue        ; not inside a solid button there
+        pts.Push([sp[1], sp[2], cl], [sp[3], sp[2], cr])
+        good += 1
+    }
+    ScreenRowsFree(blk)
+    if (good < 2)
+        return false
+    str := Round(win.w * 1000 / win.h) . "|"
+    for i, p in pts
+        str .= (i > 1 ? ";" : "") . Round((p[1] - win.x) * 100000 / win.w) . "," . Round((p[2] - win.y) * 100000 / win.h) . "," . p[3]
+    pat := ScrambleParsePattern(str)
+    if (!IsObject(pat))
+        return false
+    ScrambleLearned[n] := pat
+    if (!srcDC)
+        IniWrite, %str%, %ConfigFile%, Scramble, Cards%n%
+    OcrTrace("scramble cards learned: " . n . " cards, " . good . " buttons")
+    return true
+}
+
+; "aspect|x,y,colour;..." (x, y in 1/100000 of the game picture,
+; colour 0x00BBGGRR) -> {aspect, pts, palette} or "" if malformed.
+ScrambleParsePattern(str) {
+    p := StrSplit(str, "|")
+    if (p.MaxIndex() != 2 || !RegExMatch(p[1], "^\d{3,5}$"))
+        return ""
+    pts := [], palette := []
+    for i, q in StrSplit(p[2], ";") {
+        v := StrSplit(q, ",")
+        if (v.MaxIndex() != 3 || !RegExMatch(v[1], "^\d{1,6}$") || !RegExMatch(v[2], "^\d{1,6}$") || !RegExMatch(v[3], "^\d{1,8}$"))
+            return ""
+        if (v[1] > 100000 || v[2] > 100000 || v[3] > 0xFFFFFF)
+            return ""
+        pts.Push([v[1] / 100000, v[2] / 100000, v[3] + 0])
+        known := false
+        for j, pc in palette {
+            if (ColorGap(pc, v[3] + 0) <= 24)
+                known := true
+        }
+        if (!known)
+            palette.Push(v[3] + 0)
+    }
+    return (pts.MaxIndex() >= 4 && pts.MaxIndex() <= 8) ? {aspect: p[1] + 0, pts: pts, palette: palette} : ""
+}
+
+; Largest channel difference of two colours (either byte order).
+ColorGap(a, b) {
+    return Max(Abs((a & 0xFF) - (b & 0xFF)), Abs(((a >> 8) & 0xFF) - ((b >> 8) & 0xFF)), Abs(((a >> 16) & 0xFF) - ((b >> 16) & 0xFF)))
+}
+
+; The learned spots for this picture shape: number of cards seen, or 0.
+ScrambleLearnedLook(win, srcDC := 0) {
+    global ScrambleLearned
+    asp := Round(win.w * 1000 / win.h)
+    for n, pat in ScrambleLearned {
+        if (!IsObject(pat) || Abs(pat.aspect - asp) > 20)
+            continue
+        x0 := 999999, x1 := -999999, y0 := 999999, y1 := -999999, xy := []
+        for i, pt in pat.pts {
+            x := win.x + Round(pt[1] * win.w), y := win.y + Round(pt[2] * win.h)
+            xy.Push([x, y])
+            x0 := Min(x0, x), x1 := Max(x1, x), y0 := Min(y0, y), y1 := Max(y1, y)
+        }
+        blk := ScreenBlock(x0, y0, x1 - x0 + 1, y1 - y0 + 1, srcDC)
+        hits := 0
+        for i, q in xy {
+            c := ScreenBlockPixel(blk, q[1], q[2])
+            if (c < 0)
+                continue
+            for j, pc in pat.palette {
+                if (ColorGap(c, pc) <= 30) {
+                    hits += 1
+                    break
+                }
+            }
+        }
+        ScreenRowsFree(blk)
+        if (hits >= Ceil(xy.MaxIndex() * 0.75))
+            return n
+    }
+    return 0
+}
+
+; Where to click card k's player name: the top text line on the card
+; from the read (any GSPro layout), else 7.8 USE-heights above the
+; USE text, centred (Bruce's screens).  [x, y] or "".
+ScrambleNamePoint(c, k) {
+    global ScrambleLastLines
+    u := c.uses[k]
+    if (!IsObject(u))
+        return ""
+    lines := c.auto ? ScrambleLastLines : c.lines
+    pt := ScrambleNameFromLines(lines, c.uses, k)
+    return IsObject(pt) ? pt : [Round(u.x + u.w / 2), Round(u.y - 7.8 * u.h)]
+}
+
+ScrambleNameFromLines(lines, uses, k) {
+    u := uses[k]
+    if (!IsObject(lines) || !IsObject(u) || u.h <= 0)
+        return ""
+    cx := u.x + u.w / 2
+    pitch := 0
+    for i, o in uses {
+        if (i != k) {
+            d := Abs(o.x + o.w / 2 - cx)
+            pitch := pitch ? Min(pitch, d) : d
+        }
+    }
+    half := pitch ? pitch * 0.4 : u.h * 5
+    best := ""
+    for i, ln in lines {
+        lx := ln.x + ln.w / 2
+        ; on the card: above the USE row, below the card's top edge
+        ; (10.1 USE-heights up on Bruce's screens), card-sized text
+        if (Abs(lx - cx) > half || ln.y >= u.y - 2 * u.h || ln.y < u.y - 11 * u.h || ln.h > 4 * u.h)
+            continue
+        t := Trim(ln.text)
+        if (StrLen(t) < 2 || !RegExMatch(t, "[A-Za-z]"))
+            continue        ; the card's number badge, a lone digit
+        if (!IsObject(best) || ln.y < best.y)
+            best := ln
+    }
+    return IsObject(best) ? [Round(best.x + best.w / 2), Round(best.y + best.h / 2)] : ""
 }
 
 ; The sheet's labels on the scramble screen: the bottom row's cards,
@@ -5737,7 +5918,8 @@ ScrambleSendPick(pick, when) {
 ; shot-key delivery are unchanged. Coordinates are physical desktop
 ; pixels from the same GSPro client/USE read, never monitor 1.
 ScrambleRememberPreview(scan, uses) {
-    global ScramblePreviewRead, ScrambleLastRead
+    global ScramblePreviewRead, ScrambleLastRead, ScrambleLastLines
+    ScrambleLastLines := scan.lines   ; v5.3.0: where the names are (box picks)
     ScramblePreviewRead := ""
     lr := ScrambleLastRead
     if (!scan.HasKey("win") || !scan.win.found || !IsObject(lr) || lr.winner <= 0)

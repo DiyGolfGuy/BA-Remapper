@@ -526,6 +526,15 @@ UiSmoke:
         HandleBoxKeyUp("Right")
         SendSecondaryKey("{F7}")
         Assert(ScrambleBoxCards = "" && ScrambleBoxPick = 0, "AIM right took the card; the screen is done")
+        ; Learned cards: the saved form is checked; the name is the top
+        ; text line on the card (a lone digit is the card's number badge).
+        lp := ScrambleParsePattern("1609|40000,73000,12882203;45000,73000,12882203;60000,73000,4210752;65000,73000,4210752")
+        Assert(IsObject(lp) && lp.pts.MaxIndex() = 4 && lp.palette.MaxIndex() = 2 && !IsObject(ScrambleParsePattern("abc")) && !IsObject(ScrambleParsePattern("1609|1,2")) && !IsObject(ScrambleParsePattern("1609|200000,1,1;1,1,1;1,1,1;1,1,1")), "Learned scramble spots: saved form checked")
+        nmUses := [{x: 300, y: 600, w: 40, h: 16}, {x: 600, y: 600, w: 40, h: 16}]
+        nmLines := [{text: "1", x: 250, y: 450, w: 10, h: 18}, {text: "AL", x: 300, y: 470, w: 40, h: 30}, {text: "210", x: 300, y: 515, w: 45, h: 28}, {text: "ROUGH 2ND", x: 270, y: 560, w: 110, h: 16}, {text: "BOB", x: 595, y: 470, w: 50, h: 30}, {text: "196 yds", x: 330, y: 300, w: 60, h: 16}]
+        nm := ScrambleNameFromLines(nmLines, nmUses, 1)
+        nm2 := ScrambleNameFromLines(nmLines, nmUses, 2)
+        Assert(IsObject(nm) && nm[1] = 320 && nm[2] = 485 && IsObject(nm2) && nm2[1] = 620 && !IsObject(ScrambleNameFromLines("", nmUses, 1)), "Card name spot from the read: AL at 320,485, BOB at 620,485 (badge and scene text skipped)")
         ; Auto-Pick on: the box card wins the vote at zero.
         ScrambleAutoPick := true, ScrambleArmedTick := A_TickCount, ScrambleCoolDown := false, ScrambleMissTicks := 0
         ScrambleLastUses := [{x: sinkWin.x + 100, y: sinkWin.y + 400, w: 40, h: 16}, {x: sinkWin.x + 300, y: sinkWin.y + 400, w: 40, h: 16}, {x: sinkWin.x + 500, y: sinkWin.y + 400, w: 40, h: 16}]
@@ -1612,6 +1621,46 @@ ReliefShotSmoke:
             }
             DllCall("DeleteObject", "Ptr", src)
         }
+        ; Learned cards on the real 2-player screenshot at 1920 wide: the
+        ; read's buttons teach the spots; the look then sees these cards
+        ; and not the relief screen; the name spot sits on the card.
+        lsrc := LoadPicture(dir . "\gspro-2p.jpg")
+        VarSetCapacity(bm, 32, 0)
+        DllCall("GetObject", "Ptr", lsrc, "Int", A_PtrSize = 8 ? 32 : 24, "Ptr", &bm)
+        LW := NumGet(bm, 4, "Int"), LH := NumGet(bm, 8, "Int"), lth := Round(LH * 1920 / LW)
+        lhbm := ShotScaled(lsrc, LW, LH, 1920, lth)
+        DllCall("DeleteObject", "Ptr", lsrc)
+        lwin := {found: true, x: 0, y: 0, w: 1920, h: lth}
+        lb := ScrambleCardBand(lwin)
+        lread := ShotRead(lhbm, lb.x, lb.y, lb.w, lb.h, 2)
+        luses := ScrambleButtons({found: true, win: lwin, lines: lread.lines, text: lread.text, lc: LowerStr(lread.text)})
+        ldc := DllCall("CreateCompatibleDC", "Ptr", 0, "Ptr")
+        lo := DllCall("SelectObject", "Ptr", ldc, "Ptr", lhbm, "Ptr")
+        saveLearned := ScrambleLearned, ScrambleLearned := {}
+        learnedOk := (luses.MaxIndex() = 2) && ScrambleLearn({uses: luses, n: 2, auto: false, lines: lread.lines}, lwin, ldc)
+        seesCards := ScrambleLearnedLook(lwin, ldc)
+        lnm := ScrambleNameFromLines(lread.lines, luses, 2)
+        DllCall("SelectObject", "Ptr", ldc, "Ptr", lo, "Ptr")
+        DllCall("DeleteDC", "Ptr", ldc)
+        DllCall("DeleteObject", "Ptr", lhbm)
+        rsrc := LoadPicture(dir . "\relief-water-lateral.jpg")
+        VarSetCapacity(bm, 32, 0)
+        DllCall("GetObject", "Ptr", rsrc, "Int", A_PtrSize = 8 ? 32 : 24, "Ptr", &bm)
+        rhbm := ShotScaled(rsrc, NumGet(bm, 4, "Int"), NumGet(bm, 8, "Int"), 1920, lth)
+        DllCall("DeleteObject", "Ptr", rsrc)
+        rdc := DllCall("CreateCompatibleDC", "Ptr", 0, "Ptr")
+        ro := DllCall("SelectObject", "Ptr", rdc, "Ptr", rhbm, "Ptr")
+        seesRelief := ScrambleLearnedLook(lwin, rdc)
+        DllCall("SelectObject", "Ptr", rdc, "Ptr", ro, "Ptr")
+        DllCall("DeleteDC", "Ptr", rdc)
+        DllCall("DeleteObject", "Ptr", rhbm)
+        u2 := luses[2]
+        nameOk := IsObject(lnm) && IsObject(u2) && Abs(lnm[1] - (u2.x + u2.w / 2)) < 60 && lnm[2] < u2.y - 4 * u2.h && lnm[2] > u2.y - 11 * u2.h
+        ok := learnedOk && seesCards = 2 && !seesRelief && nameOk
+        ScrambleNote(ok ? "PASS" : "FAIL", "learned scramble spots (gspro-2p at 1920 wide): learned " . learnedOk . ", sees the cards " . seesCards . ", sees the relief screen " . seesRelief . "; card 2's name at " . (IsObject(lnm) ? lnm[1] . "," . lnm[2] : "none") . " (USE at " . (IsObject(u2) ? Round(u2.x + u2.w / 2) . "," . u2.y : "?") . ")")
+        if (!ok)
+            fails += 1
+        ScrambleLearned := saveLearned
         ; The whole thing on screen, timer running as in the program:
         ; a screenshot in a window named like GSPro.
         LoadProfile("Basic Secondary")
@@ -1706,7 +1755,7 @@ ReliefShotSmoke:
             } else {
                 while (!(IsObject(ScrambleBoxCards) && CheatVisible) && A_TickCount - t0 < 12000)
                     Sleep, 100
-                ok := IsObject(ScrambleBoxCards) && ScrambleBoxCards.n = 2 && CheatVisible && InStr(CheatShownText, "SCRAMBLE:") && InStr(CheatShownText, "teeleft=CARD 2") && InStr(CheatShownText, "teeright=|") && !ReliefWatchUp
+                ok := IsObject(ScrambleBoxCards) && ScrambleBoxCards.n = 2 && CheatVisible && InStr(CheatShownText, "SCRAMBLE:") && InStr(CheatShownText, "teeleft=CARD 2") && InStr(CheatShownText, "teeright=|") && !ReliefWatchUp && IsObject(ScrambleLearned[2])
                 sw2 := ReliefWatchWin()
                 diag := ""
                 if (!ok) {
