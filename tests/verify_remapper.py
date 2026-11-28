@@ -1615,6 +1615,9 @@ ReliefShotSmoke:
         ; a screenshot in a window named like GSPro.
         LoadProfile("Basic Secondary")
         RemapActive := true, ReliefAutoSheet := true, ReliefNoFn := true, ScrambleAutoPick := false
+        ScrambleNote(A_ScreenHeight >= 1000 ? "PASS" : "FAIL", "on screen: test screen " . A_ScreenWidth . "x" . A_ScreenHeight . " (needs 1080 lines, like a bay)")
+        if (A_ScreenHeight < 1000)
+            fails += 1
         for j, shotFile in ["relief-water-flagline.jpg", "gspro-2p.jpg"] {
             sw := A_ScreenWidth - 20, sh := Round(sw * 2137 / 3438)
             if (sh > A_ScreenHeight - 60)
@@ -1971,7 +1974,8 @@ def runtime_checks(source, ahk):
             print(notes)
             annotate("notice", "GSPro 4 relief screenshots", notes)
             report = (work / "result.txt").read_text() if (work / "result.txt").exists() else "No result"
-            assert returncode == 0 and report.startswith("PASS:"), "ReliefShotSmoke: " + report + output
+            failed = "\n".join(line for line in notes.splitlines() if line.startswith("FAIL") or "on screen" in line)
+            assert returncode == 0 and report.startswith("PASS:"), "ReliefShotSmoke: " + report + failed + output
             print("PASS: GSPro 4 relief screenshots: panel, choices, highlighted choice and the keys for every box button")
 
 

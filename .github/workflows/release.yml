@@ -39,6 +39,12 @@ jobs:
           $publish = Get-RemapperReleaseRequest -EventName $env:GITHUB_EVENT_NAME -Ref $env:GITHUB_REF -Version $version -ManualPublish ($env:MANUAL_PUBLISH -eq 'true') -ConfirmVersion $env:CONFIRM_VERSION -CommitMessage $message
           "publish=$($publish.ToString().ToLowerInvariant())" >> $env:GITHUB_OUTPUT
           "version=$version" >> $env:GITHUB_OUTPUT
+      - name: Full HD test screen (the screen-watch checks read GSPro-size screens)
+        shell: pwsh
+        run: |
+          try { Set-DisplayResolution -Width 1920 -Height 1080 -Force -ErrorAction Stop } catch { Write-Host "Set-DisplayResolution: $_" }
+          Add-Type -AssemblyName System.Windows.Forms
+          Write-Host ("Screen: " + [System.Windows.Forms.Screen]::PrimaryScreen.Bounds)
       - name: Build, verify upgrade and package
         shell: pwsh
         run: ./scripts/package-release.ps1
