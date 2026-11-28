@@ -30,6 +30,28 @@ jobs:
           Write-Host "Display scale two steps up asked: $asked"
           Start-Sleep -Seconds 3
           python tests/verify_remapper.py --ahk "$env:RUNNER_TEMP/ahk/AutoHotkeyU64.exe" --screen-watch-only
+      - name: Screen watch again on a 4K screen (3840 x 2160)
+        shell: pwsh
+        run: |
+          Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public static class DpiSet { [DllImport("user32.dll", SetLastError = true)] public static extern bool SystemParametersInfo(uint action, int param, IntPtr pv, uint winIni); }'
+          [void][DpiSet]::SystemParametersInfo(0x009F, 0, [IntPtr]::Zero, 1)
+          Start-Sleep -Seconds 2
+          foreach ($size in @(@(3840, 2160), @(2560, 1440))) {
+            try { Set-DisplayResolution -Width $size[0] -Height $size[1] -Force -ErrorAction Stop } catch { Write-Host "Set-DisplayResolution $($size[0]) x $($size[1]): $_" }
+            Start-Sleep -Seconds 3
+            $now = (Get-CimInstance Win32_VideoController | Select-Object -First 1).CurrentHorizontalResolution
+            Write-Host "Screen width now: $now"
+            if ($now -ge $size[0]) { break }
+          }
+          [void][DpiSet]::SystemParametersInfo(0x009F, 0, [IntPtr]::Zero, 1)
+          Start-Sleep -Seconds 3
+          $video = Get-CimInstance Win32_VideoController | Select-Object -First 1
+          Write-Host "Screen: $($video.CurrentHorizontalResolution) x $($video.CurrentVerticalResolution)"
+          if ($video.CurrentHorizontalResolution -ge 2560) {
+            python tests/verify_remapper.py --ahk "$env:RUNNER_TEMP/ahk/AutoHotkeyU64.exe" --screen-watch-only
+          } else {
+            Write-Host "BIG SCREEN RUN NOT POSSIBLE: this test PC cannot show more than $($video.CurrentHorizontalResolution) x $($video.CurrentVerticalResolution)."
+          }
       - uses: actions/upload-artifact@v4
         if: always()
         with:

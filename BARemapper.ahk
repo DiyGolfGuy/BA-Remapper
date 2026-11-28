@@ -722,6 +722,9 @@ WatchGameSeek := 0           ; ... looked up again not before this tick
 WatchSeenHwnd := 0           ; the game window the screen watch saw uncovered ...
 WatchSeenTick := 0           ; ... and when (GsproShown)
 ScreenWatchFast := 0         ; quick looks left after a press (see ScreenWatchHurry)
+ScrambleFullFor := 0         ; Auto-Pick, small pictures: the cards (armed tick) whose full count is known ...
+ScrambleFullN := 0           ; ... that count (ScrambleRecoverCards)
+ScrambleSmallRetry := 0      ; ... and no enlarged read before this tick (a stray button word)
 ScrambleBoxBest := ""        ; Auto-Pick on: the fullest read of the cards on screen {id, uses, lines}
 ScrambleBoxDeepId := ""      ; ... and the cards the box has read enlarged itself (small pictures)
 ScrambleAutoSeenId := ""     ; Auto-Pick's cards the cheap look has seen ...
@@ -3474,7 +3477,7 @@ ScrambleBoxRead(win) {
     best := ScrambleRowButtons(rscan.lines), bestLines := rscan.lines
     how := "1x: " . best.Length()
     if (best.Length() < 4 && win.h < 1300) {
-        band := ScrambleCardBand(scan.win)
+        band := ScrambleCardStrip(scan.win)
         for i, f in (win.h < 850 ? [3, 4] : [2, 3]) {
             o := OcrRegionScaled(band.x, band.y, band.w, band.h, f)
             u2 := ScrambleRowButtons(o.lines)
@@ -3487,6 +3490,16 @@ ScrambleBoxRead(win) {
     }
     best := ScrambleFillGaps(best)
     return {uses: best, lines: bestLines, n: best.Length(), how: how}
+}
+
+; The card strip for an enlarged read: the cards' band (0.45 to 0.92
+; heights down), 1.7 heights wide around the middle - the full width
+; on a 16:10 picture, the middle of a wider one (an ultrawide strip
+; enlarged whole would be too big for Windows' reader).
+ScrambleCardStrip(win) {
+    band := ScrambleCardBand(win)
+    w := Min(win.w, Round(win.h * 1.7))
+    return {x: win.x + (win.w - w) // 2, y: band.y, w: w, h: band.h}
 }
 
 ; The USE / Select words of one read that share a row, left to right.
@@ -3554,13 +3567,17 @@ ScrambleFillGaps(uses) {
 ScrambleBoxLook(win, srcDC := 0) {
     if (ScrambleLearnedLook(win, srcDC))
         return true
-    w := Round(win.w * 0.70)
+    ; The middle 70% of Bruce's 16:10 pictures is 1.13 heights wide.
+    ; On a wider picture (16:9, ultrawide) the cards still stand in the
+    ; middle, so the look keeps that width there instead of thinning
+    ; out across the extra width.
+    w := Min(Round(win.w * 0.70), Round(win.h * 1.13))
     if (w < 80 || win.h < 100)
         return false
     ys := []
     for i, f in [0.56, 0.61, 0.66, 0.71, 0.76, 0.81, 0.86]
         ys.Push(win.y + Round(win.h * f))
-    o := ScreenRows(srcDC, win.x + Round(win.w * 0.15), w, ys)
+    o := ScreenRows(srcDC, win.x + (win.w - w) // 2, w, ys)
     navy := 0, n := 0
     if (o.ok) {
         Loop, % o.rows {
@@ -3802,17 +3819,65 @@ ReliefRead(win, reader := "") {
     ; 30 px or more (v5.3.0: 3x under 950 px - at 1280 x 800 a 2x read
     ; lost the second word of FLAG LINE - and 4x under 640 px).
     sc := (win.h >= 1300) ? 1 : (win.h >= 950) ? 2 : (win.h >= 640) ? 3 : 4
-    if (IsObject(reader))
-        o := reader.Call(r.x, r.y, r.w, r.h, sc)
-    else if (sc > 1)
-        o := OcrRegionScaled(r.x, r.y, r.w, r.h, sc)
-    else
-        o := OcrRegion(r.x, r.y, r.w, r.h)
+    o := ReliefReadPart(r, sc, reader)
     rel := ReliefParse(o.lines)
+    ; Small print (a picture between sizes, or a shape on which GSPro
+    ; draws the panel smaller): titles read at under 34 px are read once
+    ; more, one step larger; that read counts unless it finds fewer
+    ; choices.  (At 1280 x 796 a 30 px read lost the second word of
+    ; FLAG LINE.)
+    if (rel.found && sc < 4) {
+        th := 0
+        for i, op in rel.opts
+            th := Max(th, op.h)
+        if (th > 0 && th * sc < 34) {
+            oB := ReliefReadPart(r, sc + 1, reader)
+            relB := ReliefParse(oB.lines)
+            if (relB.found && relB.opts.MaxIndex() >= rel.opts.MaxIndex())
+                rel := relB, o := oB, sc += 1
+        }
+    }
+    ; Any picture shape (v5.3.0): on Bruce's screens the whole panel
+    ; sits well inside this corner (it ends 0.365 heights across and,
+    ; with four choices, 0.447 down).  On a wider picture GSPro may
+    ; draw it bigger.  A list that runs to the edge of what was read -
+    ; no room left for one more choice - is read again with more room;
+    ; the read with more choices counts.
+    if (rel.found && ReliefAtEdge(rel, r)) {
+        r2 := {x: win.x, y: win.y, w: Round(win.w * 0.48), h: Round(win.h * 0.88)}
+        o2 := ReliefReadPart(r2, sc, reader)
+        rel2 := ReliefParse(o2.lines)
+        if (rel2.found && rel2.opts.MaxIndex() > rel.opts.MaxIndex())
+            rel := rel2, o := o2
+    }
     rel.win := win
     rel.lines := o.lines     ; kept for the trace when a read surprises
     rel.at := A_TickCount
     return rel
+}
+
+ReliefReadPart(r, sc, reader := "") {
+    if (IsObject(reader))
+        return reader.Call(r.x, r.y, r.w, r.h, sc)
+    return (sc > 1) ? OcrRegionScaled(r.x, r.y, r.w, r.h, sc) : OcrRegion(r.x, r.y, r.w, r.h)
+}
+
+; Does the list run to the bottom or the right edge of the part that
+; was read?  (No room below the last choice for another one, or a
+; title ending at the right edge.)
+ReliefAtEdge(rel, r) {
+    n := rel.opts.MaxIndex()
+    if (!n)
+        return false
+    last := rel.opts[n]
+    pitch := (n >= 2) ? (last.y - rel.opts[1].y) / (n - 1) : last.h * 3.7
+    if (last.y + pitch + last.h > r.y + r.h)
+        return true
+    for i, o in rel.opts {
+        if (o.x + o.w + o.h > r.x + r.w)
+            return true
+    }
+    return false
 }
 
 ; A choice's title: capitals only once the number badge ("1 ")
@@ -5058,22 +5123,54 @@ FindAllLinesExact(scan, needle) {
 ; physical desktop pixels, including negative origins on another
 ; monitor.
 ScrambleRecoverCards(scan) {
+    global ScrambleArmedTick, ScrambleFullFor, ScrambleFullN, ScrambleSmallRetry
     if (!IsObject(scan) || !scan.HasKey("win") || !scan.win.found)
         return scan
     uses := ScrambleButtons(scan)
-    if (uses.MaxIndex() >= 2)
-        return scan
-    band := ScrambleCardBand(scan.win)
-    if (band.w <= 0 || band.h <= 0)
-        return scan
-    o := OcrRegion(band.x, band.y, band.w, band.h)
-    recovered := {found: true, win: scan.win, lines: o.lines, text: o.text, lc: LowerStr(o.text)}
-    recoveredUses := ScrambleButtons(recovered)
-    n := recoveredUses.MaxIndex()
-    if (n >= 2 && n <= 4)
-        return recovered
-    return scan
+    n := uses.MaxIndex() ? uses.MaxIndex() : 0
+    best := scan
+    if (n < 2) {
+        band := ScrambleCardBand(scan.win)
+        if (band.w <= 0 || band.h <= 0)
+            return scan
+        o := OcrRegion(band.x, band.y, band.w, band.h)
+        recovered := {found: true, win: scan.win, lines: o.lines, text: o.text, lc: LowerStr(o.text)}
+        recoveredUses := ScrambleButtons(recovered)
+        rn := recoveredUses.MaxIndex() ? recoveredUses.MaxIndex() : 0
+        if (rn >= 2 && rn <= 4)
+            best := recovered, n := rn
+        else if (rn = 1)
+            n := 1
+    }
+    ; v5.3.0 (Bruce, 2026-11-27: "if you found something that didnt
+    ; work try it again and make it work"): on a picture under 1300 px
+    ; high one read can leave a card out - Windows' reader loses the
+    ; small white word on the highlighted card's blue button first
+    ; (Windows tests: 3 of 4 cards at 1641 x 1020 and 1738 x 1080, so
+    ; Auto-Pick took the second-best shot; 1 of 2 on a 2-player screen,
+    ; so it never started).  When a button word is on screen and fewer
+    ; than four were read, the card strip is read once more, enlarged,
+    ; and the read with more buttons counts.  Not on bigger pictures
+    ; (1440p, 4K: every card is read as before), not while no button
+    ; word is on screen (nothing extra during play), and not again for
+    ; cards whose full count the plain read already gives.
+    if (scan.win.h < 1300 && n >= 1 && n < 4 && A_TickCount >= ScrambleSmallRetry
+        && !(ScrambleArmedTick && ScrambleFullFor = ScrambleArmedTick && n >= ScrambleFullN)) {
+        strip := ScrambleCardStrip(scan.win)
+        o := OcrRegionScaled(strip.x, strip.y, strip.w, strip.h, (scan.win.h < 850) ? 3 : 2)
+        bn := ScrambleRowButtons(o.lines).Length()
+        if (bn >= 2 && bn <= 4) {
+            if (bn > n)
+                best := {found: true, win: scan.win, lines: o.lines, text: o.text, lc: LowerStr(o.text)}
+            if (ScrambleArmedTick)
+                ScrambleFullFor := ScrambleArmedTick, ScrambleFullN := Max(n, bn)
+        } else if (n < 2) {
+            ScrambleSmallRetry := A_TickCount + 10000   ; a stray word, no cards: not again for 10 s
+        }
+    }
+    return best
 }
+
 
 ; Where GSPro draws the scramble cards: on Bruce's real 2/3/4-player
 ; screens (3397-3438 x 2097-2137) the cards span 63%-78% of the game

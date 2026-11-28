@@ -1727,6 +1727,94 @@ ReliefShotSmoke:
                     fails += 1
             }
         }
+        ; Other picture shapes and sizes (v5.3.0, "all screens and
+        ; resolutions").  Bruce's screenshots are all about 16:10.  A
+        ; picture of another shape is built from them: scenery stretched
+        ; to the shape, then the real relief panel (4 choices) or the real
+        ; 4 scramble cards laid on it - at the same size against the
+        ; picture's height, and at the size GSPro would give them if it
+        ; sized its panels by the picture's width instead.  Each must be
+        ; seen by the look and read in full.
+        saveLearned2 := ScrambleLearned
+        ScrambleLearned := {}
+        pm := LoadPicture(dir . "\relief-water-mulligan.jpg")
+        VarSetCapacity(bm, 32, 0)
+        DllCall("GetObject", "Ptr", pm, "Int", A_PtrSize = 8 ? 32 : 24, "Ptr", &bm)
+        PW := NumGet(bm, 4, "Int"), PH := NumGet(bm, 8, "Int")
+        pc := LoadPicture(dir . "\gspro-4p-select.jpg")
+        DllCall("GetObject", "Ptr", pc, "Int", A_PtrSize = 8 ? 32 : 24, "Ptr", &bm)
+        CW := NumGet(bm, 4, "Int"), CH := NumGet(bm, 8, "Int")
+        shapes := [["16:9 (1920 x 1080)", 1920, 1080, 1.0], ["16:9, panels sized by width", 1920, 1080, 1.105]
+            , ["4:3 (1440 x 1080)", 1440, 1080, 1.0], ["4:3, panels sized by width", 1440, 1080, 0.829]
+            , ["5:4 (1350 x 1080)", 1350, 1080, 1.0]
+            , ["21:9 (2560 x 1080)", 2560, 1080, 1.0], ["21:9, panels half-way to width", 2560, 1080, 1.22], ["21:9, panels sized by width", 2560, 1080, 1.485]
+            , ["32:9 (3840 x 1080)", 3840, 1080, 1.0]
+            , ["16:10 at 1440 lines (2317 x 1440)", 2317, 1440, 1.0], ["16:10 at 1300 lines (2092 x 1300)", 2092, 1300, 1.0]
+            , ["16:9 at 1440 lines (2560 x 1440)", 2560, 1440, 1.0], ["16:9 at 4K (3840 x 2160)", 3840, 2160, 1.0]
+            , ["16:10 at 900 lines (1448 x 900)", 1448, 900, 1.0], ["16:9 at 768 lines (1366 x 768)", 1366, 768, 1.0], ["4:3 at 768 lines (1024 x 768)", 1024, 768, 1.0]]
+        for i, sp in shapes {
+            tw := sp[2], th := sp[3], us := sp[4]
+            for q, part in ["relief", "cards"] {
+                hb := ShapePicture(part, part = "relief" ? pm : pc, part = "relief" ? PW : CW, part = "relief" ? PH : CH, tw, th, us)
+                dc := DllCall("CreateCompatibleDC", "Ptr", 0, "Ptr")
+                o := DllCall("SelectObject", "Ptr", dc, "Ptr", hb, "Ptr")
+                swin2 := {found: true, x: 0, y: 0, w: tw, h: th, hwnd: 0}
+                if (part = "relief") {
+                    seen := ReliefLook(swin2, dc).up ? 1 : 0
+                    scard := ScrambleBoxLook(swin2, dc) ? 1 : 0
+                    DllCall("SelectObject", "Ptr", dc, "Ptr", o, "Ptr")
+                    rel := ReliefRead(swin2, Func("ShotRead").Bind(hb))
+                    got := ReliefNote(rel)
+                    ok := seen && !scard && (got = "4 choices: 1 LATERAL DROP, 2 FLAG LINE, 3 REHIT, 4 MULLIGAN")
+                    ScrambleNote(ok ? "PASS" : "FAIL", "picture shape " . sp[1] . ": relief list " . (seen ? "seen" : "NOT seen") . " by the look, read as [" . got . "]" . (scard ? ", scramble look fooled" : ""))
+                } else {
+                    seen := ScrambleBoxLook(swin2, dc) ? 1 : 0
+                    srel := ReliefLook(swin2, dc).up ? 1 : 0
+                    DllCall("SelectObject", "Ptr", dc, "Ptr", o, "Ptr")
+                    st := ScrambleCardStrip(swin2)
+                    how := "", nb := 0
+                    for z, fz in (th >= 1300 ? [1] : th < 850 ? [3, 4] : [2, 3]) {
+                        rd := ShotRead(hb, st.x, st.y, st.w, st.h, fz)
+                        nz := ScrambleRowButtons(rd.lines).Length()
+                        how .= fz . "x: " . nz . " "
+                        nb := Max(nb, nz)
+                        if (nb >= 4)
+                            break
+                    }
+                    ok := seen && !srel && nb = 4
+                    ScrambleNote(ok ? "PASS" : "FAIL", "picture shape " . sp[1] . ": 4 scramble cards " . (seen ? "seen" : "NOT seen") . " by the look, " . nb . " read in the strip (" . Trim(how) . ")" . (srel ? ", relief look fooled" : ""))
+                }
+                DllCall("DeleteDC", "Ptr", dc)
+                DllCall("DeleteObject", "Ptr", hb)
+                if (!ok)
+                    fails += 1
+            }
+        }
+        ; A screen left of and above the main one has negative
+        ; coordinates: the same looks through a picture placed there.
+        for q, part in ["relief", "cards"] {
+            hb := ShapePicture(part, part = "relief" ? pm : pc, part = "relief" ? PW : CW, part = "relief" ? PH : CH, 1920, 1080, 1.0)
+            dc := DllCall("CreateCompatibleDC", "Ptr", 0, "Ptr")
+            o := DllCall("SelectObject", "Ptr", dc, "Ptr", hb, "Ptr")
+            DllCall("SetWindowOrgEx", "Ptr", dc, "Int", -1920, "Int", -1200, "Ptr", 0)
+            nwin := {found: true, x: -1920, y: -1200, w: 1920, h: 1080, hwnd: 0}
+            seen := (part = "relief") ? (ReliefLook(nwin, dc).up ? 1 : 0) : (ScrambleBoxLook(nwin, dc) ? 1 : 0)
+            other := (part = "relief") ? (ScrambleBoxLook(nwin, dc) ? 1 : 0) : (ReliefLook(nwin, dc).up ? 1 : 0)
+            blk := ScreenBlock(-1920, -1200, 40, 40, dc)
+            px := ScreenBlockPixel(blk, -1900, -1190)
+            ScreenRowsFree(blk)
+            DllCall("SetWindowOrgEx", "Ptr", dc, "Int", 0, "Int", 0, "Ptr", 0)
+            DllCall("SelectObject", "Ptr", dc, "Ptr", o, "Ptr")
+            DllCall("DeleteDC", "Ptr", dc)
+            DllCall("DeleteObject", "Ptr", hb)
+            ok := seen && !other && px >= 0
+            ScrambleNote(ok ? "PASS" : "FAIL", "a screen left of and above the main one (picture at -1920, -1200): " . (part = "relief" ? "relief list" : "scramble cards") . " " . (seen ? "seen" : "NOT seen") . " by the look" . (other ? ", the other look fooled" : "") . (px < 0 ? ", pixel read failed" : ""))
+            if (!ok)
+                fails += 1
+        }
+        DllCall("DeleteObject", "Ptr", pm)
+        DllCall("DeleteObject", "Ptr", pc)
+        ScrambleLearned := saveLearned2
         for f, hb in scen
             DllCall("DeleteObject", "Ptr", hb)
         ; Learned cards on the real 2-player screenshot at 1920 wide: the
@@ -1785,16 +1873,20 @@ ReliefShotSmoke:
         ; 8: a small picture (1280 wide) - noted, not required.
         ; Shot 9: Auto-Pick on - its own read may leave a card out at
         ; this size; the box's cards must still be all four.
-        for j, shotFile in ["relief-water-flagline.jpg", "gspro-2p.jpg", "relief-water-flagline.jpg", "gspro-2p.jpg", "gspro-3p-select.jpg", "gspro-4p-select.jpg", "relief-water-flagline.jpg", "gspro-4p-select.jpg", "gspro-4p-select.jpg", "gspro-4p-select.jpg"] {
+        for j, shotFile in ["relief-water-flagline.jpg", "gspro-2p.jpg", "relief-water-flagline.jpg", "gspro-2p.jpg", "gspro-3p-select.jpg", "gspro-4p-select.jpg", "relief-water-flagline.jpg", "gspro-4p-select.jpg", "gspro-4p-select.jpg", "gspro-4p-select.jpg", "gspro-4p-select.jpg", "gspro-2p.jpg", "relief-water-flagline.jpg", "gspro-4p-select.jpg"] {
             away := (j = 3 || j = 4)
-            small := (j = 7 || j = 8)
+            small := (j = 7 || j = 8 || j = 11)
+            tiny := (j = 13 || j = 14)   ; shots 13, 14: a 1024 x 637 picture
             tall := (j = 10)    ; shot 10: the full 1080 lines of the screen, like full-screen 1080p
+            autoOn := (j = 9 || j = 11 || j = 12)   ; Auto-Pick on: 4 cards, 4 cards small, 2 cards
             sw := A_ScreenWidth - 20, sh := Round(sw * 2137 / 3438)
             if (sh > A_ScreenHeight - 60)
                 sh := A_ScreenHeight - 60, sw := Round(sh * 3438 / 2137)
             sx := 0, sy := 0
             if (small)
                 sw := 1280, sh := 796
+            if (tiny)
+                sw := 1024, sh := 637
             if (tall)
                 sh := A_ScreenHeight, sw := Round(sh * 3438 / 2137)
             if (j >= 5 && !tall)
@@ -1830,7 +1922,7 @@ ReliefShotSmoke:
                 WinActivate, ahk_id %ShotHwnd%
                 WinWaitActive, ahk_id %ShotHwnd%, , 3
             }
-            if (j = 9) {
+            if (autoOn) {
                 ScrambleAutoPick := true, ScrambleArmedTick := 0, ScrambleCoolDown := false, ScrambleMissTicks := 0, ScrambleBoxPick := 0
                 ScrambleResetReads()
                 SetTimer, ScrambleTick, 2000
@@ -1838,35 +1930,42 @@ ReliefShotSmoke:
             ScreenWatchOn := true
             SetTimer, ScreenWatchTick, 400
             t0 := A_TickCount
-            if (j = 9) {
-                lc9 := ""
-                while (A_TickCount - t0 < 14000) {
+            if (autoOn) {
+                ; Auto-Pick's own read must have every card and its pick
+                ; must be the best shot (4 cards: DON, 173, card 4) - at
+                ; this size its plain read alone leaves the highlighted
+                ; card out.
+                nWant := (j = 12) ? 2 : 4
+                lc9 := "", lead := 0
+                while (A_TickCount - t0 < 16000) {
                     lc9 := ScrambleBoxCardsNow()
-                    if (IsObject(lc9) && lc9.n = 4 && CheatVisible)
+                    lead := ScrambleVoteLeader()
+                    if (IsObject(lc9) && lc9.n = nWant && CheatVisible && lead > 0 && IsObject(ScrambleLastUses) && ScrambleLastUses.Length() = nWant && InStr(CheatShownText, "right=TAKE CARD " . lead))
                         break
                     Sleep, 100
                 }
                 seenMs := A_TickCount - t0
                 ownN := IsObject(ScrambleLastUses) ? ScrambleLastUses.Length() : 0
-                ok := IsObject(lc9) && lc9.auto && lc9.n = 4 && CheatVisible && InStr(CheatShownText, "teeright=CARD 3") && InStr(CheatShownText, "shotcam=CARD 4")
-                ScrambleNote(ok ? "PASS" : "FAIL", "on screen " . sw . "x" . sh . ", Auto-Pick ON: the box has all 4 cards after " . seenMs . " ms (Auto-Pick's own read: " . ownN . " buttons; the box's enlarged read: " . ScrambleBoxDeepHow . ") [" . CheatShownText . "]")
+                ok := IsObject(lc9) && lc9.auto && lc9.n = nWant && ownN = nWant && CheatVisible && (nWant = 4 ? (lead = 4 && InStr(CheatShownText, "shotcam=CARD 4") && InStr(CheatShownText, "right=TAKE CARD 4")) : (lead >= 1 && lead <= 2 && InStr(CheatShownText, "teeleft=CARD 2")))
+                ScrambleNote(ok ? "PASS" : "FAIL", "on screen " . sw . "x" . sh . ", Auto-Pick ON, " . nWant . " cards: Auto-Pick's own read has " . ownN . " buttons and its pick is card " . lead . (nWant = 4 ? " (best: card 4, DON 173)" : "") . " after " . seenMs . " ms; the box has " . (IsObject(lc9) ? lc9.n : 0) . " cards [" . CheatShownText . "]")
                 if (!ok)
                     fails += 1
-                HandleBoxKeyDown("v")       ; Tee Right = card 3
-                HandleBoxKeyUp("v")
+                pickKey := (nWant = 4) ? "v" : "c", pickCard := (nWant = 4) ? 3 : 2
+                HandleBoxKeyDown(pickKey)   ; Tee Right = card 3 (Tee Left = card 2 on the 2-card screen)
+                HandleBoxKeyUp(pickKey)
                 Sleep, 2300                 ; an Auto-Pick read after the pick
                 lc9 := ScrambleBoxCardsNow()
-                pt9 := IsObject(lc9) ? ScrambleNamePoint(lc9, 3) : ""
-                u9 := IsObject(lc9) ? lc9.uses[3] : ""
-                ok := (ScrambleBoxPick = 3) && IsObject(lc9) && lc9.n = 4 && IsObject(pt9) && IsObject(u9) && Abs(pt9[1] - (u9.x + u9.w / 2)) < sw * 0.02 && ScrambleBoxTakeCard(lc9) = 3
-                ScrambleNote(ok ? "PASS" : "FAIL", "Auto-Pick ON: Tee Right picked card 3 and the cards stay 4 after the next read (pick " . ScrambleBoxPick . ", cards " . (IsObject(lc9) ? lc9.n : 0) . ", to take " . (IsObject(lc9) ? ScrambleBoxTakeCard(lc9) : 0) . ")")
+                pt9 := IsObject(lc9) ? ScrambleNamePoint(lc9, pickCard) : ""
+                u9 := IsObject(lc9) ? lc9.uses[pickCard] : ""
+                ok := (ScrambleBoxPick = pickCard) && IsObject(lc9) && lc9.n = nWant && IsObject(pt9) && IsObject(u9) && Abs(pt9[1] - (u9.x + u9.w / 2)) < sw * 0.02 && ScrambleBoxTakeCard(lc9) = pickCard
+                ScrambleNote(ok ? "PASS" : "FAIL", "Auto-Pick ON, " . nWant . " cards: the box picked card " . pickCard . " and the cards stay " . nWant . " after the next read (pick " . ScrambleBoxPick . ", cards " . (IsObject(lc9) ? lc9.n : 0) . ", to take " . (IsObject(lc9) ? ScrambleBoxTakeCard(lc9) : 0) . ")")
                 if (!ok)
                     fails += 1
                 HandleBoxKeyDown("Right")   ; AIM right takes it
                 HandleBoxKeyUp("Right")
                 Sleep, 300
                 ok := ScrambleCoolDown && !CheatVisible
-                ScrambleNote(ok ? "PASS" : "FAIL", "Auto-Pick ON: AIM right took the box's card (Auto-Pick stood down: " . ScrambleCoolDown . ", sheet gone: " . !CheatVisible . ")")
+                ScrambleNote(ok ? "PASS" : "FAIL", "Auto-Pick ON, " . nWant . " cards: AIM right took the box's card (Auto-Pick stood down: " . ScrambleCoolDown . ", sheet gone: " . !CheatVisible . ")")
                 if (!ok)
                     fails += 1
                 ScrambleAutoPick := false
@@ -1954,13 +2053,13 @@ ReliefShotSmoke:
                 WinKill, ahk_exe notepad.exe
                 WinWaitClose, ahk_exe notepad.exe, , 5
             } else if (j >= 5) {
-                if (j = 7) {
+                if (j = 7 || j = 13) {
                     while (!(ReliefWatchUp && CheatVisible) && A_TickCount - t0 < 9000)
                         Sleep, 100
                     ok := ReliefWatchUp && CheatVisible && InStr(CheatShownText, "right=ENTER: FLAG LINE") && InStr(CheatShownText, "up=CLOSER")
                     seenMs := A_TickCount - t0
                     w7 := ReliefWatchWin()
-                    ScrambleNote(ok ? "PASS" : "FAIL", "small picture " . sw . "x" . sh . " at " . sx . "," . sy . ": the water list " . (ok ? "was seen in " . seenMs . " ms" : "was NOT confirmed (look " . ((w7.found && ReliefLook(w7).up) ? "sees the panel" : "does not see the panel") . ")") . " [" . CheatShownText . "]")
+                    ScrambleNote(ok ? "PASS" : "FAIL", "small picture " . sw . "x" . sh . " at " . sx . "," . sy . ": the water list " . (ok ? "was seen in " . seenMs . " ms" : "was NOT confirmed (look " . ((w7.found && ReliefLook(w7).up) ? "sees the panel" : "does not see the panel") . "; read: " . (IsObject(ReliefLast) ? ReliefNote(ReliefLast) : "none") . ")") . " [" . CheatShownText . "]")
                     if (!ok)
                         fails += 1
                 } else {
@@ -1999,7 +2098,7 @@ ReliefShotSmoke:
                     }
                     ok := okCards && okSpot && okNames
                     readHow := IsObject(ScrambleBoxCards) ? ScrambleBoxCards.how : "no cards"
-                    if (small) {
+                    if (small || tiny) {
                         ScrambleNote(ok ? "PASS" : "FAIL", "small picture " . sw . "x" . sh . " at " . sx . "," . sy . ": " . nCards . " scramble cards " . (okCards ? "seen in " . seenMs . " ms" : "NOT seen") . " (reads " . readHow . "), sheet top right " . okSpot . ", names " . nameNote . "[" . CheatShownText . "]")
                         if (!ok)
                             fails += 1
@@ -2115,6 +2214,46 @@ ReliefShotSmoke:
         ExitApp, 1
     }
 Return
+
+; A picture of another shape: sky over grass, tw x th, then one part
+; of the real screenshot `src` (SW x SH) laid on it, `us` times its size against the picture's height: the relief
+; panel in the top left corner, or the scramble cards in the middle
+; above the bottom edge.
+ShapePicture(part, src, SW, SH, tw, th, us) {
+    scr := DllCall("GetDC", "Ptr", 0, "Ptr")
+    out := DllCall("CreateCompatibleBitmap", "Ptr", scr, "Int", tw, "Int", th, "Ptr")
+    ddc := DllCall("CreateCompatibleDC", "Ptr", scr, "Ptr")
+    sdc := DllCall("CreateCompatibleDC", "Ptr", scr, "Ptr")
+    DllCall("ReleaseDC", "Ptr", 0, "Ptr", scr)
+    od := DllCall("SelectObject", "Ptr", ddc, "Ptr", out, "Ptr")
+    for i, band in [[0, Round(th * 0.45), 0xD2A078], [Round(th * 0.45), th, 0x326E3C]] {   ; sky, grass (0x00BBGGRR)
+        br := DllCall("CreateSolidBrush", "UInt", band[3], "Ptr")
+        ob := DllCall("SelectObject", "Ptr", ddc, "Ptr", br, "Ptr")
+        DllCall("PatBlt", "Ptr", ddc, "Int", 0, "Int", band[1], "Int", tw, "Int", band[2] - band[1], "UInt", 0x00F00021)
+        DllCall("SelectObject", "Ptr", ddc, "Ptr", ob, "Ptr")
+        DllCall("DeleteObject", "Ptr", br)
+    }
+    os := DllCall("SelectObject", "Ptr", sdc, "Ptr", src, "Ptr")
+    DllCall("SetStretchBltMode", "Ptr", ddc, "Int", 4)
+    DllCall("SetBrushOrgEx", "Ptr", ddc, "Int", 0, "Int", 0, "Ptr", 0)
+    k := us * th / SH
+    if (part = "relief") {
+        ; the panel with a little of what is around it: 0 to 0.40
+        ; heights across, 0.10 to 0.47 heights down
+        sx := 0, sy := Round(SH * 0.10), sW := Round(SH * 0.40), sH := Round(SH * 0.37)
+        dx := 0, dy := Round(sy * k)
+    } else {
+        ; the cards: the middle 44% of the width, 0.60 to 0.82 heights down
+        sx := Round(SW * 0.28), sy := Round(SH * 0.60), sW := Round(SW * 0.44), sH := Round(SH * 0.22)
+        dx := Round((tw - sW * k) / 2), dy := th - Round((SH - sy) * k)
+    }
+    DllCall("StretchBlt", "Ptr", ddc, "Int", dx, "Int", dy, "Int", Round(sW * k), "Int", Round(sH * k), "Ptr", sdc, "Int", sx, "Int", sy, "Int", sW, "Int", sH, "UInt", 0x00CC0020)
+    DllCall("SelectObject", "Ptr", sdc, "Ptr", os, "Ptr")
+    DllCall("SelectObject", "Ptr", ddc, "Ptr", od, "Ptr")
+    DllCall("DeleteDC", "Ptr", sdc)
+    DllCall("DeleteDC", "Ptr", ddc)
+    return out
+}
 
 ; A picture shrunk or grown to tw x th (HALFTONE, like a smaller window).
 ShotScaled(src, W, H, tw, th) {
@@ -2413,7 +2552,7 @@ def runtime_checks(source, ahk):
             script = work / "ReliefShotSmoke.ahk"
             script.write_text(candidate + "\n" + SMOKE + "\n" + SCRAMBLE + "\n" + REALSHOT + "\n" + RELIEF, encoding="utf-8-sig")
             try:
-                check = subprocess.run([str(ahk), "/ErrorStdOut", str(script), str(ROOT / "tests" / "fixtures" / "gspro")], capture_output=True, text=True, timeout=300)
+                check = subprocess.run([str(ahk), "/ErrorStdOut", str(script), str(ROOT / "tests" / "fixtures" / "gspro")], capture_output=True, text=True, timeout=480)
                 returncode, output = check.returncode, check.stdout + check.stderr
             except subprocess.TimeoutExpired:
                 returncode, output = -1, "timed out"
@@ -2449,12 +2588,12 @@ def screen_watch_only(source, ahk):
         script = work / "ReliefShotSmoke.ahk"
         script.write_text(candidate + "\n" + SMOKE + "\n" + SCRAMBLE + "\n" + REALSHOT + "\n" + RELIEF, encoding="utf-8-sig")
         try:
-            check = subprocess.run([str(ahk), "/ErrorStdOut", str(script), str(ROOT / "tests" / "fixtures" / "gspro")], capture_output=True, text=True, timeout=300)
+            check = subprocess.run([str(ahk), "/ErrorStdOut", str(script), str(ROOT / "tests" / "fixtures" / "gspro")], capture_output=True, text=True, timeout=480)
             returncode, output = check.returncode, check.stdout + check.stderr
         except subprocess.TimeoutExpired:
             returncode, output = -1, "timed out"
         notes = (work / "scramble-checks.txt").read_text(encoding="utf-8-sig") if (work / "scramble-checks.txt").exists() else "No notes recorded"
-        shown = [line for line in notes.splitlines() if line.startswith("FAIL") or any(word in line for word in ("on screen", "watch cost", "another program", "small picture", "Auto-Pick ON", "screen gone"))]
+        shown = [line for line in notes.splitlines() if line.startswith("FAIL") or any(word in line for word in ("on screen", "watch cost", "another program", "small picture", "Auto-Pick ON", "screen gone", "picture shape", "a screen left"))]
         for line in shown:
             print("SCALE RUN " + line)
         report = (work / "result.txt").read_text() if (work / "result.txt").exists() else "No result"
