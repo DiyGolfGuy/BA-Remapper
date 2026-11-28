@@ -7322,110 +7322,65 @@ ShowBuilder:
     Gui, Builder:Add, Text, x30 y98 w920 0x10
 
     ; --------------------------------------------------------
-    ;  PANEL REPLICA - positions mirror the physical box:
-    ;
-    ;   MULLIGAN    HEAT MAP     PUTT       FLYOVER
-    ;         ^                       ^
-    ;      [CLUB UP]              [AIM UP]
-    ;               BA CUSTOM PRODUCTS
-    ;    CLUB            < [AIM LT]  AIM  [AIM RT] >
-    ;      [CLUB DN]              [AIM DN]
-    ;         v          TEE POS     v
-    ;   RESET AIM   < [TEE L]  [TEE R] >   SHOT CAM
+    ;  v5.3.0: the Builder is the box itself - the same top-down
+    ;  picture of the V2.5 as the cheat sheet.  Each round button
+    ;  is a click spot (its tap key printed on it), and its job
+    ;  with FN is printed in yellow where the sheet prints it.
     ; --------------------------------------------------------
-
-    ; Top row  (yellow text under each button = its secondary
-    ; function, exactly like the yellow print on the real box)
-    Gui, Builder:Font, s9 c000000 Normal, Segoe UI
-    Gui, Builder:Add, Button, x55  y110 w85 h85 Disabled     vBtnMulligan, MULLIGAN`nCtrl+M
-    Gui, Builder:Add, Button, x280 y110 w85 h85 gBtnHeatmap  vBtnHeatmap,  HEAT MAP`nY
-    Gui, Builder:Add, Button, x505 y110 w85 h85 gBtnPutt     vBtnPutt,     PUTT`nU
-    Gui, Builder:Add, Button, x800 y110 w85 h85 gBtnFlyover  vBtnFlyover,  FLYOVER`nO
-    Gui, Builder:Font, s8 cFFD400 Bold, Segoe UI
-    Gui, Builder:Add, Text, x262 y197 w121 Center vSecHeatmap,
-    Gui, Builder:Add, Text, x487 y197 w121 Center vSecPutt,
-    Gui, Builder:Add, Text, x782 y197 w121 Center vSecFlyover,
-
-    ; Up arrows (panel print)
-    Gui, Builder:Font, s11 cWhite Bold, Segoe UI
-    Gui, Builder:Add, Text, x222 y198 w20 Center, ^
-    Gui, Builder:Add, Text, x677 y198 w20 Center, ^
-
-    ; Second row: CLUB UP (left) and AIM UP (right)
-    Gui, Builder:Font, s9 c000000 Normal, Segoe UI
-    Gui, Builder:Add, Button, x190 y218 w85 h85 gBtnClubup vBtnClubup, CLUB UP`nI
-    Gui, Builder:Add, Button, x645 y218 w85 h85 gBtnUp     vBtnUp,     AIM UP`nUp
-    Gui, Builder:Font, s8 cFFD400 Bold, Segoe UI
-    Gui, Builder:Add, Text, x172 y305 w121 Center vSecClubup,
-    Gui, Builder:Add, Text, x627 y305 w121 Center vSecUp,
-
-    ; Brand center (like the logo on the physical panel)
-    Gui, Builder:Font, s12 c2ECC71 Bold, Segoe UI
-    Gui, Builder:Add, Text, x300 y252 w320 Center, BA CUSTOM PRODUCTS
-
-    ; Middle row: AIM LEFT / AIM text / AIM RIGHT, CLUB label at left
-    Gui, Builder:Font, s16 cWhite Bold, Segoe UI
-    Gui, Builder:Add, Text, x157 y355 w150 Center, CLUB
-    Gui, Builder:Add, Text, x640 y355 w150 Center, AIM
-    Gui, Builder:Font, s14 cWhite Bold, Segoe UI
-    Gui, Builder:Add, Text, x505 y358 w20 Center, <
-    Gui, Builder:Add, Text, x897 y358 w20 Center, >
-    Gui, Builder:Font, s9 c000000 Normal, Segoe UI
-    Gui, Builder:Add, Button, x535 y330 w85 h85 gBtnLeft  vBtnLeft,  AIM LEFT`nLeft
-    Gui, Builder:Add, Button, x805 y330 w85 h85 gBtnRight vBtnRight, AIM RIGHT`nRight
-    Gui, Builder:Font, s8 cFFD400 Bold, Segoe UI
-    Gui, Builder:Add, Text, x517 y417 w121 Center vSecLeft,
-    Gui, Builder:Add, Text, x787 y417 w121 Center vSecRight,
-
-    ; Fourth row: CLUB DOWN (left) and AIM DOWN (right)
-    Gui, Builder:Font, s9 c000000 Normal, Segoe UI
-    Gui, Builder:Add, Button, x190 y440 w85 h85 gBtnClubdown vBtnClubdown, CLUB DOWN`nK
-    Gui, Builder:Add, Button, x645 y440 w85 h85 gBtnDown     vBtnDown,     AIM DOWN`nDown
-    Gui, Builder:Font, s8 cFFD400 Bold, Segoe UI
-    Gui, Builder:Add, Text, x172 y527 w121 Center vSecClubdown,
-    Gui, Builder:Add, Text, x627 y527 w121 Center vSecDown,
-
-    ; Down arrows (beside the buttons) + TEE POS panel print
-    Gui, Builder:Font, s11 cWhite Bold, Segoe UI
-    Gui, Builder:Add, Text, x162 y478 w20 Center, v
-    Gui, Builder:Add, Text, x740 y478 w20 Center, v
-    Gui, Builder:Add, Text, x455 y528 w120 Center, TEE POS
-
-    ; Bottom row: corners + tee pair
-    Gui, Builder:Font, s9 c000000 Normal, Segoe UI
-    Gui, Builder:Add, Button, x55  y550 w85 h85 gBtnResetaim vBtnResetaim, RESET AIM`nA
-    Gui, Builder:Add, Button, x385 y550 w85 h85 gBtnTeeleft  vBtnTeeleft,  TEE LEFT`nC
-    Gui, Builder:Add, Button, x560 y550 w85 h85 gBtnTeeright vBtnTeeright, TEE RIGHT`nV
-    Gui, Builder:Add, Button, x800 y550 w85 h85 gBtnShotcam  vBtnShotcam,  SHOT CAM`nJ
-    Gui, Builder:Font, s14 cWhite Bold, Segoe UI
-    Gui, Builder:Add, Text, x352 y580 w20 Center, <
-    Gui, Builder:Add, Text, x652 y580 w20 Center, >
-    Gui, Builder:Font, s8 cFFD400 Bold, Segoe UI
-    Gui, Builder:Add, Text, x42  y639 w121 Center vSecResetaim,
-    Gui, Builder:Add, Text, x372 y639 w121 Center vSecTeeleft,
-    Gui, Builder:Add, Text, x547 y639 w121 Center vSecTeeright,
-    Gui, Builder:Add, Text, x787 y639 w121 Center vSecShotcam,
+    BldPicX := 80, BldPicY := 104, BldPicW := 800, BldPicH := 552
+    if (FileExist(BoxPicPath))
+        Gui, Builder:Add, Picture, x%BldPicX% y%BldPicY% w%BldPicW% h%BldPicH% vBuilderBoxPic, %BoxPicPath%
+    else
+        Gui, Builder:Add, Progress, x%BldPicX% y%BldPicY% w%BldPicW% h%BldPicH% Background26283F Disabled vBuilderBoxPic
+    bldLay := CheatPicLayout()
+    bldBtns := [["mulligan", "BtnMulligan", "", "Ctrl+M"], ["heatmap", "BtnHeatmap", "SecHeatmap", "Y"], ["putt", "BtnPutt", "SecPutt", "U"]
+        , ["flyover", "BtnFlyover", "SecFlyover", "O"], ["clubup", "BtnClubup", "SecClubup", "I"], ["up", "BtnUp", "SecUp", "Up"]
+        , ["left", "BtnLeft", "SecLeft", "Left"], ["right", "BtnRight", "SecRight", "Right"], ["clubdown", "BtnClubdown", "SecClubdown", "K"]
+        , ["down", "BtnDown", "SecDown", "Down"], ["resetaim", "BtnResetaim", "SecResetaim", "A"], ["teeleft", "BtnTeeleft", "SecTeeleft", "C"]
+        , ["teeright", "BtnTeeright", "SecTeeright", "V"], ["shotcam", "BtnShotcam", "SecShotcam", "J"]]
+    bldR := Round(BldPicW * 0.0557)
+    for i, bb in bldBtns {
+        t := bldLay[bb[1]]
+        bx := BldPicX + Round(BldPicW * t[1] / 1000) - bldR, by := BldPicY + Round(BldPicH * t[2] / 1000) - bldR, bd := 2 * bldR
+        Gui, Builder:Font, s10 c303030 Bold, Segoe UI
+        ctl := bb[2], lbl := bb[1]
+        if (lbl = "mulligan")
+            Gui, Builder:Add, Text, x%bx% y%by% w%bd% h%bd% Center +0x200 BackgroundTrans Disabled v%ctl%, % bb[4]
+        else
+            Gui, Builder:Add, Text, x%bx% y%by% w%bd% h%bd% Center +0x200 BackgroundTrans g%ctl% v%ctl%, % bb[4]
+        if (bb[3] != "") {
+            sw := Round(BldPicW * t[6] / 1000), sh := 20
+            ax := BldPicX + Round(BldPicW * t[3] / 1000), ay := BldPicY + Round(BldPicH * t[4] / 1000) - sh // 2
+            sx := (t[5] = "l") ? ax : (t[5] = "r") ? ax - sw : ax - sw // 2
+            sal := (t[5] = "l") ? "Left" : (t[5] = "r") ? "Right" : "Center"
+            Gui, Builder:Font, s9 cFFD400 Bold, Segoe UI
+            sc := bb[3]
+            Gui, Builder:Add, Text, x%sx% y%ay% w%sw% h%sh% %sal% BackgroundTrans v%sc%,
+        }
+    }
+    Gui, Builder:Font, s8 cAAAAAA Normal, Segoe UI
+    Gui, Builder:Add, Text, x80 y658 w800 Center, Click a button on the box to set its tap and FN jobs.  GSPro hotkeys only work in the GSPro window - BA Remapper brings it to the front first.
 
     ; Bottom action buttons
     Gui, Builder:Font, s10 c000000 Bold, Segoe UI
-    Gui, Builder:Add, Button, x40 y662 w150 h40 gBuilderImport, Import Profile...
-    Gui, Builder:Add, Button, x200 y662 w150 h40 gBuilderExport, Export Profile...
+    Gui, Builder:Add, Button, x40 y684 w150 h40 gBuilderImport, Import Profile...
+    Gui, Builder:Add, Button, x200 y684 w150 h40 gBuilderExport, Export Profile...
     Gui, Builder:Font, s9 cFFFFFF Normal, Segoe UI
     BuilderTestMode := false
-    Gui, Builder:Add, Checkbox, x370 y668 w230 h30 vBuilderTest gOnBuilderTest, Test mode: press box buttons, see what they do (nothing sent)
+    Gui, Builder:Add, Checkbox, x370 y690 w230 h30 vBuilderTest gOnBuilderTest, Test mode: press box buttons, see what they do (nothing sent)
     Gui, Builder:Font, s10 c000000 Bold, Segoe UI
-    Gui, Builder:Add, Button, x620 y662 w150 h40 gBuilderReset vBuilderResetBtn, Reset Profile
-    Gui, Builder:Add, Button, x780 y662 w150 h40 gBuilderClose, Close
+    Gui, Builder:Add, Button, x620 y684 w150 h40 gBuilderReset vBuilderResetBtn, Reset Profile
+    Gui, Builder:Add, Button, x780 y684 w150 h40 gBuilderClose, Close
 
     Gui, Builder:Font, s9 cC8E6C2 Normal, Segoe UI
-    Gui, Builder:Add, Text, x20 y712 w940 Center vBuilderStatus, Click a button to set its FN secondary  -  yellow text = current secondary  -  auto-saves
+    Gui, Builder:Add, Text, x20 y734 w940 Center vBuilderStatus, Click a button on the box to set its jobs  -  yellow = its FN job  -  auto-saves
     Gui, Builder:Font, s9 cFFD400 Normal, Segoe UI
-    Gui, Builder:Add, Text, x20 y736 w940 Center vBuilderCheck gBuilderCheckDetails, Layout check: OK
+    Gui, Builder:Add, Text, x20 y758 w940 Center vBuilderCheck gBuilderCheckDetails, Layout check: OK
 
     UpdateBuilderLabels()
     RefreshBuilderPresetControls()
     WinGetPos, bx, by, , , ahk_id %MainHwnd%
-    ShowSettingsWindow("Builder", BuilderHwnd, 980, 772, false, bx, by)
+    ShowSettingsWindow("Builder", BuilderHwnd, 980, 794, false, bx, by)
 Return
 
 OnBuilderTest:
@@ -7913,9 +7868,11 @@ UpdateOneLabel(btnIdVal, ctrlName, secCtrl, dispName, priKey) {
     ; A custom tap key shows on the button with a * (v5.2.0)
     if (ProfPrimary.HasKey(btnIdVal))
         priKey := KeyShortName(ProfPrimary[btnIdVal]) . " *"
-    label := dispName . "`n" . priKey
+    ; v5.3.0: the picture prints the button's name; the button shows
+    ; its tap key (and FN on the FN button)
+    label := priKey
     if (btnIdVal = FnButtonId)
-        label := "[FN]`n" . dispName . "`n" . priKey
+        label := "FN`n" . priKey
     GuiControl, Builder:, %ctrlName%, %label%
     ; Yellow panel print under the button = the secondary
     sec := (btnIdVal = FnButtonId) ? "FN / SHIFT KEY" : YellowSecName(btnIdVal)
