@@ -33,6 +33,10 @@ Bullets:
 - **Pick scramble shots from the box.** The bottom row picks a card: Reset Aim card 1, Tee Left card 2, Tee Right card 3, Shot Cam card 4. GSPro shows where that ball is; press another to compare. Aim Right takes it. With Auto-Pick on, the countdown keeps running and takes the card you picked.
 - **Light on the PC.** It looks at a few pixels of the GSPro picture about three times a second; Windows' own OCR reads the screen only once, when the list or the cards appear.
 - Both are on by default and can be turned off on the main window.
+- **Only what works on that screen.** The sheet shows just that screen's jobs: relief jobs on the relief list, CARD 1-4 and TAKE CARD on the scramble cards, Clear View (and anything you add) when FN is held during play.
+- **The box always goes to GSPro.** After a click on another screen (a video, a stats page), the next box press brings GSPro back to the front first. To type in another program, turn mapping off with Ctrl+F12.
+- **Builder on the box picture**, with every GSPro hotkey listed by name.
+- **GSPro 4 only.** The older GSPro relief menu is no longer read; the Reset Smart Click Spots button is gone. New installs start on Basic Secondary.
 
 ## Page wording to update
 

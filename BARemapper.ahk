@@ -722,6 +722,8 @@ ScrambleBoxMiss := 0
 ScrambleBoxRetry := 0
 ScrambleBoxPending := 0      ; AIM right waiting for Auto-Pick's read in flight
 ScrambleBoxBoost := ""       ; vote key the box choice was added to
+ScrambleBoxOkTick := 0       ; last small read that proved the cards are up ...
+ScrambleBoxOkId := ""        ; ... and for which cards
 GdipToken := 0               ; GDI+ (built into Windows) for the sheet's picture
 BoxPicPath := ConfigDir . "\box-v25.jpg"
 BoxPicBmp := 0
@@ -2482,8 +2484,10 @@ HandleBoxKeyUp(keyName) {
             OcrTrace("key FN (" . keyName . ") up" . (FnUsedAsModifier ? "" : " - tapped alone, sent its own key"))
         if (!FnUsedAsModifier && !OwnTextFocus() && !ScrambleBoxPress(btnId)) {
             pk := BoxTapKey(btnId)
-            if (pk != "")
+            if (pk != "") {
+                GsproToFront()
                 Send, %pk%
+            }
         }
         FnIsDown := false
         FnUsedAsModifier := false
@@ -3041,6 +3045,10 @@ ScrambleBoxPress(btnId) {
     c := ScrambleBoxCardsNow()
     if (!IsObject(c) || (c.hwnd && !WinActive("ahk_id " . c.hwnd)))
         return false
+    ; The colour check alone never moves a tee button's job: before a
+    ; press counts, one small read proves the cards are still there.
+    if (!ScrambleBoxConfirm(c))
+        return false
     if (btnId = "right") {
         k := ScrambleBoxTakeCard(c)
         if (!k) {
@@ -3076,6 +3084,51 @@ ScrambleBoxPress(btnId) {
         ParkMouse()
     }
     return true
+}
+
+; Auto-Pick off: the cards were found by colours and one read; a
+; fairway could look alike later.  So a box press first reads the
+; thin strip around the USE / Select words (enlarged on small
+; screens) - good for 3 s.  No button word there: the cards are
+; gone, the press is the button's own key.  Auto-Pick on: its own
+; read every 2 s is the proof.  A read already running: trust it.
+ScrambleBoxConfirm(c) {
+    global ScrambleBoxCards, ScrambleBoxRetry, ScrambleBoxOkTick, ScrambleBoxOkId, OcrBusy
+    if (c.auto)
+        return true
+    if (ScrambleBoxOkId = c.id && A_TickCount - ScrambleBoxOkTick < 3000)
+        return true
+    if (OcrBusy)
+        return true
+    x0 := 999999, x1 := -999999, y0 := 999999, y1 := -999999, hh := 0
+    for i, u in c.uses
+        x0 := Min(x0, u.x), x1 := Max(x1, u.x + u.w), y0 := Min(y0, u.y), y1 := Max(y1, u.y + u.h), hh := Max(hh, u.h)
+    if (hh <= 0)
+        return false
+    rx := Round(x0 - 3 * hh), ry := Round(y0 - 1.5 * hh), rw := Round(x1 - x0 + 6 * hh), rh := Round(y1 - y0 + 3 * hh)
+    found := 0
+    OcrLockTake()
+    try {
+        for i, f in (hh < 24 ? [2, 3] : [1, 2]) {
+            o := (f > 1) ? OcrRegionScaled(rx, ry, rw, rh, f) : OcrRegion(rx, ry, rw, rh)
+            found := ScrambleButtons({lines: o.lines}).MaxIndex()
+            if (found)
+                break
+        }
+    } catch appErr {
+        LogAppError("ScrambleBoxConfirm", appErr)
+        found := 1      ; the reader failed, not the screen
+    }
+    OcrBusy := false
+    if (found) {
+        ScrambleBoxOkId := c.id, ScrambleBoxOkTick := A_TickCount
+        return true
+    }
+    OcrTrace("scramble watch: no cards at the press - the button keeps its own job")
+    ScrambleBoxCards := ""
+    ScrambleBoxRetry := A_TickCount + 3000
+    CheatHide()
+    return false
 }
 
 ; Auto-Pick takes the box's card at zero: the box choice gets 1000
@@ -7194,6 +7247,11 @@ CheatShow:
     }
 Return
 
+BuilderRepaint:
+    if (BuilderHwnd && DllCall("IsWindow", "Ptr", BuilderHwnd))
+        DllCall("RedrawWindow", "Ptr", BuilderHwnd, "Ptr", 0, "Ptr", 0, "UInt", 0x185)
+Return
+
 ScreenWatchTick:
     try {
         ScreenWatchStep()
@@ -7865,6 +7923,8 @@ Return
 ;  UPDATE BUILDER LABELS
 ; ============================================================
 UpdateBuilderLabels() {
+    global BuilderHwnd
+    SetTimer, BuilderRepaint, -30   ; v5.3.0: see-through print on the picture
     UpdateLayoutCheck()
     UpdateOneLabel("heatmap",  "BtnHeatmap",  "SecHeatmap",  "HEAT MAP",  "Y")
     UpdateOneLabel("putt",     "BtnPutt",     "SecPutt",     "PUTT",      "U")

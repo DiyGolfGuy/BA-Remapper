@@ -496,6 +496,14 @@ UiSmoke:
         sinkWin := ClientRectByTitle(GSProWinNeedle, GSProWinExclude)
         cardUses := [{x: sinkWin.x + 200, y: sinkWin.y + 400, w: 40, h: 16}, {x: sinkWin.x + 500, y: sinkWin.y + 400, w: 40, h: 16}]
         ScrambleBoxCards := {uses: cardUses, n: 2, hwnd: sinkWin.hwnd, auto: false, id: "b1"}
+        ; no cards on this test window: a press reads the strip, finds no
+        ; button word, and the button keeps its own job (C reaches GSPro? no:
+        ; checked with a harmless key below); then mark them proven
+        ScrambleBoxOkId := "", OcrBusy := false
+        Assert(!ScrambleBoxConfirm(ScrambleBoxCards) && ScrambleBoxCards = "", "Cards known by colour only are checked by a small read at the press: none there, the buttons keep their own jobs")
+        ScrambleBoxRetry := 0
+        ScrambleBoxCards := {uses: cardUses, n: 2, hwnd: sinkWin.hwnd, auto: false, id: "b1"}
+        ScrambleBoxOkId := "b1", ScrambleBoxOkTick := A_TickCount + 600000
         Assert(IsObject(ScrambleBoxCardsNow()) && ScrambleBoxPickNow(ScrambleBoxCards) = 0, "Scramble cards known, nothing picked yet")
         HandleBoxKeyDown("c")      ; Tee Left = card 2 (clicks the name, no V/C key)
         HandleBoxKeyUp("c")
