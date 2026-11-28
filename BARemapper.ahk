@@ -615,8 +615,8 @@ FnChoiceMap["Shot Cam (J)"]    := "shotcam"
 RemapActive := false
 SwapIK      := false
 
-ActiveProfile  := "Default"
-StartupProfile := "Default"
+ActiveProfile  := "Basic Secondary"   ; v5.3.0: a new install starts on the box print
+StartupProfile := "Basic Secondary"
 ProfileList    := []
 
 ; Per-profile data loaded into these
@@ -1851,7 +1851,7 @@ LoadSettings() {
     global ConfigFile, ActiveProfile, StartupProfile, SwapIK
     global ScrambleAutoPick, ScrambleDelaySec, ScrambleCountdown, ClickDelayMs, ShowFnCheat, CheatSizePct, CheatPosX, CheatPosY
     global ReliefAutoSheet, ReliefNoFn
-    IniRead, ActiveProfile,  %ConfigFile%, App, ActiveProfile,  Default
+    IniRead, ActiveProfile,  %ConfigFile%, App, ActiveProfile,  Basic Secondary
     IniRead, StartupProfile, %ConfigFile%, App, StartupProfile, %ActiveProfile%
     IniRead, swapVal,        %ConfigFile%, App, SwapIK,         0
     SwapIK := (swapVal + 0) ? true : false
@@ -2096,11 +2096,37 @@ ScanProfileList() {
         SplitPath, A_LoopFileName, , , , baseName
         ProfileList.Push(baseName)
     }
-    if (ProfileList.MaxIndex() = "") {
-        ; First run with no profiles - create Default
-        ProfileList.Push("Default")
-        SaveProfile("Default")
+    ; v5.3.0: a first run has no blank "Default" any more - the
+    ; Basic Secondary preset (SeedPresetProfiles, right after) is the
+    ; profile a new install starts on.
+}
+
+; v5.3.0 (Bruce: "make sure the basic setup the default is what we
+; have been talking about"): a PC still on the blank "Default"
+; profile that 5.2.x and older created at first run - no FN job, no
+; custom tap, FN on Reset Aim - is moved to Basic Secondary once.
+; Any profile with something in it is left exactly as it is.
+MigrateBlankDefault() {
+    global ActiveProfile, StartupProfile, ProfilesDir, AllBtnIds
+    if (ActiveProfile != "Default" && StartupProfile != "Default")
+        return false
+    pf := ProfilesDir . "\Default.ini"
+    if (FileExist(pf)) {
+        IniRead, fnId, %pf%, Profile, FnButtonId, resetaim
+        if (fnId != "resetaim")
+            return false
+        for i, id in AllBtnIds {
+            IniRead, t, %pf%, Profile, %id%_Type, none
+            IniRead, pk, %pf%, Profile, %id%_Primary, %A_Space%
+            if ((t != "none" && t != "") || Trim(pk) != "")
+                return false
+        }
     }
+    if (ActiveProfile = "Default")
+        ActiveProfile := "Basic Secondary"
+    if (StartupProfile = "Default")
+        StartupProfile := "Basic Secondary"
+    return true
 }
 
 ; ============================================================
@@ -6559,6 +6585,8 @@ LoadSpots()
 RefreshAutoStartPath()
 ScanProfileList()
 SeedPresetProfiles()
+if (MigrateBlankDefault())
+    SaveSettings()
 LoadProfile(ActiveProfile)
 
 ; ============================================================
