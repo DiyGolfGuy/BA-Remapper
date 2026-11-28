@@ -1773,7 +1773,7 @@ ReliefShotSmoke:
                     DllCall("SelectObject", "Ptr", dc, "Ptr", o, "Ptr")
                     st := ScrambleCardStrip(swin2)
                     how := "", nb := 0
-                    for z, fz in (th >= 1300 ? [1] : th < 850 ? [3, 4] : [2, 3]) {
+                    for z, fz in (th >= 2000 ? [1] : th < 850 ? [3, 4] : th < 1300 ? [2, 3] : [1, 2]) {
                         rd := ShotRead(hb, st.x, st.y, st.w, st.h, fz)
                         nz := ScrambleRowButtons(rd.lines).Length()
                         how .= fz . "x: " . nz . " "

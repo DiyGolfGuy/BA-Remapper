@@ -1307,6 +1307,12 @@ ReliefShortName(t) {
     StringUpper, t, t
     if (FuzzyIs(t, "lateral drop"))
         return "LATERAL"
+    ; v5.3.0: a known choice is printed by its name, also when the
+    ; reader got a letter wrong on a very small picture ("FUG LINE").
+    for i, name in ["FLAG LINE", "REHIT", "MULLIGAN"] {
+        if (FuzzyIs(t, name))
+            return name
+    }
     return t
 }
 
@@ -2980,11 +2986,11 @@ ScreenWatchStep() {
     ScrambleBoxWatchStep(win)
     global ScrambleLearnedId, ScrambleBoxDeepId, ScrambleBoxDeepHow, OcrBusy, ScrambleBusy
     lc := ScrambleBoxCardsNow()
-    ; Auto-Pick on, a picture under 1300 px high: its reads can leave
-    ; out the highlighted card (see ScrambleBoxRead).  The box reads
-    ; the enlarged card strip itself, once for these cards; Auto-Pick's
-    ; own reads and its choice are not touched.
-    if (IsObject(lc) && lc.auto && ReliefNoFn && ScrambleBoxDeepId != lc.id && lc.n < 4 && win.h < 1300 && !OcrBusy && !ScrambleBusy) {
+    ; Auto-Pick on, a picture under 2000 px high: a read can leave out
+    ; the highlighted card (see ScrambleBoxRead).  The box reads the
+    ; enlarged card strip itself, once for these cards, so its card
+    ; numbers are right from the start.
+    if (IsObject(lc) && lc.auto && ReliefNoFn && ScrambleBoxDeepId != lc.id && lc.n < 4 && win.h < 2000 && !OcrBusy && !ScrambleBusy) {
         ScrambleBoxDeepId := lc.id
         OcrLockTake()
         try {
@@ -3463,9 +3469,11 @@ ScrambleBoxWatchStep(win) {
 ; can leave a card out: Windows' reader loses small white print on the
 ; highlighted card's blue button first (1641 x 1020: 2 of 3 and 3 of 4
 ; cards; 1280 x 796: 2 of 4).  A card left out would shift the numbers,
-; so on a picture under 1300 px high the card strip is read again
-; enlarged (2x and 3x; 3x and 4x under 850 px) and the read with the
-; most buttons in one row counts.  Once, when the cards show up.
+; so on a picture under 2000 px high (in the Windows tests a 1440-line
+; picture lost a card too; 4K reads every card) the card strip is read
+; again enlarged (2x; 2x and 3x under 1300 px; 3x and 4x under 850 px)
+; and the read with the most buttons in one row counts.  Once, when
+; the cards show up.
 ; {uses: [left to right], lines, n, how}
 ScrambleBoxRead(win) {
     global GSProWinNeedle, GSProWinExclude
@@ -3476,9 +3484,9 @@ ScrambleBoxRead(win) {
     rscan := ScrambleRecoverCards(scan)
     best := ScrambleRowButtons(rscan.lines), bestLines := rscan.lines
     how := "1x: " . best.Length()
-    if (best.Length() < 4 && win.h < 1300) {
+    if (best.Length() < 4 && win.h < 2000) {
         band := ScrambleCardStrip(scan.win)
-        for i, f in (win.h < 850 ? [3, 4] : [2, 3]) {
+        for i, f in (win.h < 850 ? [3, 4] : win.h < 1300 ? [2, 3] : [2]) {
             o := OcrRegionScaled(band.x, band.y, band.w, band.h, f)
             u2 := ScrambleRowButtons(o.lines)
             how .= ", " . f . "x: " . u2.Length()
@@ -4218,7 +4226,7 @@ ReliefWheel(dir) {
 ReliefFindRecenter(win, reader := "") {
     rx := win.x + Round(win.w * 0.15), ry := win.y + Round(win.h * 0.82)
     rw := Round(win.w * 0.75), rh := win.h - Round(win.h * 0.82)
-    sc := (win.h < 1300) ? 2 : 1
+    sc := (win.h >= 1300) ? 1 : (win.h >= 950) ? 2 : 3   ; as ReliefRead: small pictures read larger
     if (IsObject(reader))
         o := reader.Call(rx, ry, rw, rh, sc)
     else if (sc > 1)
@@ -5153,18 +5161,18 @@ ScrambleRecoverCards(scan) {
             n := 1
     }
     ; v5.3.0 (Bruce, 2026-11-27: "if you found something that didnt
-    ; work try it again and make it work"): on a picture under 1300 px
+    ; work try it again and make it work"): on a picture under 2000 px
     ; high one read can leave a card out - Windows' reader loses the
     ; small white word on the highlighted card's blue button first
-    ; (Windows tests: 3 of 4 cards at 1641 x 1020 and 1738 x 1080, so
-    ; Auto-Pick took the second-best shot; 1 of 2 on a 2-player screen,
-    ; so it never started).  When a button word is on screen and fewer
-    ; than four were read, the card strip is read once more, enlarged,
-    ; and the read with more buttons counts.  Not on bigger pictures
-    ; (1440p, 4K: every card is read as before), not while no button
-    ; word is on screen (nothing extra during play), and not again for
-    ; cards whose full count the plain read already gives.
-    if (scan.win.h < 1300 && n >= 1 && n < 4 && A_TickCount >= ScrambleSmallRetry
+    ; (Windows tests: 3 of 4 cards at 1641 x 1020, 1738 x 1080 and on
+    ; 1440-line pictures, so Auto-Pick took the second-best shot; 1 of
+    ; 2 on a 2-player screen, so it never started).  When a button word
+    ; is on screen and fewer than four were read, the card strip is
+    ; read once more, enlarged, and the read with more buttons counts.
+    ; Not on a 4K picture (every card is read as before), not while no
+    ; button word is on screen (nothing extra during play), and not
+    ; again for cards whose full count the plain read already gives.
+    if (scan.win.h < 2000 && n >= 1 && n < 4 && A_TickCount >= ScrambleSmallRetry
         && !(ScrambleArmedTick && ScrambleFullFor = ScrambleArmedTick && n >= ScrambleFullN)) {
         strip := ScrambleCardStrip(scan.win)
         o := OcrRegionScaled(strip.x, strip.y, strip.w, strip.h, (scan.win.h < 850) ? 3 : 2)
