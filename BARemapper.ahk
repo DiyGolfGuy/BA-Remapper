@@ -3443,6 +3443,29 @@ ScrambleBoxWatchStep(win) {
     }
     ScrambleBoxMiss := 0
     ScrambleBoxHits += 1
+    ; A second opinion (v5.3.0): fewer than four cards were read and
+    ; nothing has been picked yet - one more read about a second and a
+    ; half later.  The green's moving grid can spoil a single read (as
+    ; it once did for Auto-Pick); the cards only ever become more.
+    global ScrambleBoxPick, ScrambleBoxFor
+    sc := ScrambleBoxCards
+    if (IsObject(sc) && sc.n < 4 && !sc.again && A_TickCount - sc.at >= 1500 && !OcrBusy && !(ScrambleBoxPick && ScrambleBoxFor = sc.id)) {
+        sc.again := true
+        OcrLockTake()
+        rd := ""
+        try {
+            rd := ScrambleBoxRead(win)
+        } catch appErr {
+            LogAppError("ScrambleBoxWatch", appErr)
+        }
+        OcrBusy := false
+        if (IsObject(rd) && rd.n > sc.n && rd.n <= 4) {
+            ScrambleBoxCards := {uses: rd.uses, n: rd.n, hwnd: win.hwnd, auto: false, id: "b" . A_TickCount, lines: rd.lines, how: sc.how . "; again " . rd.how, at: A_TickCount, again: true}
+            ScrambleLearn(ScrambleBoxCards, win)
+            OcrTrace("scramble watch: " . rd.n . " cards on a second read (" . rd.how . ")")
+        }
+        return
+    }
     if (IsObject(ScrambleBoxCards) || ScrambleBoxHits < 2 || A_TickCount < ScrambleBoxRetry || OcrBusy)
         return
     OcrLockTake()
@@ -3455,7 +3478,7 @@ ScrambleBoxWatchStep(win) {
     }
     OcrBusy := false
     if (IsObject(uses) && uses.Length() >= 2) {
-        ScrambleBoxCards := {uses: uses, n: Min(uses.Length(), 4), hwnd: win.hwnd, auto: false, id: "b" . A_TickCount, lines: readLines, how: readHow}
+        ScrambleBoxCards := {uses: uses, n: Min(uses.Length(), 4), hwnd: win.hwnd, auto: false, id: "b" . A_TickCount, lines: readLines, how: readHow, at: A_TickCount, again: false}
         ScrambleBoxWait := 0
         ScrambleLearn(ScrambleBoxCards, win)
         OcrTrace("scramble watch: " . uses.Length() . " cards on screen (" . readHow . "; picture " . win.w . " x " . win.h . ")")
@@ -3495,6 +3518,17 @@ ScrambleBoxRead(win) {
             if (best.Length() >= 4)
                 break
         }
+    }
+    else if (best.Length() >= 1 && best.Length() < 4) {
+        ; a 4K picture: every card is read as it is; one more look at
+        ; the strip a moment later, in case this one caught a bad frame
+        Sleep, 150
+        band := ScrambleCardStrip(scan.win)
+        o := OcrRegion(band.x, band.y, band.w, band.h)
+        u2 := ScrambleRowButtons(o.lines)
+        how .= ", strip: " . u2.Length()
+        if (u2.Length() > best.Length() && u2.Length() <= 4)
+            best := u2, bestLines := o.lines
     }
     best := ScrambleFillGaps(best)
     return {uses: best, lines: bestLines, n: best.Length(), how: how}

@@ -30,7 +30,7 @@ jobs:
           Write-Host "Display scale two steps up asked: $asked"
           Start-Sleep -Seconds 3
           python tests/verify_remapper.py --ahk "$env:RUNNER_TEMP/ahk/AutoHotkeyU64.exe" --screen-watch-only
-      - name: Screen watch again on a 4K screen (3840 x 2160)
+      - name: Screen watch again on a 4K screen, when this test PC can show one
         shell: pwsh
         run: |
           Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public static class DpiSet { [DllImport("user32.dll", SetLastError = true)] public static extern bool SystemParametersInfo(uint action, int param, IntPtr pv, uint winIni); }'

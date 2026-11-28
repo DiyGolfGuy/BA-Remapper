@@ -77,6 +77,9 @@ GSPro picture is on screen; one Windows OCR read confirms it when the
 list or the cards appear. It works at any resolution, Windows scale and
 screen count. It keeps working after a click on another screen (a video
 on screen 2), as long as no window covers the GSPro picture.
+Screens: any size from 1024 x 768 to 4K, any shape (4:3, 16:9, 16:10,
+ultrawide) and any Windows scale. On screens smaller than 4K the list
+and the cards are read enlarged so no choice or card is missed.
 Each time the scramble cards are read, Remapper also remembers what
 your GSPro draws there, so it spots them quicker and more surely.
 Main window settings:

@@ -36,6 +36,8 @@ Bullets:
 - **Only what works on that screen.** The sheet shows just that screen's jobs: relief jobs on the relief list, CARD 1-4 and TAKE CARD on the scramble cards, Clear View (and anything you add) when FN is held during play.
 - **The box always goes to GSPro.** After a click on another screen (a video, a stats page), the next box press brings GSPro back to the front first, and the sheet still comes up by itself on the relief list and scramble cards. To type in another program, turn mapping off with Ctrl+F12.
 - **Builder on the box picture**, with every GSPro hotkey listed by name.
+- **Any screen.** Works at any size from 1024 x 768 to 4K, any shape (4:3, 16:9, 16:10, ultrawide) and any Windows scale.
+- **Auto-Pick sees every card on screens under 4K.** It reads the scramble cards a second time, enlarged, when a card may be missing.
 - **GSPro 4 only.** The older GSPro relief menu is no longer read; the Reset Smart Click Spots button is gone. New installs start on Basic Secondary.
 
 ## Page wording to update
@@ -76,6 +78,7 @@ Bruce sets this on GitHub himself (Settings, About, the gear icon). Suggested te
 ## Keep the claims accurate
 
 - **Tested by the AI:** Windows CI with the real Windows OCR on a 1920 x 1080 screen, using Bruce's real GSPro 4 relief screenshots and GSPro scramble screenshots shown on screen (water list found in 1.1 s, scramble cards in 1.6 s); the drawn sheet captured and checked; the keys each press sends recorded by a separate program; the watch measured at about 3 ms of CPU per look (under 1% of one core). Say "light on the PC", not a number, on the page.
+- **Screens tested by the AI:** pictures from 1024 x 637 to 3840 x 2160 and shapes from 5:4 to 32:9 built from Bruce's real screenshots (all about 16:10), on screen at 1024, 1280, 1641 and 1738 wide, at 100% and 150% Windows scale. Not tested: two or more real screens, screens with different scales side by side, real screenshots of other shapes. Say "any screen size and shape" only once Bruce is comfortable with that; "1080p to 4K" is the safe wording.
 - **Not tested by the AI:** a live round on a bay with the box, GSPro 4's real scramble screen (the scramble test screens are from before GSPro 4, with the button word edited), and the click on the player's name in GSPro. Don't claim field testing until Bruce confirms it.
 - **Picture:** the sheet's box picture is drawn from Bruce's product photo; call it "a picture of your control box", not a photo.
 - **Wording:** say "works without FN on the relief list and scramble cards", not "no FN button needed" in general: FN is still used for Clear View and the other jobs during play.
