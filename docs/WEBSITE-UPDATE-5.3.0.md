@@ -63,7 +63,7 @@ Bruce sets this on GitHub himself (Settings, About, the gear icon). Suggested te
 
 ## Keep the claims accurate
 
-- **Tested by the AI** (fill in from the release record): Windows CI with the real Windows OCR on Bruce's real GSPro 4 relief screenshots and GSPro scramble screenshots shown on screen; the drawn sheet captured and checked; the keys each press sends recorded by a separate program.
+- **Tested by the AI:** Windows CI with the real Windows OCR on a 1920 x 1080 screen, using Bruce's real GSPro 4 relief screenshots and GSPro scramble screenshots shown on screen (water list found in 1.1 s, scramble cards in 1.6 s); the drawn sheet captured and checked; the keys each press sends recorded by a separate program; the watch measured at about 3 ms of CPU per look (under 1% of one core). Say "light on the PC", not a number, on the page.
 - **Not tested by the AI:** a live round on a bay with the box, GSPro 4's real scramble screen (the scramble test screens are from before GSPro 4, with the button word edited), and the click on the player's name in GSPro. Don't claim field testing until Bruce confirms it.
 - **Picture:** the sheet's box picture is drawn from Bruce's product photo; call it "a picture of your control box", not a photo.
 - **Wording:** say "works without FN on the relief list and scramble cards", not "no FN button needed" in general: FN is still used for Clear View and the other jobs during play.

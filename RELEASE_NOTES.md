@@ -13,6 +13,8 @@ The cheat sheet is now a picture of your control box, it comes up by itself on G
 
 ## How this was checked
 
-- Windows CI (results in the release record): the drawn sheet captured from the screen and checked; the labels for every screen; the keys each press sends, recorded by a separate program; the pixel looks on your real relief and scramble screenshots at full size and 1920 wide; and the whole screen watch on a 1920 x 1080 test screen with your water screenshot and a 2-player scramble screenshot shown in a window named like GSPro.
+- Windows CI: the drawn sheet captured from the screen and checked; the labels for every screen; the keys each press sends, recorded by a separate program; the pixel looks on your real relief and scramble screenshots at full size and 1920 wide.
+- The whole screen watch on a 1920 x 1080 test screen, with your water screenshot and a 2-player scramble screenshot shown in a window named like GSPro: the water list was spotted and confirmed in 1.1 s and the sheet came up with the Flag Line labels; Aim Right without FN took the choice; the list was read again after Enter; the scramble cards were found in 1.6 s (Auto-Pick off) with CARD 1 / CARD 2 / TAKE CARD; closing either screen put everything back to normal.
+- The watch's cost, measured on the test PC: about 3 ms of CPU per look, under 1% of one core.
 - All earlier checks (your real screenshots, FN and held-B delivery, Mulligan, scramble Auto-Pick, startup, installer upgrade) still pass.
 - Not tested by the AI: your bay, the box itself, a live round, and GSPro 4's real scramble screen (the scramble test screens are from before GSPro 4, with the button word changed to Select). Please try the water hole, an OB, and a scramble.
