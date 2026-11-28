@@ -520,10 +520,10 @@ UiSmoke:
         HandleBoxKeyDown("a")      ; FN tapped alone = card 1 (no A key)
         HandleBoxKeyUp("a")
         Assert(ScrambleBoxPickNow(ScrambleBoxCards) = 1, "Reset Aim tapped picks card 1")
-        SendSecondaryKey("{F10}")
+        SendSecondaryKey("{F6}")    ; markers: F6 / F7 (F10 would open the window menu)
         HandleBoxKeyDown("Right")  ; AIM right takes card 1: the key 1, no arrow
         HandleBoxKeyUp("Right")
-        SendSecondaryKey("{F11}")
+        SendSecondaryKey("{F7}")
         Assert(ScrambleBoxCards = "" && ScrambleBoxPick = 0, "AIM right took the card; the screen is done")
         ; Auto-Pick on: the box card wins the vote at zero.
         ScrambleAutoPick := true, ScrambleArmedTick := A_TickCount, ScrambleCoolDown := false, ScrambleMissTicks := 0
@@ -1847,8 +1847,8 @@ def runtime_checks(source, ahk):
         between = downs[downs.index(0x77) + 1:downs.index(0x78)]
         assert 0x4D in between and 0x0D not in between and not any(0x30 <= key <= 0x39 for key in between), f"Mulligan button without the relief list: Ctrl+M only, got {between}"
         print("PASS: the box's Ctrl+M reached the game untouched; no number or Enter followed it without the relief list")
-        assert 0x79 in downs and 0x7A in downs, f"F10 / F11 markers around the scramble take: {downs}"
-        take = downs[downs.index(0x79) + 1:downs.index(0x7A)]
+        assert 0x75 in downs and 0x76 in downs, f"F6 / F7 markers around the scramble take: {downs}"
+        take = downs[downs.index(0x75) + 1:downs.index(0x76)]
         assert take == [0x31], f"Scramble screen: AIM right sent the card's number 1 and nothing else, got {take}"
         print("PASS: scramble cards from the box: Tee Left / Reset Aim tap picked, AIM right sent 1; no A, V or arrow leaked")
         relief_downs = [key for _, message, key in rows if message in (0x100, 0x104) and key in (0x32, 0x33, 0x0D, 0x34, 0x71, 0x58)]
