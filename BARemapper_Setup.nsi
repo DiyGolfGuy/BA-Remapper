@@ -11,7 +11,7 @@
 !include "x64.nsh"
 
 !define APPNAME "BA Remapper"
-!define COMPANY "BA Custom Products"
+!define COMPANY "BA Custom Products LLC"
 !define VERSION "5.3.0"
 !define VERSION4 "5.3.0.0"
 !define EXENAME "BARemapper.exe"

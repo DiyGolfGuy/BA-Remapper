@@ -1,7 +1,8 @@
 ﻿#NoEnv
 ;@Ahk2Exe-SetName BA Remapper
 ;@Ahk2Exe-SetDescription BA Custom Products Control Box Remapper
-;@Ahk2Exe-SetCompanyName BA Custom Products
+;@Ahk2Exe-SetCompanyName BA Custom Products LLC
+;@Ahk2Exe-SetCopyright (c) 2026 BA Custom Products LLC
 ;@Ahk2Exe-SetVersion 5.3.0
 ;@Ahk2Exe-SetOrigFilename BARemapper.exe
 ;@Ahk2Exe-SetMainIcon BARemapper.ico
