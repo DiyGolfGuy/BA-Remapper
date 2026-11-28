@@ -68,6 +68,8 @@ Press one: Remapper frames that card and clicks the player's name, so
 GSPro shows where that ball is. Press another to look at that one.
 Aim Right takes the picked card. With Auto-Pick on, the countdown keeps
 going and takes the card picked on the box at zero.
+On the scramble cards the sheet shows at the top right, clear of the
+cards; everywhere else it is where you placed it (Size and Place).
 
 How Remapper knows the screen: a quick look at a few pixels of the
 GSPro picture (no screen reading) about three times a second while GSPro

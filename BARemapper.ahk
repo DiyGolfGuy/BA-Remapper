@@ -1436,22 +1436,12 @@ CheatDraw(adjust := false) {
         CheatWinAdjust := kind
     }
     g := CheatGeom(win)
-    ; Scramble screen: the sheet never sits on the cards.  If its spot
-    ; would cover them it moves straight up to just above the cards
-    ; (or below them when there is more room there) for this screen.
+    ; Scramble screen: the sheet goes to the top right, clear of the
+    ; cards (Bruce, 2026-11-27).  Everywhere else it is where Size and
+    ; Place put it; the size is the chosen one on every screen.
     if (IsObject(scr)) {
-        ct := 999999, cb := -999999, cl := 999999, cr := -999999
-        for i, u in scr.uses
-            ct := Min(ct, u.y - 10.6 * u.h), cb := Max(cb, u.y + 3.8 * u.h), cl := Min(cl, u.x - 6 * u.h), cr := Max(cr, u.x + u.w + 6 * u.h)
-        if (g.x < cr && g.x + g.pw > cl && g.y < cb && g.y + g.ph > ct) {
-            above := Round(ct - g.pad - g.ph), below := Round(cb + g.pad)
-            if (above >= win.y + g.pad)
-                g.y := above
-            else if (below + g.ph <= win.y + win.h - g.pad)
-                g.y := below
-            else
-                g.y := win.y + g.pad
-        }
+        g.x := win.x + win.w - g.pw - g.pad
+        g.y := win.y + g.pad
     }
     if (!CheatVisible || !DllCall("IsWindowVisible", "Ptr", CheatHwnd)) {
         cx := g.x, cy := g.y, cw := g.pw, chh := g.ph

@@ -515,6 +515,9 @@ UiSmoke:
         CheatDraw()
         cheatText := CheatShownText
         Assert(CheatVisible && InStr(cheatText, "SCRAMBLE:  CARD 2 PICKED") && InStr(cheatText, "resetaim=CARD 1|") && InStr(cheatText, "teeleft=CARD 2") && InStr(cheatText, "teeright=|") && InStr(cheatText, "right=TAKE CARD 2") && InStr(cheatText, "NO FN NEEDED") && InStr(cheatText, "clubup=|") && InStr(cheatText, "heatmap=|"), "Scramble sheet: cards along the bottom row, TAKE CARD 2 on AIM right: " . cheatText)
+        WinGetPos, scx, scy, scw, , ahk_id %CheatHwnd%
+        sg := CheatGeom(sinkWin)
+        Assert(Abs(scx + scw - (sinkWin.x + sinkWin.w - sg.pad)) <= 2 && Abs(scy - (sinkWin.y + sg.pad)) <= 2 && CheatPosX = 0 && CheatPosY = 1000, "On the scramble cards the sheet sits top right (its saved spot is bottom left): " . scx . "," . scy)
         px := CheatPixels(CheatHwnd, "scramble")
         CheatHide()
         WinActivate, GSPro BA Remapper regression target
