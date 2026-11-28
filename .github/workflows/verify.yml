@@ -24,7 +24,6 @@ jobs:
         run: ./scripts/package-release.ps1
       - name: Screen watch again at 150% Windows scale
         shell: pwsh
-        continue-on-error: true
         run: |
           Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public static class DpiSet { [DllImport("user32.dll", SetLastError = true)] public static extern bool SystemParametersInfo(uint action, int param, IntPtr pv, uint winIni); }'
           $asked = [DpiSet]::SystemParametersInfo(0x009F, 2, [IntPtr]::Zero, 1)
