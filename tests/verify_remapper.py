@@ -1623,9 +1623,16 @@ ReliefShotSmoke:
             sw := A_ScreenWidth - 20, sh := Round(sw * 2137 / 3438)
             if (sh > A_ScreenHeight - 60)
                 sh := A_ScreenHeight - 60, sw := Round(sh * 3438 / 2137)
+            ; shrunk smoothly first (like GSPro drawing at this size), so
+            ; the window shows clean text rather than a jagged resize
+            src := LoadPicture(dir . "\" . shotFile)
+            VarSetCapacity(bm, 32, 0)
+            DllCall("GetObject", "Ptr", src, "Int", A_PtrSize = 8 ? 32 : 24, "Ptr", &bm)
+            showBmp := ShotScaled(src, NumGet(bm, 4, "Int"), NumGet(bm, 8, "Int"), sw, sh)
+            DllCall("DeleteObject", "Ptr", src)
             Gui, Shot:New, -Caption +ToolWindow +HwndShotHwnd, GSPro screen watch test
             Gui, Shot:Margin, 0, 0
-            Gui, Shot:Add, Picture, x0 y0 w%sw% h%sh%, % dir . "\" . shotFile
+            Gui, Shot:Add, Picture, x0 y0 w%sw% h%sh%, HBITMAP:%showBmp%
             Gui, Shot:Show, x0 y0 w%sw% h%sh%
             WinActivate, ahk_id %ShotHwnd%
             WinWaitActive, ahk_id %ShotHwnd%, , 3
@@ -1640,6 +1647,22 @@ ReliefShotSmoke:
                     fails += 1
                 if (CheatVisible)
                     CheatPixels(CheatHwnd, "relief")
+                ; What the watch costs: the window check and both looks,
+                ; 50 times, on this 1080p screen.
+                tc0 := 0, tc1 := 0, tcf := 0
+                DllCall("QueryPerformanceFrequency", "Int64*", tcf)
+                DllCall("QueryPerformanceCounter", "Int64*", tc0)
+                Loop, 50 {
+                    w2 := ReliefWatchWin()
+                    ReliefLook(w2)
+                    ScrambleBoxLook(w2)
+                }
+                DllCall("QueryPerformanceCounter", "Int64*", tc1)
+                perLook := (tc1 - tc0) * 1000 / tcf / 50
+                ok := w2.found && perLook < 25
+                ScrambleNote(ok ? "PASS" : "FAIL", "watch cost: " . Round(perLook, 2) . " ms per look (window check + relief look + scramble look) = " . Round(perLook / 4, 2) . "% of one CPU core at one look every 400 ms")
+                if (!ok)
+                    fails += 1
                 ReliefLastAct := ""
                 HandleBoxKeyDown("Right")   ; no FN: Drop Ball = Enter on Flag Line
                 HandleBoxKeyUp("Right")
@@ -1656,7 +1679,8 @@ ReliefShotSmoke:
                 while (!(IsObject(ScrambleBoxCards) && CheatVisible) && A_TickCount - t0 < 9000)
                     Sleep, 100
                 ok := IsObject(ScrambleBoxCards) && ScrambleBoxCards.n = 2 && CheatVisible && InStr(CheatShownText, "SCRAMBLE:") && InStr(CheatShownText, "teeleft=CARD 2") && InStr(CheatShownText, "teeright=|") && !ReliefWatchUp
-                ScrambleNote(ok ? "PASS" : "FAIL", "on screen, Auto-Pick off: the 2 scramble cards were seen in " . (A_TickCount - t0) . " ms and the sheet shows the bottom row [" . CheatShownText . "]")
+                sw2 := ReliefWatchWin()
+                ScrambleNote(ok ? "PASS" : "FAIL", "on screen, Auto-Pick off: the 2 scramble cards were seen in " . (A_TickCount - t0) . " ms and the sheet shows the bottom row [" . CheatShownText . "] (look " . (sw2.found ? (ScrambleBoxLook(sw2) ? "sees the cards" : "does not see the cards") : "no GSPro window") . ")")
                 if (!ok)
                     fails += 1
                 if (CheatVisible)

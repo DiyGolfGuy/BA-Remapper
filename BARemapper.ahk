@@ -694,7 +694,10 @@ ReliefWatchUp := false       ; relief watch: the list is on screen (panel colour
 ReliefWatchHits := 0         ; looks in a row that saw the panel
 ReliefWatchMiss := 0         ; looks in a row that did not
 ReliefWatchRetry := 0        ; an OCR read found no list: next read not before this tick
-ReliefNoFnHeld := {}         ; relief buttons held down (one press per push, no auto-repeat)
+ScreenJobHeld := {}          ; buttons pressed for a screen job, held down (one press per push)
+ReliefWatchWait := 0         ; back-off after a look the OCR read did not confirm
+ScrambleBoxWait := 0
+ScrambleBoxTick := false     ; the scramble look runs every other watch tick
 ScrambleBoxCards := ""        ; v5.3.0 Auto-Pick off: the scramble cards the screen watch read
 ScrambleBoxPick := 0         ; card picked on the box (1-4) ...
 ScrambleBoxFor := ""         ; ... for these cards (ScrambleBoxCardsNow().id)
@@ -1450,6 +1453,12 @@ CheatHide(force := false) {
 BoxPicInstall() {
     global BoxPicPath
     FileInstall, assets\box-v25.jpg, %BoxPicPath%, 1
+    if (!FileExist(BoxPicPath)) {
+        ; settings folder not writable (e.g. Windows' folder protection):
+        ; the temp folder always is
+        BoxPicPath := A_Temp . "\BARemapper-box-v25.jpg"
+        FileInstall, assets\box-v25.jpg, %BoxPicPath%, 1
+    }
 }
 
 ; Where each button and its print sit on the box picture, in
@@ -2373,9 +2382,18 @@ HandleBoxKeyDown(keyName) {
     }
 
     ; v5.3.0: on GSPro 4's relief list the relief buttons work without
-    ; FN; on the scramble screen the bottom row picks a card.
-    if (ReliefNoFnPress(btnId) || ScrambleBoxPress(btnId))
+    ; FN; on the scramble screen the bottom row picks a card.  A button
+    ; held down after such a press stays quiet: its auto-repeat must
+    ; not become its own key (an aim move) once the screen has closed.
+    global ScreenJobHeld
+    if (ScreenJobHeld.HasKey(btnId) && A_TickCount - ScreenJobHeld[btnId] < 600) {
+        ScreenJobHeld[btnId] := A_TickCount
         return
+    }
+    if (ReliefNoFnPress(btnId) || ScrambleBoxPress(btnId)) {
+        ScreenJobHeld[btnId] := A_TickCount
+        return
+    }
     pk := BoxTapKey(btnId)
     if (AnyOcrSecondary())
         OcrTrace("key " . keyName . " (" . btnId . ") down, FN not held -> sent " . pk)
@@ -2386,7 +2404,7 @@ HandleBoxKeyDown(keyName) {
 HandleBoxKeyUp(keyName) {
     global KeyToBtnId, FnButtonId, FnIsDown, FnUsedAsModifier
     global FnLastDownTime, BtnPrimary
-    global ReliefNoFnHeld
+    global ScreenJobHeld
     btnId := KeyToBtnId[keyName]
     if (btnId = "")
         return
@@ -2394,7 +2412,7 @@ HandleBoxKeyUp(keyName) {
         BuilderTestKey(btnId, false)
         return
     }
-    ReliefNoFnHeld.Delete(btnId)
+    ScreenJobHeld.Delete(btnId)
     if (btnId = FnButtonId) {
         CheatFnReleased()
         if (AnyOcrSecondary())
@@ -2583,23 +2601,36 @@ ReliefOnlyAction(actionId) {
 ; The GSPro game window when it is the one in front, else found: false.
 ReliefWatchWin() {
     global GSProWinNeedle, GSProWinExclude
-    WinGetTitle, at, A
+    ; Only the window in front is looked at - no search through every
+    ; window - so the watch costs nothing while GSPro is not in front.
+    h := DllCall("GetForegroundWindow", "Ptr")
+    if (!h)
+        return {found: false}
+    WinGetTitle, at, ahk_id %h%
     if (at = "" || !InStr(at, GSProWinNeedle) || (GSProWinExclude != "" && InStr(at, GSProWinExclude)))
         return {found: false}
-    win := ClientRectByTitle(GSProWinNeedle, GSProWinExclude)
-    if (!win.found || !WinActive("ahk_id " . win.hwnd))
+    VarSetCapacity(rc, 16, 0), VarSetCapacity(pt, 8, 0)
+    if (!DllCall("GetClientRect", "Ptr", h, "Ptr", &rc) || !DllCall("ClientToScreen", "Ptr", h, "Ptr", &pt))
         return {found: false}
-    return win
+    cw := NumGet(rc, 8, "Int"), ch := NumGet(rc, 12, "Int")
+    ; the game picture, not GSPro's small connector or a minimized window
+    if (cw < 640 || ch < 400)
+        return {found: false}
+    return {found: true, hwnd: h, x: NumGet(pt, 0, "Int"), y: NumGet(pt, 4, "Int"), w: cw, h: ch}
 }
 
 ; One look at the panel corner: share of panel-navy, card-navy and
-; highlight-blue pixels in 64 x 24 samples of the area 0.45 heights
-; wide from the left edge, 0.10 to 0.24 heights down.  up = the
+; highlight-blue pixels in 64 x 24 samples of the area 0.50 heights
+; wide from the left edge, 0.06 to 0.30 heights down.  up = the
 ; relief panel is there.  srcDC (tests): a DC holding a screenshot.
+; The colour families are wide on purpose (any brightness, HDR, a
+; UI 20% bigger or smaller than Bruce's screens): Bruce's relief
+; screens give 22-45% navy, his round screens at most 10%; one OCR
+; read decides anyway.
 ReliefLook(win, srcDC := 0) {
     GW := 64, GH := 24
-    rx := win.x, ry := win.y + Round(win.h * 0.10)
-    rw := Min(Round(win.h * 0.45), win.w), rh := Round(win.h * 0.14)
+    rx := win.x, ry := win.y + Round(win.h * 0.06)
+    rw := Min(Round(win.h * 0.50), win.w), rh := Round(win.h * 0.24)
     res := {panel: 0, card: 0, blue: 0, up: false}
     if (rw < 8 || rh < 8)
         return res
@@ -2620,12 +2651,12 @@ ReliefLook(win, srcDC := 0) {
         Loop, % GW * GH {
             c := NumGet(bits + 0, (A_Index - 1) * 4, "UInt")
             b := c & 0xFF, g := (c >> 8) & 0xFF, r := (c >> 16) & 0xFF
-            if (Abs(r - 11) <= 9 && Abs(g - 17) <= 9 && Abs(b - 31) <= 10 && b - r >= 12 && b - g >= 8)
-                panel += 1
-            else if (Abs(r - 24) <= 12 && Abs(g - 33) <= 12 && Abs(b - 53) <= 14 && b - r >= 18)
-                card += 1
+            if (r <= 50 && g <= 50 && b <= 50 && b >= 18 && b - r >= 10 && b - g >= 6)
+                panel += 1      ; the panel's dark navy (R11 G17 B31)
+            else if (r >= 8 && r <= 48 && g >= 16 && g <= 60 && b >= 34 && b <= 90 && b - r >= 16 && b - g >= 10)
+                card += 1       ; a card (R24 G33 B53)
             else if (b - r >= 50 && b > 70 && g > 30)
-                blue += 1
+                blue += 1       ; the highlighted card
         }
     }
     DllCall("SelectObject", "Ptr", mdc, "Ptr", old, "Ptr")
@@ -2635,7 +2666,7 @@ ReliefLook(win, srcDC := 0) {
         DllCall("ReleaseDC", "Ptr", 0, "Ptr", screenDC)
     n := GW * GH
     res.panel := panel / n, res.card := card / n, res.blue := blue / n
-    res.up := (res.panel >= 0.15 && res.card + res.blue >= 0.12)
+    res.up := (res.panel >= 0.06 && res.panel + res.card + res.blue >= 0.18)
     return res
 }
 
@@ -2663,12 +2694,17 @@ ScreenWatchStep() {
 }
 
 ReliefWatchLook(win) {
-    global ReliefWatchUp, ReliefWatchHits, ReliefWatchMiss, ReliefWatchRetry, ReliefLast, ReliefLastActTick, OcrBusy
+    global ReliefWatchUp, ReliefWatchHits, ReliefWatchMiss, ReliefWatchRetry, ReliefWatchWait, ReliefLast, ReliefLastActTick, OcrBusy
+    ; Old Windows (no capture exclusion): the sheet itself would be in
+    ; the look if it sits over the panel corner - keep what was seen.
+    if (CheatCovers(win.x, win.y + Round(win.h * 0.06), Round(win.h * 0.50), Round(win.h * 0.24)))
+        return
     look := ReliefLook(win)
     if (!look.up) {
         ReliefWatchHits := 0
         ReliefWatchMiss += 1
         ReliefWatchRetry := 0
+        ReliefWatchWait := 0
         if (ReliefWatchUp && ReliefWatchMiss >= 2)
             ReliefWatchSet(false)
         return
@@ -2696,14 +2732,18 @@ ReliefWatchLook(win) {
     OcrBusy := false
     if (IsObject(rel) && rel.found) {
         ReliefWatchSet(true)
+        ReliefWatchWait := 0
     } else {
+        ; something navy that is not the list: look again later, less
+        ; often each time (3, 6, 12 ... 30 s) while it stays
         ReliefWatchSet(false)
-        ReliefWatchRetry := A_TickCount + 3000
+        ReliefWatchWait := Min(30000, ReliefWatchWait ? ReliefWatchWait * 2 : 3000)
+        ReliefWatchRetry := A_TickCount + ReliefWatchWait
     }
 }
 
 ReliefWatchSet(up) {
-    global ReliefWatchUp, ReliefLast, ReliefExpectSel, ReliefNoFnHeld, CheatAuto, FnIsDown
+    global ReliefWatchUp, ReliefLast, ReliefExpectSel, CheatAuto, FnIsDown
     if ((up ? true : false) = (ReliefWatchUp ? true : false))
         return
     ReliefWatchUp := up ? true : false
@@ -2714,7 +2754,6 @@ ReliefWatchSet(up) {
     OcrTrace("relief watch: list gone")
     ReliefLast := ""
     ReliefExpectSel := 0
-    ReliefNoFnHeld := {}
     if (!FnIsDown)
         CheatHide()
 }
@@ -2733,21 +2772,18 @@ ReliefNoFnAction(a) {
 ; Only buttons whose FN job is a relief action, only while the watch
 ; has the list and its panel is on screen right now (a fresh look);
 ; every other button, and every button off the list, sends its own
-; key exactly as before.  A held button counts once.
+; key exactly as before.  A held button counts once (ScreenJobHeld).
 ReliefNoFnPress(btnId) {
-    global ReliefNoFn, ReliefWatchUp, SecType, SecValue, FnButtonId, ReliefNoFnHeld
+    global ReliefNoFn, ReliefWatchUp, SecType, SecValue, FnButtonId
     if (!ReliefNoFn || !ReliefWatchUp || btnId = FnButtonId)
         return false
     if (SecType[btnId] != "ocr" || !ReliefNoFnAction(SecValue[btnId]))
         return false
-    if (ReliefNoFnHeld[btnId])
-        return true
     win := ReliefWatchWin()
     if (!win.found || !ReliefLook(win).up) {
         ReliefWatchSet(false)
         return false
     }
-    ReliefNoFnHeld[btnId] := true
     OcrTrace("key " . btnId . " on the relief list, no FN needed -> " . SecValue[btnId])
     FireSecondary(btnId)
     return true
@@ -2763,6 +2799,16 @@ CheatStateKey() {
             return "s|" . c.id . "|" . ScrambleBoxTakeCard(c)
     }
     return st.key
+}
+
+; True when the sheet is on screen over (x, y, w, h) and could be in
+; a screen capture (Windows before 10 2004 cannot leave it out).
+CheatCovers(x, y, w, h) {
+    global CheatVisible, CheatExcluded, CheatHwnd
+    if (!CheatVisible || CheatExcluded || !CheatHwnd)
+        return false
+    WinGetPos, sx, sy, sw, sh, ahk_id %CheatHwnd%
+    return (sx != "" && sx < x + w && sx + sw > x && sy < y + h && sy + sh > y)
 }
 
 CheatAutoWanted() {
@@ -2932,13 +2978,21 @@ ScrambleBoxTake(k, c) {
 ScrambleBoxWatchStep(win) {
     global ScrambleAutoPick, ScrambleBoxCards, ScrambleBoxHits, ScrambleBoxMiss, ScrambleBoxRetry
     global ReliefNoFn, ReliefWatchUp, OcrBusy, GSProWinNeedle, GSProWinExclude, FnIsDown
+    global ScrambleBoxWait, ScrambleBoxTick
     if (ScrambleAutoPick || ReliefWatchUp || !ReliefNoFn) {
         ScrambleBoxCards := ""
         ScrambleBoxHits := 0
         return
     }
+    ; every other tick (0.8 s) is plenty for a screen that stays up
+    ScrambleBoxTick := !ScrambleBoxTick
+    if (ScrambleBoxTick)
+        return
+    if (CheatCovers(win.x + Round(win.w * 0.15), win.y + Round(win.h * 0.50), Round(win.w * 0.70), Round(win.h * 0.38)))
+        return
     if (!ScrambleBoxLook(win)) {
         ScrambleBoxHits := 0
+        ScrambleBoxWait := 0
         ScrambleBoxMiss += 1
         if (ScrambleBoxMiss >= 2 && IsObject(ScrambleBoxCards)) {
             ScrambleBoxCards := ""
@@ -2964,16 +3018,17 @@ ScrambleBoxWatchStep(win) {
     OcrBusy := false
     if (IsObject(uses) && uses.MaxIndex() >= 2) {
         ScrambleBoxCards := {uses: uses, n: Min(uses.MaxIndex(), 4), hwnd: win.hwnd, auto: false, id: "b" . A_TickCount}
+        ScrambleBoxWait := 0
         OcrTrace("scramble watch: " . uses.MaxIndex() . " cards on screen")
     } else {
-        ScrambleBoxRetry := A_TickCount + 3000
+        ScrambleBoxWait := Min(30000, ScrambleBoxWait ? ScrambleBoxWait * 2 : 3000)
+        ScrambleBoxRetry := A_TickCount + ScrambleBoxWait
     }
 }
 
 ; The chosen scramble card's colours in the card strip (0.50 to 0.88
-; heights down, the middle 70% across), 80 x 24 samples.  Bruce's
-; 2/3/4-player screens: 2.8-3.1% card navy and 0.5-0.8% button blue;
-; his relief screens: none.  srcDC (tests): a DC holding a screenshot.
+; heights down, the middle 70% across), 80 x 24 samples.
+; srcDC (tests): a DC holding a screenshot.
 ScrambleBoxLook(win, srcDC := 0) {
     GW := 80, GH := 24
     rx := win.x + Round(win.w * 0.15), ry := win.y + Round(win.h * 0.50)
@@ -2997,10 +3052,10 @@ ScrambleBoxLook(win, srcDC := 0) {
         Loop, % GW * GH {
             c := NumGet(bits + 0, (A_Index - 1) * 4, "UInt")
             b := c & 0xFF, g := (c >> 8) & 0xFF, r := (c >> 16) & 0xFF
-            if (r <= 14 && g >= 28 && g <= 48 && b >= 44 && b <= 70 && b - g >= 10)
-                navy += 1
-            else if (r >= 12 && r <= 50 && g >= 105 && g <= 150 && b >= 170 && b <= 225)
-                btn += 1
+            if (r <= 20 && g >= 26 && g <= 56 && b >= 40 && b <= 80 && b - g >= 8 && g - r >= 18)
+                navy += 1       ; the chosen card's teal-navy (R2 G39 B58)
+            else if (r <= 60 && g >= 95 && g <= 160 && b >= 160 && b - r >= 120)
+                btn += 1        ; its USE / Select button (R27 G128 B198)
         }
     }
     DllCall("SelectObject", "Ptr", mdc, "Ptr", old, "Ptr")
@@ -3009,7 +3064,9 @@ ScrambleBoxLook(win, srcDC := 0) {
     if (screenDC)
         DllCall("ReleaseDC", "Ptr", 0, "Ptr", screenDC)
     n := GW * GH
-    return (navy / n >= 0.012 && btn / n >= 0.002)
+    ; Bruce's 2/3/4-player screens: 1.6-3.4% card navy (UI 20% smaller
+    ; or bigger, 15% darker or brighter); relief screens: 0.1% at most.
+    return (navy / n >= 0.010)
 }
 
 ; The sheet's labels on the scramble screen: the bottom row's cards,
