@@ -2,7 +2,7 @@
 ;@Ahk2Exe-SetName BA Remapper
 ;@Ahk2Exe-SetDescription BA Custom Products Control Box Remapper
 ;@Ahk2Exe-SetCompanyName BA Custom Products
-;@Ahk2Exe-SetVersion 5.2.2
+;@Ahk2Exe-SetVersion 5.3.0
 ;@Ahk2Exe-SetOrigFilename BARemapper.exe
 ;@Ahk2Exe-SetMainIcon BARemapper.ico
 #SingleInstance Off
@@ -18,8 +18,24 @@ CoordMode, Mouse, Screen
 DllCall("SetProcessDPIAware")
 
 ; ============================================================
-;  BA CUSTOM PRODUCTS - CONTROL BOX REMAPPER v5.2.2
+;  BA CUSTOM PRODUCTS - CONTROL BOX REMAPPER v5.3.0
 ;  bacustomproducts@gmail.com   GitHub: DiyGolfGuy
+;
+;  CHANGES IN v5.3.0  (Bruce, Nov 27 2026)
+;  - The cheat sheet is a real picture of the V2.5 box (top-down,
+;    made from Bruce's product photo, round buttons) drawn with GDI+
+;    (built into Windows) with the yellow print on it, sharp at any
+;    size, resolution, Windows scale or number of screens.
+;  - Screen watch: a cheap pixel look (no OCR) finds GSPro 4's relief
+;    list (water / OB) and the scramble cards; one OCR read confirms.
+;    The sheet then comes up by itself and says what each button does
+;    on that screen, and the buttons work there without FN.  FN stays
+;    for Clear View and every job that is not on that screen.
+;  - Scramble cards from the box: Reset Aim (tap) / Tee Left / Tee
+;    Right / Shot Cam pick card 1-4 (frame + a click on the player's
+;    name so GSPro shows the ball), AIM right takes it.  Auto-Pick
+;    keeps counting; a box pick is the card it takes at zero.
+;  - Main window: two new settings for the screen watch.
 ;
 ;  CHANGES IN v5.2.2  (Bruce, Nov 24 2026)
 ;  - Mulligan button on GSPro 4's water relief list: it highlighted
@@ -372,7 +388,7 @@ DllCall("SetProcessDPIAware")
 ; ============================================================
 ;  CONSTANTS / PATHS
 ; ============================================================
-AppVersion := "5.2.2"
+AppVersion := "5.3.0"
 MainWinTitle    := "BA Custom Control Box Remapper"
 BuilderWinTitle := "BA Custom Control Box - Button Builder"
 HelpWinTitle    := "BA Custom Control Box - Help"
@@ -669,6 +685,27 @@ CheatVisible := false
 CheatExcluded := true
 CheatShownFor := 0
 CheatHwnd := 0
+CheatAuto := false           ; the sheet on screen came up by itself on the relief list (v5.3.0)
+CheatWinAdjust := -1         ; the sheet's window: -1 none, 0 over GSPro, 1 Size and Place
+CheatShownText := ""         ; what the sheet on screen says (title | chip | print), for the trace and tests
+ReliefAutoSheet := true      ; v5.3.0: show the sheet by itself on GSPro 4's relief list (settings.ini [App] ReliefSheet)
+ReliefNoFn := true           ; ... and its relief buttons work there without FN (settings.ini [App] ReliefNoFn)
+ReliefWatchUp := false       ; relief watch: the list is on screen (panel colours seen + one OCR read)
+ReliefWatchHits := 0         ; looks in a row that saw the panel
+ReliefWatchMiss := 0         ; looks in a row that did not
+ReliefWatchRetry := 0        ; an OCR read found no list: next read not before this tick
+ReliefNoFnHeld := {}         ; relief buttons held down (one press per push, no auto-repeat)
+ScrambleBoxCards := ""        ; v5.3.0 Auto-Pick off: the scramble cards the screen watch read
+ScrambleBoxPick := 0         ; card picked on the box (1-4) ...
+ScrambleBoxFor := ""         ; ... for these cards (ScrambleBoxCardsNow().id)
+ScrambleBoxHits := 0
+ScrambleBoxMiss := 0
+ScrambleBoxRetry := 0
+ScrambleBoxPending := 0      ; AIM right waiting for Auto-Pick's read in flight
+ScrambleBoxBoost := ""       ; vote key the box choice was added to
+GdipToken := 0               ; GDI+ (built into Windows) for the sheet's picture
+BoxPicPath := ConfigDir . "\box-v25.jpg"
+BoxPicBmp := 0
 BuilderTestMode := false
 TestFnDown := false
 TestFnUsed := false
@@ -723,6 +760,7 @@ launchHidden := (LaunchHow = "startup" || LaunchHow = "program")
 ;  FILESYSTEM SETUP - happens before anything else reads/writes
 ; ============================================================
 InitConfigPaths()
+BoxPicInstall()
 
 ; Unconditional launch log - answers "did Windows even run us
 ; at boot" from a file instead of a guess.  Newest entries at
@@ -1255,123 +1293,125 @@ CheatArea(allowScreen := false) {
 ; on any screen resolution.
 CheatGeom(win) {
     global CheatSizePct, CheatPosX, CheatPosY
-    ; 940 x 640 layout units: the Builder's 900-wide box plus 20 on
-    ; each side so the outer yellow print is never cut off.  Size in
-    ; physical pixels (like the scramble panel), at least 300 px and
-    ; never more than fits.
-    pw := Round(Min(Max(win.w * CheatSizePct / 100, 300), win.w - 40, (win.h - 40) * 940 / 640))
+    ; v5.3.0: 940 x 710 units - a title line over the box picture
+    ; (1.45 wide to 1 high), 16 around.  Size in physical pixels
+    ; (like the scramble panel), at least 300 px and never more than
+    ; fits.  Everything else follows the width, so the sheet looks
+    ; the same on any screen, resolution or Windows scale.
+    pw := Round(Min(Max(win.w * CheatSizePct / 100, 300), win.w - 40, (win.h - 40) * 940 / 710))
     sc := pw / 940
     pad := Round(16 * sc)
-    head := Round(44 * sc)
-    ph := head + Round(570 * sc) + pad
+    head := Round(52 * sc)
+    bw := pw - 2 * pad
+    bh := Round(bw / 1.45)
+    ph := pad + head + bh + pad
     freeW := Max(0, win.w - pw - 2 * pad)
     freeH := Max(0, win.h - ph - 2 * pad)
     x := win.x + pad + Round(freeW * CheatPosX / 1000)
     y := win.y + pad + Round(freeH * CheatPosY / 1000)
-    return {pw: pw, ph: ph, sc: sc, pad: pad, head: head, x: x, y: y, freeW: freeW, freeH: freeH}
+    return {pw: pw, ph: ph, sc: sc, pad: pad, head: head, bw: bw, bh: bh, x: x, y: y, freeW: freeW, freeH: freeH}
+}
+
+; What the sheet prints for each button: [{id, text, dim, fn}].
+; With the relief buttons working without FN, a button that keeps
+; its own key there shows its FN job as "FN: ..." in grey.
+CheatSheetLabels(model, st) {
+    global SecType, SecValue
+    noFn := st.on && ReliefNoFnActive()
+    out := []
+    for i, m in model {
+        t := m.yellow, dim := false
+        if (m.fn) {
+            t := noFn ? "FN" : "FN - HOLD"
+        } else if (t != "") {
+            ; GSPro's own bar names the keys; the picture keeps it short
+            t := RegExReplace(t, " \((F|B)\)$")
+            if (noFn && m.id != "mulligan" && !(SecType[m.id] = "ocr" && ReliefNoFnAction(SecValue[m.id]))) {
+                t := "FN: " . t
+                dim := true
+            }
+        }
+        out.Push({id: m.id, text: t, dim: dim, fn: m.fn})
+    }
+    return out
 }
 
 ; adjust = Size and place mode: drawn over GSPro even when it is
 ; not the active window (or over the screen with GSPro closed), not
 ; click-through so it can be dragged, with a green outline.
 CheatDraw(adjust := false) {
-    global ActiveProfile, CheatVisible, CheatExcluded, CheatShownFor, ReliefLast
-    global CheatPanelW, CheatPanelH, CheatHwnd, CheatAdjHwnd, CheatShownKey
+    global ActiveProfile, CheatVisible, CheatExcluded, CheatShownFor, FnIsDown, CheatAuto
+    global CheatPanelW, CheatPanelH, CheatHwnd, CheatAdjHwnd, CheatShownKey, CheatWinAdjust, CheatShownText
     win := CheatArea(adjust)
     if (!win.found || (!adjust && !WinActive("ahk_id " . win.hwnd))) {
         CheatHide(adjust)
         return
     }
+    global ReliefNoFn
     st := CheatReliefState()
+    scr := (!adjust && ReliefNoFn && !st.on) ? ScrambleBoxCardsNow() : ""
     model := CheatModel(st)
+    labels := IsObject(scr) ? CheatScrambleLabels(model, scr) : CheatSheetLabels(model, st)
     any := false
-    for i, m in model {
-        if (!m.fn && m.yellow != "")
+    for i, l in labels {
+        if (!l.fn && l.text != "")
             any := true
     }
     if (!any && !adjust) {
         CheatHide()
         return
     }
-    relief := st.on
-    CheatShownKey := st.key
+    CheatShownKey := IsObject(scr) ? "s|" . scr.id . "|" . ScrambleBoxTakeCard(scr) : st.key
+    chip := "", chipColor := 0
     if (adjust) {
-        ; Same window as the scramble overlay minus click-through
-        ; (WS_EX_TRANSPARENT), so it takes the mouse for dragging;
-        ; still never takes focus from GSPro.
-        Gui, Cheat:New, +AlwaysOnTop -Caption +ToolWindow -DPIScale +E0x08080000 +Hwndah
-        Gui, Cheat:Color, 1C1C1C
-        DllCall("SetLayeredWindowAttributes", "Ptr", ah, "UInt", 0, "UChar", 255, "UInt", 2)
-        DllCall("SetWindowDisplayAffinity", "Ptr", ah, "UInt", 0x11)
-        overlay := {hwnd: ah, excluded: true}
-    } else {
-        overlay := ScramblePreviewWindow("Cheat", "1C1C1C")
-    }
-    CheatExcluded := overlay.excluded
-    CheatShownFor := win.hwnd
-    g := CheatGeom(win)
-    pw := g.pw, ph := g.ph, sc := g.sc, pad := g.pad, head := g.head
-    ox := 20
-    px2pt := 72 / A_ScreenDPI
-    namePt := Max(6, Round(13 * sc)) * px2pt * 96 / 72
-    ; One long word (MULLIGAN) gets a smaller size so it is never
-    ; broken in the middle of the word.
-    longPt := Max(6, Round(10.5 * sc)) * px2pt * 96 / 72
-    yelPt := Max(6, Round(15 * sc)) * px2pt * 96 / 72
-    yelSmallPt := Max(6, Round(13 * sc)) * px2pt * 96 / 72
-    headPt := Max(7, Round(18 * sc)) * px2pt * 96 / 72
-    Gui, Cheat:Margin, 0, 0
-    title := "HOLD FN + BUTTON  -  " . ActiveProfile
-    if (relief)
-        title := "HOLD FN + BUTTON  -  RELIEF LIST" . ((st.sel && st.rel.opts.HasKey(st.sel)) ? ":  " . st.sel . " " . ReliefShortName(st.rel.opts[st.sel].text) . " PICKED" : "")
-    if (adjust)
         title := "DRAG TO PLACE  -  " . ActiveProfile
-    Gui, Cheat:Font, s%headPt% cFFFFFF Bold, Segoe UI
-    tw := pw - pad * 2
-    Gui, Cheat:Add, Text, x%pad% y%pad% w%tw% BackgroundTrans, %title%
-    ; Panel print
-    Gui, Cheat:Font, s%namePt% cFFFFFF Bold, Segoe UI
-    for i, t in [["BA CUSTOM PRODUCTS", 270, 162, 320], ["CLUB", 127, 262, 150], ["AIM", 610, 262, 150], ["TEE POS", 425, 430, 120]] {
-        lx := pad + Round((t[2] + ox) * sc), ly := head + Round(t[3] * sc), lw := Round(t[4] * sc)
-        Gui, Cheat:Add, Text, x%lx% y%ly% w%lw% Center BackgroundTrans c8A8F96, % t[1]
+    } else if (IsObject(scr)) {
+        k := ScrambleBoxPickNow(scr)
+        title := "SCRAMBLE:  " . (k ? "CARD " . k . " PICKED" : "PICK A CARD")
+        chip := "NO FN NEEDED", chipColor := 0xFF2ECC71
+    } else if (st.on) {
+        title := "RELIEF LIST" . ((st.sel && st.rel.opts.HasKey(st.sel)) ? ":  " . st.sel . " " . ReliefShortName(st.rel.opts[st.sel].text) . " PICKED" : "")
+        if (ReliefNoFnActive())
+            chip := "NO FN NEEDED", chipColor := 0xFF2ECC71
+        else
+            chip := "HOLD FN", chipColor := 0xFFFFD400
+    } else {
+        title := "HOLD FN + BUTTON  -  " . ActiveProfile
     }
-    bs := Round(85 * sc)
-    for i, m in model {
-        bx := pad + Round((m.x + ox) * sc), by := head + Round(m.y * sc)
-        color := m.fn ? "FFD400" : "3A3F47"
-        Gui, Cheat:Add, Progress, x%bx% y%by% w%bs% h%bs% Background%color% Disabled -Theme
-        nPt := (!InStr(m.name, " ") && StrLen(m.name) > 7) ? longPt : namePt
-        Gui, Cheat:Font, s%nPt% Bold, Segoe UI
-        nameColor := m.fn ? "111111" : "FFFFFF"
-        ; Printed name inside the button, wrapped to its width
-        ny := by + Round(bs * (m.fn ? 0.08 : 0.2)), nh := bs - (ny - by)
-        Gui, Cheat:Add, Text, x%bx% y%ny% w%bs% h%nh% Center BackgroundTrans c%nameColor%, % (m.fn ? "FN`n" : "") . m.name
-        if (m.yellow != "") {
-            ; One line (0x200 = SS_CENTERIMAGE, never wraps into the
-            ; button below), wide enough for custom names, kept inside
-            ; the panel.
-            yw := Round(250 * sc), yh := Round(24 * sc), yy := by + bs + Round(3 * sc)
-            yx := Max(Round(pad / 2), Min(bx + (bs - yw) // 2, pw - Round(pad / 2) - yw))
-            yPt := (StrLen(m.yellow) > 15) ? yelSmallPt : yelPt
-            Gui, Cheat:Font, s%yPt% cFFD400 Bold, Segoe UI
-            Gui, Cheat:Add, Text, x%yx% y%yy% w%yw% h%yh% Center +0x200 BackgroundTrans, % m.yellow
-        }
+    ; One window, painted again in place: no flicker when the relief
+    ; choice changes.  A new one only when the kind changes.
+    kind := adjust ? 1 : 0
+    if (CheatWinAdjust != kind || !CheatHwnd || !DllCall("IsWindow", "Ptr", CheatHwnd)) {
+        if (CheatWinAdjust != -1)
+            Gui, Cheat:Destroy
+        ; Click-through (0x20) and never activated (0x08000000), over
+        ; GSPro but not owned by it (see ScramblePreviewWindow); Size
+        ; and Place takes the mouse so the sheet can be dragged.
+        ex := adjust ? "+E0x08080000" : "+E0x08080020"
+        Gui, Cheat:New, +AlwaysOnTop -Caption +ToolWindow -DPIScale %ex% +Hwndch
+        ; Left out of screen captures, so the OCR reads see GSPro under it.
+        DllCall("SetWindowDisplayAffinity", "Ptr", ch, "UInt", 0x11)
+        affinity := 0
+        DllCall("GetWindowDisplayAffinity", "Ptr", ch, "UInt*", affinity)
+        CheatExcluded := (affinity = 0x11)
+        CheatHwnd := ch
+        CheatWinAdjust := kind
     }
-    if (adjust) {
-        ; green outline: this is the sheet being placed
-        bw := Max(3, Round(6 * sc))
-        Gui, Cheat:Add, Progress, x0 y0 w%pw% h%bw% Background2ECC71 Disabled -Theme
-        by2 := ph - bw
-        Gui, Cheat:Add, Progress, x0 y%by2% w%pw% h%bw% Background2ECC71 Disabled -Theme
-        Gui, Cheat:Add, Progress, x0 y0 w%bw% h%ph% Background2ECC71 Disabled -Theme
-        bx2 := pw - bw
-        Gui, Cheat:Add, Progress, x%bx2% y0 w%bw% h%ph% Background2ECC71 Disabled -Theme
+    g := CheatGeom(win)
+    if (!CheatVisible || !DllCall("IsWindowVisible", "Ptr", CheatHwnd)) {
+        cx := g.x, cy := g.y, cw := g.pw, chh := g.ph
+        Gui, Cheat:Show, x%cx% y%cy% w%cw% h%chh% NoActivate
     }
-    cx := g.x, cy := g.y
-    Gui, Cheat:Show, x%cx% y%cy% w%pw% h%ph% NoActivate
-    CheatPanelW := pw, CheatPanelH := ph
-    CheatHwnd := overlay.hwnd
+    spec := {title: title, chip: chip, chipColor: chipColor, labels: labels, adjust: adjust}
+    painted := CheatPaint(CheatHwnd, g.x, g.y, g, spec)
+    shown := title . "|" . chip
+    for i, l in labels
+        shown .= "|" . l.id . "=" . l.text
+    CheatShownText := shown . (painted ? "" : "|(plain)")
+    CheatShownFor := win.hwnd
+    CheatPanelW := g.pw, CheatPanelH := g.ph
     CheatVisible := true
+    CheatAuto := !FnIsDown && !adjust
     ; Size and Place: its control box stays above the sheet, so the
     ; sheet can be dragged anywhere without covering the buttons.
     if (adjust && CheatAdjHwnd)
@@ -1381,14 +1421,281 @@ CheatDraw(adjust := false) {
 ; force: also hides the sheet being placed (Size and place mode);
 ; FN release, mapping off and OCR reads leave that one alone.
 CheatHide(force := false) {
-    global CheatVisible, CheatAdjusting
+    global CheatVisible, CheatAdjusting, CheatWinAdjust, CheatAuto, CheatShownText
     if (CheatAdjusting && !force)
         return
     SetTimer, CheatShow, Off
     SetTimer, CheatTick, Off
-    if (CheatVisible)
+    if (CheatVisible || CheatWinAdjust != -1)
         Gui, Cheat:Destroy
     CheatVisible := false
+    CheatWinAdjust := -1
+    CheatAuto := false
+    CheatShownText := ""
+}
+
+; ------------------------------------------------------------
+;  Drawing the sheet (v5.3.0).  The whole sheet is one picture made
+;  with GDI+, the drawing engine built into Windows, and handed to
+;  a layered window (UpdateLayeredWindow): a real picture of the box
+;  with smooth round buttons and the yellow print on it, sharp at
+;  any size.  No add-ons, nothing to install.  The box picture is
+;  carried inside the program (BoxPicInstall).  If it cannot be
+;  used, the same sheet is drawn on a plain navy box.
+; ------------------------------------------------------------
+
+; v5.3.0: the control-box picture the sheet shows - a top-down V2.5
+; made from Bruce's product photo.  Written next to the settings at
+; every start, so the sheet never depends on another file.
+BoxPicInstall() {
+    global BoxPicPath
+    FileInstall, assets\box-v25.jpg, %BoxPicPath%, 1
+}
+
+; Where each button and its print sit on the box picture, in
+; thousandths of the picture: button x, y, print x, y, print align
+; (c centre, l from the left, r up to the right), widest print.
+CheatPicLayout() {
+    static t := {mulligan: [110, 150, 110, 252, "c", 210], heatmap: [379, 150, 379, 252, "c", 210]
+        , putt: [618, 150, 618, 252, "c", 210], flyover: [893, 150, 893, 252, "c", 200]
+        , clubup: [244, 317, 244, 418, "c", 210], up: [753, 317, 753, 418, "c", 210]
+        , left: [618, 486, 609, 588, "c", 200], right: [893, 486, 893, 588, "c", 200]
+        , clubdown: [244, 652, 307, 652, "l", 165], down: [753, 652, 690, 652, "r", 180]
+        , resetaim: [110, 874, 110, 975, "c", 210], teeleft: [379, 874, 379, 975, "c", 210]
+        , teeright: [618, 874, 618, 975, "c", 210], shotcam: [893, 874, 893, 975, "c", 200]}
+    return t
+}
+
+GdipReady() {
+    global GdipToken
+    if (GdipToken)
+        return true
+    if (!DllCall("GetModuleHandle", "Str", "gdiplus", "Ptr"))
+        DllCall("LoadLibrary", "Str", "gdiplus", "Ptr")
+    VarSetCapacity(si, 24, 0)
+    NumPut(1, si, 0, "UInt")
+    tok := 0
+    if (DllCall("gdiplus\GdiplusStartup", "Ptr*", tok, "Ptr", &si, "Ptr", 0) != 0 || !tok)
+        return false
+    GdipToken := tok
+    return true
+}
+
+; The box picture as a GDI+ bitmap held in memory (the file is not
+; kept open, so Factory Reset can always remove it).  0 = none.
+CheatBoxPicture() {
+    global BoxPicPath, BoxPicBmp
+    if (BoxPicBmp)
+        return BoxPicBmp
+    if (!GdipReady() || !FileExist(BoxPicPath))
+        return 0
+    img := 0
+    if (DllCall("gdiplus\GdipCreateBitmapFromFile", "WStr", BoxPicPath, "Ptr*", img) != 0 || !img)
+        return 0
+    w := 0, h := 0
+    DllCall("gdiplus\GdipGetImageWidth", "Ptr", img, "UInt*", w)
+    DllCall("gdiplus\GdipGetImageHeight", "Ptr", img, "UInt*", h)
+    mem := 0
+    if (w > 0 && h > 0 && DllCall("gdiplus\GdipCreateBitmapFromScan0", "Int", w, "Int", h, "Int", 0, "Int", 0xE200B, "Ptr", 0, "Ptr*", mem) = 0 && mem) {
+        gr := 0
+        DllCall("gdiplus\GdipGetImageGraphicsContext", "Ptr", mem, "Ptr*", gr)
+        DllCall("gdiplus\GdipDrawImageRectI", "Ptr", gr, "Ptr", img, "Int", 0, "Int", 0, "Int", w, "Int", h)
+        DllCall("gdiplus\GdipDeleteGraphics", "Ptr", gr)
+    }
+    DllCall("gdiplus\GdipDisposeImage", "Ptr", img)
+    BoxPicBmp := mem
+    return mem
+}
+
+; A rounded rectangle as a GDI+ path (caller deletes it).
+GdipRoundPath(x, y, w, h, r) {
+    p := 0
+    DllCall("gdiplus\GdipCreatePath", "Int", 0, "Ptr*", p)
+    d := Max(1, r * 2)
+    DllCall("gdiplus\GdipAddPathArc", "Ptr", p, "Float", x, "Float", y, "Float", d, "Float", d, "Float", 180, "Float", 90)
+    DllCall("gdiplus\GdipAddPathArc", "Ptr", p, "Float", x + w - d, "Float", y, "Float", d, "Float", d, "Float", 270, "Float", 90)
+    DllCall("gdiplus\GdipAddPathArc", "Ptr", p, "Float", x + w - d, "Float", y + h - d, "Float", d, "Float", d, "Float", 0, "Float", 90)
+    DllCall("gdiplus\GdipAddPathArc", "Ptr", p, "Float", x, "Float", y + h - d, "Float", d, "Float", d, "Float", 90, "Float", 90)
+    DllCall("gdiplus\GdipClosePathFigure", "Ptr", p)
+    return p
+}
+
+GdipFillRound(gr, argb, x, y, w, h, r) {
+    p := GdipRoundPath(x, y, w, h, r)
+    br := 0
+    DllCall("gdiplus\GdipCreateSolidFill", "UInt", argb, "Ptr*", br)
+    DllCall("gdiplus\GdipFillPath", "Ptr", gr, "Ptr", br, "Ptr", p)
+    DllCall("gdiplus\GdipDeleteBrush", "Ptr", br)
+    DllCall("gdiplus\GdipDeletePath", "Ptr", p)
+}
+
+; Text as a path in Arial Bold: size px, ink box placed at x (al: c
+; centre, l left edge, r right edge) and centred on y, never wider
+; than maxW (smaller type instead).  outline > 0 draws a dark edge
+; first so yellow reads on any background.  Returns the ink width.
+GdipText(gr, text, size, x, y, al, maxW, argb, outline := 0) {
+    static fam := 0, fmt := 0
+    if (text = "")
+        return 0
+    if (!fam) {
+        if (DllCall("gdiplus\GdipCreateFontFamilyFromName", "WStr", "Arial", "Ptr", 0, "Ptr*", fam) != 0)
+            DllCall("gdiplus\GdipGetGenericFontFamilySansSerif", "Ptr*", fam)
+        DllCall("gdiplus\GdipCreateStringFormat", "Int", 0x1000, "Int", 0, "Ptr*", fmt)   ; no wrapping
+    }
+    p := 0
+    DllCall("gdiplus\GdipCreatePath", "Int", 1, "Ptr*", p)
+    VarSetCapacity(rc, 16, 0)
+    VarSetCapacity(bd, 16, 0)
+    Loop, 2 {
+        NumPut(0, rc, 0, "Float"), NumPut(0, rc, 4, "Float"), NumPut(100000, rc, 8, "Float"), NumPut(size * 3, rc, 12, "Float")
+        DllCall("gdiplus\GdipResetPath", "Ptr", p)
+        DllCall("gdiplus\GdipAddPathString", "Ptr", p, "WStr", text, "Int", -1, "Ptr", fam, "Int", 1, "Float", size, "Ptr", &rc, "Ptr", fmt)
+        DllCall("gdiplus\GdipGetPathWorldBounds", "Ptr", p, "Ptr", &bd, "Ptr", 0, "Ptr", 0)
+        bx := NumGet(bd, 0, "Float"), by := NumGet(bd, 4, "Float"), bw := NumGet(bd, 8, "Float"), bh := NumGet(bd, 12, "Float")
+        if (bw <= maxW || A_Index = 2 || bw <= 0)
+            break
+        size := size * maxW / bw * 0.98
+    }
+    ; move the ink box to its place
+    tx := (al = "l") ? x : (al = "r") ? x - bw : x - bw / 2
+    ty := y - bh / 2
+    m := 0
+    DllCall("gdiplus\GdipCreateMatrix2", "Float", 1, "Float", 0, "Float", 0, "Float", 1, "Float", tx - bx, "Float", ty - by, "Ptr*", m)
+    DllCall("gdiplus\GdipTransformPath", "Ptr", p, "Ptr", m)
+    DllCall("gdiplus\GdipDeleteMatrix", "Ptr", m)
+    if (outline > 0) {
+        pen := 0
+        DllCall("gdiplus\GdipCreatePen1", "UInt", 0xE6080A16, "Float", outline, "Int", 2, "Ptr*", pen)
+        DllCall("gdiplus\GdipSetPenLineJoin", "Ptr", pen, "Int", 2)
+        DllCall("gdiplus\GdipDrawPath", "Ptr", gr, "Ptr", pen, "Ptr", p)
+        DllCall("gdiplus\GdipDeletePen", "Ptr", pen)
+    }
+    br := 0
+    DllCall("gdiplus\GdipCreateSolidFill", "UInt", argb, "Ptr*", br)
+    DllCall("gdiplus\GdipFillPath", "Ptr", gr, "Ptr", br, "Ptr", p)
+    DllCall("gdiplus\GdipDeleteBrush", "Ptr", br)
+    DllCall("gdiplus\GdipDeletePath", "Ptr", p)
+    return bw
+}
+
+; Paint the sheet (g = CheatGeom) into the layered window hwnd at
+; x, y.  False when GDI+ is not available (nothing drawn).
+CheatPaint(hwnd, x, y, g, spec) {
+    global FnButtonId
+    if (!GdipReady())
+        return false
+    w := g.pw, h := g.ph, sc := g.sc
+    VarSetCapacity(bi, 40, 0)
+    NumPut(40, bi, 0, "UInt"), NumPut(w, bi, 4, "Int"), NumPut(-h, bi, 8, "Int")
+    NumPut(1, bi, 12, "UShort"), NumPut(32, bi, 14, "UShort")
+    bits := 0
+    hdc := DllCall("CreateCompatibleDC", "Ptr", 0, "Ptr")
+    dib := DllCall("CreateDIBSection", "Ptr", hdc, "Ptr", &bi, "UInt", 0, "Ptr*", bits, "Ptr", 0, "UInt", 0, "Ptr")
+    if (!dib) {
+        DllCall("DeleteDC", "Ptr", hdc)
+        return false
+    }
+    old := DllCall("SelectObject", "Ptr", hdc, "Ptr", dib, "Ptr")
+    gr := 0
+    DllCall("gdiplus\GdipCreateFromHDC", "Ptr", hdc, "Ptr*", gr)
+    DllCall("gdiplus\GdipSetSmoothingMode", "Ptr", gr, "Int", 4)
+    DllCall("gdiplus\GdipSetInterpolationMode", "Ptr", gr, "Int", 7)
+    DllCall("gdiplus\GdipSetPixelOffsetMode", "Ptr", gr, "Int", 2)
+    DllCall("gdiplus\GdipGraphicsClear", "Ptr", gr, "UInt", 0)
+    ; card behind everything
+    GdipFillRound(gr, 0xEC10121A, 0, 0, w, h, 14 * sc)
+    ; title line, and the chip saying how the buttons work right now
+    ty := g.pad + g.head / 2 - 4 * sc
+    chipW := 0
+    if (spec.chip != "") {
+        cs := 15 * sc
+        ; measure: draw nothing, just the width
+        cw := GdipTextWidth(spec.chip, cs) + 26 * sc
+        cx1 := w - g.pad, cx0 := cx1 - cw
+        GdipFillRound(gr, spec.chipColor, cx0, ty - 15 * sc, cw, 30 * sc, 15 * sc)
+        GdipText(gr, spec.chip, cs, (cx0 + cx1) / 2, ty, "c", cw, 0xFF0B1A0F)
+        chipW := cw + 12 * sc
+    }
+    GdipText(gr, spec.title, 22 * sc, g.pad, ty, "l", w - 2 * g.pad - chipW, 0xFFFFFFFF)
+    ; the box: soft shadow, then the picture with rounded corners
+    bx := g.pad, by := g.pad + g.head, bw := g.bw, bh := g.bh
+    GdipFillRound(gr, 0x70000000, bx + 2 * sc, by + 4 * sc, bw, bh, 10 * sc)
+    lay := CheatPicLayout()
+    pic := CheatBoxPicture()
+    clip := GdipRoundPath(bx, by, bw, bh, 10 * sc)
+    DllCall("gdiplus\GdipSetClipPath", "Ptr", gr, "Ptr", clip, "Int", 0)
+    if (pic) {
+        DllCall("gdiplus\GdipDrawImageRectI", "Ptr", gr, "Ptr", pic, "Int", Round(bx), "Int", Round(by), "Int", Round(bw), "Int", Round(bh))
+    } else {
+        ; plain box: navy with cream buttons where the real ones are
+        GdipFillRound(gr, 0xFF26283F, bx, by, bw, bh, 0)
+        br := 0
+        DllCall("gdiplus\GdipCreateSolidFill", "UInt", 0xFFEAE5D6, "Ptr*", br)
+        r := bw * 0.0557
+        for id, t in lay
+            DllCall("gdiplus\GdipFillEllipse", "Ptr", gr, "Ptr", br, "Float", bx + bw * t[1] / 1000 - r, "Float", by + bh * t[2] / 1000 - r, "Float", 2 * r, "Float", 2 * r)
+        DllCall("gdiplus\GdipDeleteBrush", "Ptr", br)
+    }
+    DllCall("gdiplus\GdipResetClip", "Ptr", gr)
+    DllCall("gdiplus\GdipDeletePath", "Ptr", clip)
+    ; the yellow print, and a yellow ring round the FN button
+    fs := bh * 0.044
+    for i, l in spec.labels {
+        if (!lay.HasKey(l.id))
+            continue
+        t := lay[l.id]
+        if (l.fn) {
+            r := bw * 0.0557, ccx := bx + bw * t[1] / 1000, ccy := by + bh * t[2] / 1000
+            for k, ring in [[9 * sc, 0x55FFD400, r + 6 * sc], [3.5 * sc, 0xFFFFD400, r + 5 * sc]] {
+                pen := 0
+                DllCall("gdiplus\GdipCreatePen1", "UInt", ring[2], "Float", ring[1], "Int", 2, "Ptr*", pen)
+                DllCall("gdiplus\GdipDrawEllipse", "Ptr", gr, "Ptr", pen, "Float", ccx - ring[3], "Float", ccy - ring[3], "Float", 2 * ring[3], "Float", 2 * ring[3])
+                DllCall("gdiplus\GdipDeletePen", "Ptr", pen)
+            }
+        }
+        if (l.text = "")
+            continue
+        GdipText(gr, l.text, l.dim ? fs * 0.9 : fs, bx + bw * t[3] / 1000, by + bh * t[4] / 1000, t[5], bw * t[6] / 1000
+            , l.dim ? 0xFFC8CDD7 : 0xFFFFD400, Max(2, fs * 0.17))
+    }
+    if (spec.adjust) {
+        ; green outline: this is the sheet being placed
+        pen := 0
+        bwid := Max(3, 6 * sc)
+        DllCall("gdiplus\GdipCreatePen1", "UInt", 0xFF2ECC71, "Float", bwid, "Int", 2, "Ptr*", pen)
+        p := GdipRoundPath(bwid / 2, bwid / 2, w - bwid, h - bwid, 14 * sc)
+        DllCall("gdiplus\GdipDrawPath", "Ptr", gr, "Ptr", pen, "Ptr", p)
+        DllCall("gdiplus\GdipDeletePath", "Ptr", p)
+        DllCall("gdiplus\GdipDeletePen", "Ptr", pen)
+    }
+    DllCall("gdiplus\GdipDeleteGraphics", "Ptr", gr)
+    ; hand the picture to the window (per-pixel alpha)
+    VarSetCapacity(pt, 8, 0), VarSetCapacity(sz, 8, 0), VarSetCapacity(src, 8, 0), VarSetCapacity(bf, 4, 0)
+    NumPut(x, pt, 0, "Int"), NumPut(y, pt, 4, "Int")
+    NumPut(w, sz, 0, "Int"), NumPut(h, sz, 4, "Int")
+    NumPut(0x01FF0000, bf, 0, "UInt")   ; AC_SRC_OVER, 255, AC_SRC_ALPHA
+    ok := DllCall("UpdateLayeredWindow", "Ptr", hwnd, "Ptr", 0, "Ptr", &pt, "Ptr", &sz, "Ptr", hdc, "Ptr", &src, "UInt", 0, "Ptr", &bf, "UInt", 2)
+    DllCall("SelectObject", "Ptr", hdc, "Ptr", old, "Ptr")
+    DllCall("DeleteObject", "Ptr", dib)
+    DllCall("DeleteDC", "Ptr", hdc)
+    return ok ? true : false
+}
+
+; Width of text in Arial Bold at size px (GdipText's ink box).
+GdipTextWidth(text, size) {
+    static fam := 0
+    if (!fam) {
+        if (DllCall("gdiplus\GdipCreateFontFamilyFromName", "WStr", "Arial", "Ptr", 0, "Ptr*", fam) != 0)
+            DllCall("gdiplus\GdipGetGenericFontFamilySansSerif", "Ptr*", fam)
+    }
+    p := 0
+    DllCall("gdiplus\GdipCreatePath", "Int", 1, "Ptr*", p)
+    VarSetCapacity(rc, 16, 0), VarSetCapacity(bd, 16, 0)
+    NumPut(100000, rc, 8, "Float"), NumPut(size * 3, rc, 12, "Float")
+    DllCall("gdiplus\GdipAddPathString", "Ptr", p, "WStr", text, "Int", -1, "Ptr", fam, "Int", 1, "Float", size, "Ptr", &rc, "Ptr", 0)
+    DllCall("gdiplus\GdipGetPathWorldBounds", "Ptr", p, "Ptr", &bd, "Ptr", 0, "Ptr", 0)
+    DllCall("gdiplus\GdipDeletePath", "Ptr", p)
+    return NumGet(bd, 8, "Float")
 }
 
 ; ------------------------------------------------------------
@@ -1525,6 +1832,7 @@ FriendlyAction(k) {
 LoadSettings() {
     global ConfigFile, ActiveProfile, StartupProfile, SwapIK
     global ScrambleAutoPick, ScrambleDelaySec, ScrambleCountdown, ClickDelayMs, ShowFnCheat, CheatSizePct, CheatPosX, CheatPosY
+    global ReliefAutoSheet, ReliefNoFn
     IniRead, ActiveProfile,  %ConfigFile%, App, ActiveProfile,  Default
     IniRead, StartupProfile, %ConfigFile%, App, StartupProfile, %ActiveProfile%
     IniRead, swapVal,        %ConfigFile%, App, SwapIK,         0
@@ -1542,6 +1850,10 @@ LoadSettings() {
     ShowFnCheat := (fcVal + 0) ? true : false
     IniRead, fsVal,          %ConfigFile%, App, FnCheatSize, 35
     CheatSizePct := CheatSizeValid(fsVal) ? fsVal + 0 : 35
+    IniRead, rsVal,          %ConfigFile%, App, ReliefSheet, 1
+    ReliefAutoSheet := (rsVal + 0) ? true : false
+    IniRead, rnVal,          %ConfigFile%, App, ReliefNoFn, 1
+    ReliefNoFn := (rnVal + 0) ? true : false
     IniRead, fxVal,          %ConfigFile%, App, FnCheatX, 0
     IniRead, fyVal,          %ConfigFile%, App, FnCheatY, 1000
     CheatPosX := CheatPosValid(fxVal) ? fxVal + 0 : 0
@@ -1559,7 +1871,7 @@ LoadSettings() {
 SaveSettings() {
     global ConfigFile, ActiveProfile, StartupProfile, SwapIK
     global ScrambleAutoPick, ScrambleDelaySec, ScrambleCountdown, ClickDelayMs, ShowFnCheat, CheatSizePct, CheatPosX, CheatPosY
-    global CheatAdjusting, CheatAdjOrig
+    global CheatAdjusting, CheatAdjOrig, ReliefAutoSheet, ReliefNoFn
     IniWrite, %ActiveProfile%,  %ConfigFile%, App, ActiveProfile
     IniWrite, %StartupProfile%, %ConfigFile%, App, StartupProfile
     swapWrite := SwapIK ? 1 : 0
@@ -1572,6 +1884,10 @@ SaveSettings() {
     IniWrite, %ClickDelayMs%, %ConfigFile%, App, ClickDelayMs
     fcWrite := ShowFnCheat ? 1 : 0
     IniWrite, %fcWrite%, %ConfigFile%, App, FnCheatSheet
+    rsWrite := ReliefAutoSheet ? 1 : 0
+    IniWrite, %rsWrite%, %ConfigFile%, App, ReliefSheet
+    rnWrite := ReliefNoFn ? 1 : 0
+    IniWrite, %rnWrite%, %ConfigFile%, App, ReliefNoFn
     ; While Size and Place is open only Lock it in saves its values.
     keep := (CheatAdjusting && IsObject(CheatAdjOrig)) ? CheatAdjOrig : {size: CheatSizePct, x: CheatPosX, y: CheatPosY}
     fsWrite := keep.size, fxWrite := keep.x, fyWrite := keep.y
@@ -2056,6 +2372,10 @@ HandleBoxKeyDown(keyName) {
         return
     }
 
+    ; v5.3.0: on GSPro 4's relief list the relief buttons work without
+    ; FN; on the scramble screen the bottom row picks a card.
+    if (ReliefNoFnPress(btnId) || ScrambleBoxPress(btnId))
+        return
     pk := BoxTapKey(btnId)
     if (AnyOcrSecondary())
         OcrTrace("key " . keyName . " (" . btnId . ") down, FN not held -> sent " . pk)
@@ -2066,6 +2386,7 @@ HandleBoxKeyDown(keyName) {
 HandleBoxKeyUp(keyName) {
     global KeyToBtnId, FnButtonId, FnIsDown, FnUsedAsModifier
     global FnLastDownTime, BtnPrimary
+    global ReliefNoFnHeld
     btnId := KeyToBtnId[keyName]
     if (btnId = "")
         return
@@ -2073,11 +2394,12 @@ HandleBoxKeyUp(keyName) {
         BuilderTestKey(btnId, false)
         return
     }
+    ReliefNoFnHeld.Delete(btnId)
     if (btnId = FnButtonId) {
-        CheatHide()
+        CheatFnReleased()
         if (AnyOcrSecondary())
             OcrTrace("key FN (" . keyName . ") up" . (FnUsedAsModifier ? "" : " - tapped alone, sent its own key"))
-        if (!FnUsedAsModifier && !OwnTextFocus()) {
+        if (!FnUsedAsModifier && !OwnTextFocus() && !ScrambleBoxPress(btnId)) {
             pk := BoxTapKey(btnId)
             if (pk != "")
                 Send, %pk%
@@ -2233,6 +2555,484 @@ SmartAction(actionId) {
 ; v5.2.0 actions that exist only on GSPro 4's relief list
 ReliefOnlyAction(actionId) {
     return (SubStr(actionId, 1, 6) = "Relief")
+}
+
+; ------------------------------------------------------------
+;  RELIEF WATCH  (v5.3.0, Bruce 2026-11-27: "the cool cheat sheet
+;  comes up when it sees the right screen for it - either OB or the
+;  hazard"; "the only thing we would need FN for would be the clear
+;  view")
+;
+;  Cheap on purpose: while mapping is on and GSPro is the window in
+;  front, about three times a second ReliefLook copies 64 x 24
+;  pixels of GSPro's panel corner in one go - no OCR, no text.
+;  GSPro 4's relief panel is a solid dark navy block (R11 G17 B31)
+;  with its cards on it; nothing in a round has that colour there
+;  (Bruce's water and OB screenshots: 27-32% of the look; his round
+;  screenshots: 0%).  When it shows up twice in a row, ONE OCR read
+;  of the panel (ReliefProbe - the same read an FN press makes)
+;  confirms the list.  Then the cheat sheet comes up by itself and
+;  the box's relief buttons work without FN.  The panel gone (two
+;  looks) -> everything is back to normal at once.
+;
+;  Every size is a share of the game picture's height, from its top
+;  left corner, so any resolution, Windows scale, window size or
+;  number of screens reads the same (the panel is anchored there).
+; ------------------------------------------------------------
+
+; The GSPro game window when it is the one in front, else found: false.
+ReliefWatchWin() {
+    global GSProWinNeedle, GSProWinExclude
+    WinGetTitle, at, A
+    if (at = "" || !InStr(at, GSProWinNeedle) || (GSProWinExclude != "" && InStr(at, GSProWinExclude)))
+        return {found: false}
+    win := ClientRectByTitle(GSProWinNeedle, GSProWinExclude)
+    if (!win.found || !WinActive("ahk_id " . win.hwnd))
+        return {found: false}
+    return win
+}
+
+; One look at the panel corner: share of panel-navy, card-navy and
+; highlight-blue pixels in 64 x 24 samples of the area 0.45 heights
+; wide from the left edge, 0.10 to 0.24 heights down.  up = the
+; relief panel is there.  srcDC (tests): a DC holding a screenshot.
+ReliefLook(win, srcDC := 0) {
+    GW := 64, GH := 24
+    rx := win.x, ry := win.y + Round(win.h * 0.10)
+    rw := Min(Round(win.h * 0.45), win.w), rh := Round(win.h * 0.14)
+    res := {panel: 0, card: 0, blue: 0, up: false}
+    if (rw < 8 || rh < 8)
+        return res
+    screenDC := 0
+    if (!srcDC)
+        srcDC := screenDC := DllCall("GetDC", "Ptr", 0, "Ptr")
+    VarSetCapacity(bi, 40, 0)
+    NumPut(40, bi, 0, "UInt"), NumPut(GW, bi, 4, "Int"), NumPut(-GH, bi, 8, "Int")
+    NumPut(1, bi, 12, "UShort"), NumPut(32, bi, 14, "UShort")
+    bits := 0
+    mdc := DllCall("CreateCompatibleDC", "Ptr", srcDC, "Ptr")
+    dib := DllCall("CreateDIBSection", "Ptr", mdc, "Ptr", &bi, "UInt", 0, "Ptr*", bits, "Ptr", 0, "UInt", 0, "Ptr")
+    old := DllCall("SelectObject", "Ptr", mdc, "Ptr", dib, "Ptr")
+    DllCall("SetStretchBltMode", "Ptr", mdc, "Int", 3)   ; COLORONCOLOR: real pixels, never blended
+    ok := DllCall("StretchBlt", "Ptr", mdc, "Int", 0, "Int", 0, "Int", GW, "Int", GH, "Ptr", srcDC, "Int", rx, "Int", ry, "Int", rw, "Int", rh, "UInt", 0x00CC0020)
+    panel := 0, card := 0, blue := 0
+    if (ok && bits) {
+        Loop, % GW * GH {
+            c := NumGet(bits + 0, (A_Index - 1) * 4, "UInt")
+            b := c & 0xFF, g := (c >> 8) & 0xFF, r := (c >> 16) & 0xFF
+            if (Abs(r - 11) <= 9 && Abs(g - 17) <= 9 && Abs(b - 31) <= 10 && b - r >= 12 && b - g >= 8)
+                panel += 1
+            else if (Abs(r - 24) <= 12 && Abs(g - 33) <= 12 && Abs(b - 53) <= 14 && b - r >= 18)
+                card += 1
+            else if (b - r >= 50 && b > 70 && g > 30)
+                blue += 1
+        }
+    }
+    DllCall("SelectObject", "Ptr", mdc, "Ptr", old, "Ptr")
+    DllCall("DeleteObject", "Ptr", dib)
+    DllCall("DeleteDC", "Ptr", mdc)
+    if (screenDC)
+        DllCall("ReleaseDC", "Ptr", 0, "Ptr", screenDC)
+    n := GW * GH
+    res.panel := panel / n, res.card := card / n, res.blue := blue / n
+    res.up := (res.panel >= 0.15 && res.card + res.blue >= 0.12)
+    return res
+}
+
+; The screen watch timer (ScreenWatchTick, every 400 ms).
+ScreenWatchStep() {
+    global RemapActive, ReliefAutoSheet, ReliefNoFn, ReliefWatchHits, ScrambleBoxCards, CheatVisible, FnIsDown
+    if (!RemapActive || (!ReliefAutoSheet && !ReliefNoFn)) {
+        ReliefWatchSet(false)
+        ScrambleBoxCards := ""
+        return
+    }
+    win := ReliefWatchWin()
+    if (!win.found) {
+        ; GSPro not in front: nothing to watch (it is looked at again
+        ; the moment it is)
+        ReliefWatchHits := 0
+        ReliefWatchSet(false)
+        ScrambleBoxCards := ""
+        return
+    }
+    ReliefWatchLook(win)
+    ScrambleBoxWatchStep(win)
+    if (CheatAutoWanted() && !CheatVisible && !FnIsDown)
+        CheatAutoShow()
+}
+
+ReliefWatchLook(win) {
+    global ReliefWatchUp, ReliefWatchHits, ReliefWatchMiss, ReliefWatchRetry, ReliefLast, ReliefLastActTick, OcrBusy
+    look := ReliefLook(win)
+    if (!look.up) {
+        ReliefWatchHits := 0
+        ReliefWatchMiss += 1
+        ReliefWatchRetry := 0
+        if (ReliefWatchUp && ReliefWatchMiss >= 2)
+            ReliefWatchSet(false)
+        return
+    }
+    ReliefWatchMiss := 0
+    ReliefWatchHits += 1
+    if (ReliefWatchUp && IsObject(ReliefLast) && ReliefLast.found) {
+        ; still up: the read stays good for presses and the sheet
+        ReliefLast.at := A_TickCount
+        return
+    }
+    ; New panel, or the read was used up by Enter (Lateral Drop and
+    ; Flag Line show the lie with the list still up): read it once.
+    if (ReliefWatchHits < 2 || A_TickCount < ReliefWatchRetry || OcrBusy)
+        return
+    if (ReliefWatchUp && (A_TickCount - ReliefLastActTick) < 900)
+        return   ; GSPro is still taking the last press
+    OcrLockTake()
+    rel := ""
+    try {
+        rel := ReliefProbe()
+    } catch appErr {
+        LogAppError("ReliefWatch", appErr)
+    }
+    OcrBusy := false
+    if (IsObject(rel) && rel.found) {
+        ReliefWatchSet(true)
+    } else {
+        ReliefWatchSet(false)
+        ReliefWatchRetry := A_TickCount + 3000
+    }
+}
+
+ReliefWatchSet(up) {
+    global ReliefWatchUp, ReliefLast, ReliefExpectSel, ReliefNoFnHeld, CheatAuto, FnIsDown
+    if ((up ? true : false) = (ReliefWatchUp ? true : false))
+        return
+    ReliefWatchUp := up ? true : false
+    if (up) {
+        OcrTrace("relief watch: list on screen - " . ReliefNote(ReliefLast))
+        return
+    }
+    OcrTrace("relief watch: list gone")
+    ReliefLast := ""
+    ReliefExpectSel := 0
+    ReliefNoFnHeld := {}
+    if (!FnIsDown)
+        CheatHide()
+}
+
+ReliefNoFnActive() {
+    global ReliefNoFn, ReliefWatchUp
+    return ReliefNoFn && ReliefWatchUp
+}
+
+; The FN jobs that mean something on the relief list.
+ReliefNoFnAction(a) {
+    return (a = "DropRehit" || a = "NextOption" || a = "Rehit" || a = "MoveForward" || a = "MoveBack" || ReliefOnlyAction(a))
+}
+
+; A box press on the relief list without FN: true = handled here.
+; Only buttons whose FN job is a relief action, only while the watch
+; has the list and its panel is on screen right now (a fresh look);
+; every other button, and every button off the list, sends its own
+; key exactly as before.  A held button counts once.
+ReliefNoFnPress(btnId) {
+    global ReliefNoFn, ReliefWatchUp, SecType, SecValue, FnButtonId, ReliefNoFnHeld
+    if (!ReliefNoFn || !ReliefWatchUp || btnId = FnButtonId)
+        return false
+    if (SecType[btnId] != "ocr" || !ReliefNoFnAction(SecValue[btnId]))
+        return false
+    if (ReliefNoFnHeld[btnId])
+        return true
+    win := ReliefWatchWin()
+    if (!win.found || !ReliefLook(win).up) {
+        ReliefWatchSet(false)
+        return false
+    }
+    ReliefNoFnHeld[btnId] := true
+    OcrTrace("key " . btnId . " on the relief list, no FN needed -> " . SecValue[btnId])
+    FireSecondary(btnId)
+    return true
+}
+
+; What the sheet should show now, as a key (redraw when it changes).
+CheatStateKey() {
+    global ReliefNoFn
+    st := CheatReliefState()
+    if (!st.on && ReliefNoFn) {
+        c := ScrambleBoxCardsNow()
+        if (IsObject(c))
+            return "s|" . c.id . "|" . ScrambleBoxTakeCard(c)
+    }
+    return st.key
+}
+
+CheatAutoWanted() {
+    global ReliefWatchUp, ReliefAutoSheet, ReliefNoFn, RemapActive, CheatAdjusting
+    if (!ReliefAutoSheet || !RemapActive || CheatAdjusting)
+        return false
+    return ReliefWatchUp || (ReliefNoFn && IsObject(ScrambleBoxCardsNow()))
+}
+
+CheatAutoShow() {
+    global CheatVisible, FnIsDown
+    if (!CheatAutoWanted() || FnIsDown)
+        return
+    CheatDraw()
+    if (CheatVisible)
+        SetTimer, CheatTick, 250
+}
+
+; FN let go: the sheet goes, unless the relief list keeps it up.
+CheatFnReleased() {
+    if (CheatAutoWanted()) {
+        SetTimer, CheatAfterFn, -1
+        return
+    }
+    CheatHide()
+}
+
+; ------------------------------------------------------------
+;  SCRAMBLE CARDS FROM THE BOX  (v5.3.0, Bruce 2026-11-27)
+;
+;  While a scramble shot-select screen is up, the bottom row picks a
+;  card: Reset Aim (tapped) 1, Tee Left 2, Tee Right 3, Shot Cam 4.
+;  The Remapper frames that card and left-clicks the player's name
+;  on it, so GSPro shows where that ball lies; AIM right takes it -
+;  the card's number, the same key Auto-Pick sends.  Auto-Pick keeps
+;  counting down; a card picked on the box is the one it takes at
+;  zero (the box choice outvotes every read).  The cheat sheet shows
+;  CARD 1-4 on the bottom row and TAKE CARD on AIM right.
+;
+;  How the screen is known: with Auto-Pick on, from its own reads
+;  (nothing extra runs).  With Auto-Pick off, a cheap colour check
+;  of the card strip in the screen watch - the chosen card is a
+;  solid teal-navy (R2 G39 B58) with a blue button (R27 G128 B198)
+;  on Bruce's screenshots - and one read when the cards show up.
+; ------------------------------------------------------------
+
+; The cards on screen now: {uses, n, hwnd, auto, id} or "".
+ScrambleBoxCardsNow() {
+    global RemapActive, ScrambleAutoPick, ScrambleArmedTick, ScrambleCoolDown, ScrambleMissTicks
+    global ScrambleLastUses, ScrambleLastHwnd, ScrambleBoxCards
+    if (!RemapActive)
+        return ""
+    if (ScrambleAutoPick) {
+        u := ScrambleLastUses
+        if (ScrambleArmedTick > 0 && !ScrambleCoolDown && ScrambleMissTicks = 0 && IsObject(u) && u.MaxIndex() >= 2)
+            return {uses: u, n: Min(u.MaxIndex(), 4), hwnd: ScrambleLastHwnd, auto: true, id: "a" . ScrambleArmedTick}
+        return ""
+    }
+    c := ScrambleBoxCards
+    return (IsObject(c) && c.n >= 2) ? c : ""
+}
+
+; The card picked on the box for these cards (0 = none yet).
+ScrambleBoxPickNow(c) {
+    global ScrambleBoxPick, ScrambleBoxFor
+    return (IsObject(c) && ScrambleBoxPick && ScrambleBoxFor = c.id && ScrambleBoxPick <= c.n) ? ScrambleBoxPick : 0
+}
+
+; The card AIM right would take: the box pick, else Auto-Pick's choice.
+ScrambleBoxTakeCard(c) {
+    k := ScrambleBoxPickNow(c)
+    if (!k && c.auto)
+        k := ScrambleVoteLeader()
+    return (k >= 1 && k <= c.n) ? k : 0
+}
+
+; A box press on the scramble screen: true = handled here.
+ScrambleBoxPress(btnId) {
+    global ReliefNoFn, ScrambleBoxPick, ScrambleBoxFor, ScrambleBusy, ScrambleBoxPending
+    static cardOf := {resetaim: 1, teeleft: 2, teeright: 3, shotcam: 4}
+    if (!ReliefNoFn || (!cardOf.HasKey(btnId) && btnId != "right"))
+        return false
+    c := ScrambleBoxCardsNow()
+    if (!IsObject(c) || (c.hwnd && !WinActive("ahk_id " . c.hwnd)))
+        return false
+    if (btnId = "right") {
+        k := ScrambleBoxTakeCard(c)
+        if (!k) {
+            ShowGsproTip("Pick a card first: Reset Aim 1, Tee Left 2, Tee Right 3, Shot Cam 4", 2200)
+            return true
+        }
+        if (c.auto && ScrambleBusy) {
+            ; Auto-Pick is reading the cards right now: take it the
+            ; moment that read is done (it may have picked already)
+            ScrambleBoxPending := k
+            SetTimer, ScrambleBoxTakeLater, -60
+            return true
+        }
+        ScrambleBoxTake(k, c)
+        return true
+    }
+    k := cardOf[btnId]
+    if (k > c.n) {
+        ShowGsproTip("Only " . c.n . " cards on this screen", 1500)
+        return true
+    }
+    ScrambleBoxPick := k
+    ScrambleBoxFor := c.id
+    if (c.auto)
+        ScrambleBoxVote(k, c.n)
+    OcrTrace("scramble: card " . k . " picked on the box (" . c.n . " cards)")
+    ; Left-click the player's name: GSPro shows where that ball is.
+    ; The name sits 7.8 USE-text heights above the top of its USE /
+    ; Select text, centred over it (Bruce's real screens).
+    u := c.uses[k]
+    if (IsObject(u)) {
+        DpiClickAt(Round(u.x + u.w / 2), Round(u.y - 7.8 * u.h))
+        ParkMouse()
+    }
+    return true
+}
+
+; Auto-Pick takes the box's card at zero: the box choice gets 1000
+; votes on top of the reads (ScrambleVoteLeader is unchanged).
+ScrambleBoxVote(k, n) {
+    global ScrambleVotes, ScrambleReadsN, ScrambleVoteLast, ScrambleBoxBoost
+    cn := 0
+    for key, v in ScrambleReadsN
+        cn := Max(cn, key + 0)
+    if (!cn)
+        cn := n
+    if (ScrambleBoxBoost != "" && ScrambleVotes.HasKey(ScrambleBoxBoost))
+        ScrambleVotes[ScrambleBoxBoost] -= 1000
+    key := cn . "-" . k
+    ScrambleVotes[key] := (ScrambleVotes.HasKey(key) ? ScrambleVotes[key] : 0) + 1000
+    ScrambleVoteLast := key
+    ScrambleBoxBoost := key
+}
+
+; AIM right: the card's number goes to GSPro, as Auto-Pick sends it.
+ScrambleBoxTake(k, c) {
+    global ScrambleCoolDown, ScrambleArmedTick, ScrambleTries, ScrambleLastRead, ScrambleBoxCards
+    global ScrambleBoxPick, ScrambleBoxRetry
+    if (c.hwnd && !WinActive("ahk_id " . c.hwnd)) {
+        h := c.hwnd
+        WinActivate, ahk_id %h%
+        Sleep, 150
+    }
+    ScrambleHidePreview()
+    Send, %k%
+    if (c.auto) {
+        ScrambleCoolDown := true
+        ScrambleArmedTick := 0
+        ScrambleTries := 0
+        SetTimer, ScrambleZero, Off
+        lr := ScrambleLastRead
+        if (IsObject(lr))
+            ScrambleLogDecision(lr.n, lr.cards, lr.minShot, k, "OK - PICKED " . k . " on the box (AIM right)")
+    } else {
+        ScrambleBoxCards := ""
+        ScrambleBoxRetry := A_TickCount + 3000   ; the cards are going away
+    }
+    ScrambleBoxPick := 0
+    OcrTrace("scramble: card " . k . " taken on the box (AIM right)")
+}
+
+; Auto-Pick off: the cheap look for the cards, one read when they
+; show up, gone after two looks without them.
+ScrambleBoxWatchStep(win) {
+    global ScrambleAutoPick, ScrambleBoxCards, ScrambleBoxHits, ScrambleBoxMiss, ScrambleBoxRetry
+    global ReliefNoFn, ReliefWatchUp, OcrBusy, GSProWinNeedle, GSProWinExclude, FnIsDown
+    if (ScrambleAutoPick || ReliefWatchUp || !ReliefNoFn) {
+        ScrambleBoxCards := ""
+        ScrambleBoxHits := 0
+        return
+    }
+    if (!ScrambleBoxLook(win)) {
+        ScrambleBoxHits := 0
+        ScrambleBoxMiss += 1
+        if (ScrambleBoxMiss >= 2 && IsObject(ScrambleBoxCards)) {
+            ScrambleBoxCards := ""
+            OcrTrace("scramble watch: cards gone")
+            if (!FnIsDown)
+                CheatHide()
+        }
+        return
+    }
+    ScrambleBoxMiss := 0
+    ScrambleBoxHits += 1
+    if (IsObject(ScrambleBoxCards) || ScrambleBoxHits < 2 || A_TickCount < ScrambleBoxRetry || OcrBusy)
+        return
+    OcrLockTake()
+    uses := ""
+    try {
+        scan := ScanWinClient(GSProWinNeedle, GSProWinExclude)
+        if (scan.found)
+            uses := ScrambleButtons(ScrambleRecoverCards(scan))
+    } catch appErr {
+        LogAppError("ScrambleBoxWatch", appErr)
+    }
+    OcrBusy := false
+    if (IsObject(uses) && uses.MaxIndex() >= 2) {
+        ScrambleBoxCards := {uses: uses, n: Min(uses.MaxIndex(), 4), hwnd: win.hwnd, auto: false, id: "b" . A_TickCount}
+        OcrTrace("scramble watch: " . uses.MaxIndex() . " cards on screen")
+    } else {
+        ScrambleBoxRetry := A_TickCount + 3000
+    }
+}
+
+; The chosen scramble card's colours in the card strip (0.50 to 0.88
+; heights down, the middle 70% across), 80 x 24 samples.  Bruce's
+; 2/3/4-player screens: 2.8-3.1% card navy and 0.5-0.8% button blue;
+; his relief screens: none.  srcDC (tests): a DC holding a screenshot.
+ScrambleBoxLook(win, srcDC := 0) {
+    GW := 80, GH := 24
+    rx := win.x + Round(win.w * 0.15), ry := win.y + Round(win.h * 0.50)
+    rw := Round(win.w * 0.70), rh := Round(win.h * 0.38)
+    if (rw < 8 || rh < 8)
+        return false
+    screenDC := 0
+    if (!srcDC)
+        srcDC := screenDC := DllCall("GetDC", "Ptr", 0, "Ptr")
+    VarSetCapacity(bi, 40, 0)
+    NumPut(40, bi, 0, "UInt"), NumPut(GW, bi, 4, "Int"), NumPut(-GH, bi, 8, "Int")
+    NumPut(1, bi, 12, "UShort"), NumPut(32, bi, 14, "UShort")
+    bits := 0
+    mdc := DllCall("CreateCompatibleDC", "Ptr", srcDC, "Ptr")
+    dib := DllCall("CreateDIBSection", "Ptr", mdc, "Ptr", &bi, "UInt", 0, "Ptr*", bits, "Ptr", 0, "UInt", 0, "Ptr")
+    old := DllCall("SelectObject", "Ptr", mdc, "Ptr", dib, "Ptr")
+    DllCall("SetStretchBltMode", "Ptr", mdc, "Int", 3)
+    ok := DllCall("StretchBlt", "Ptr", mdc, "Int", 0, "Int", 0, "Int", GW, "Int", GH, "Ptr", srcDC, "Int", rx, "Int", ry, "Int", rw, "Int", rh, "UInt", 0x00CC0020)
+    navy := 0, btn := 0
+    if (ok && bits) {
+        Loop, % GW * GH {
+            c := NumGet(bits + 0, (A_Index - 1) * 4, "UInt")
+            b := c & 0xFF, g := (c >> 8) & 0xFF, r := (c >> 16) & 0xFF
+            if (r <= 14 && g >= 28 && g <= 48 && b >= 44 && b <= 70 && b - g >= 10)
+                navy += 1
+            else if (r >= 12 && r <= 50 && g >= 105 && g <= 150 && b >= 170 && b <= 225)
+                btn += 1
+        }
+    }
+    DllCall("SelectObject", "Ptr", mdc, "Ptr", old, "Ptr")
+    DllCall("DeleteObject", "Ptr", dib)
+    DllCall("DeleteDC", "Ptr", mdc)
+    if (screenDC)
+        DllCall("ReleaseDC", "Ptr", 0, "Ptr", screenDC)
+    n := GW * GH
+    return (navy / n >= 0.012 && btn / n >= 0.002)
+}
+
+; The sheet's labels on the scramble screen: the bottom row's cards,
+; AIM right takes, every other FN job in grey (FN still does it).
+CheatScrambleLabels(model, c) {
+    static cardOf := {resetaim: 1, teeleft: 2, teeright: 3, shotcam: 4}
+    k := ScrambleBoxTakeCard(c)
+    out := []
+    for i, m in model {
+        t := "", dim := false
+        if (cardOf.HasKey(m.id)) {
+            if (cardOf[m.id] <= c.n)
+                t := "CARD " . cardOf[m.id] . (m.fn ? " (TAP)" : "")
+        } else if (m.id = "right") {
+            t := k ? "TAKE CARD " . k : "TAKE CARD"
+        } else if (!m.fn && m.yellow != "" && m.id != "mulligan") {
+            t := "FN: " . RegExReplace(m.yellow, " \((F|B)\)$"), dim := true
+        }
+        out.Push({id: m.id, text: t, dim: dim, fn: m.fn})
+    }
+    return out
 }
 
 ; FN-down prefetch: read the panel corner (lock must be free).
@@ -4881,6 +5681,9 @@ ScramblePreviewModel(win) {
         if (card.green && !other.green && other.shot = card.shot)
             reason := "Green preferred"
     }
+    boxCards := ScrambleBoxCardsNow()
+    if (IsObject(boxCards) && ScrambleBoxPickNow(boxCards) = pick)
+        reason := "Picked on the box"   ; v5.3.0
     ; Format parsed units, not raw OCR (291 71' must never appear
     ; as 29,171 feet). Explicit feet marks off-green stay feet too.
     markedFeet := InStr(ScrambleNormQuotes(card.distRaw), "'")
@@ -5532,29 +6335,34 @@ Gui, Main:Add, Checkbox, x25 y580 w320 vFnCheatCheck gOnFnCheatToggle Checked%ch
 Gui, Main:Font, s9 c000000 Normal, Segoe UI
 Gui, Main:Add, Button, x355 y575 w180 h28 gOnCheatAdjust, Size and Place...
 Gui, Main:Font, s10 cCCCCCC Normal, Segoe UI
-Gui, Main:Add, Text, x25 y612 w510 0x10
+; v5.3.0: the screen watch (relief list and scramble cards)
+autoSheetChecked := ReliefAutoSheet ? 1 : 0
+Gui, Main:Add, Checkbox, x25 y612 w510 vReliefSheetCheck gOnReliefSheetToggle Checked%autoSheetChecked%, Show it by itself on the relief list (water / OB) and scramble cards
+noFnChecked := ReliefNoFn ? 1 : 0
+Gui, Main:Add, Checkbox, x25 y644 w510 vReliefNoFnCheck gOnReliefNoFnToggle Checked%noFnChecked%, On those screens the buttons work without FN (FN + Club = Clear View)
+Gui, Main:Add, Text, x25 y676 w510 0x10
 Gui, Main:Font, s9 c999999 Normal, Segoe UI
-Gui, Main:Add, Text, x25 y624 w510, Files are saved at:
+Gui, Main:Add, Text, x25 y688 w510, Files are saved at:
 Gui, Main:Font, s9 cWhite Normal, Consolas
-Gui, Main:Add, Text, x25 y643 w510 h34, %ConfigDir%
+Gui, Main:Add, Text, x25 y707 w510 h34, %ConfigDir%
 Gui, Main:Font, s9 c000000 Normal, Segoe UI
-Gui, Main:Add, Button, x25 y686 w95 h29 gOnOpenFolder, Open Folder
-Gui, Main:Add, Button, x128 y686 w188 h29 gResetSmartSpots, Reset Smart Click Spots
-Gui, Main:Add, Button, x324 y686 w91 h29 gTrayOcrDump, OCR Test
-Gui, Main:Add, Button, x423 y686 w112 h29 gShowHelp, Help / Guide
+Gui, Main:Add, Button, x25 y750 w95 h29 gOnOpenFolder, Open Folder
+Gui, Main:Add, Button, x128 y750 w188 h29 gResetSmartSpots, Reset Smart Click Spots
+Gui, Main:Add, Button, x324 y750 w91 h29 gTrayOcrDump, OCR Test
+Gui, Main:Add, Button, x423 y750 w112 h29 gShowHelp, Help / Guide
 Gui, Main:Font, s9 cAAAAAA Normal, Segoe UI
-Gui, Main:Add, Text, x25 y724 w345 h30, Reset Smart Click Spots re-learns click positions only.
+Gui, Main:Add, Text, x25 y788 w345 h30, Reset Smart Click Spots re-learns click positions only.
 Gui, Main:Font, s9 c000000 Normal, Segoe UI
-Gui, Main:Add, Button, x385 y722 w150 h27 gShowFactoryReset, Factory Reset...
+Gui, Main:Add, Button, x385 y786 w150 h27 gShowFactoryReset, Factory Reset...
 Gui, Main:Font, s9 cAAAAAA Normal, Segoe UI
-Gui, Main:Add, Text, x20 y764 w520 Center, Ctrl+F12 toggles button mapping. Turn mapping OFF to type normally.
+Gui, Main:Add, Text, x20 y828 w520 Center, Ctrl+F12 toggles button mapping. Turn mapping OFF to type normally.
 Gui, Main:Font, s10 c000000 Normal, Segoe UI
-Gui, Main:Add, Button, x125 y792 w150 h35 gMinimizeMain, Minimize to Tray
-Gui, Main:Add, Button, x285 y792 w150 h35 gDoFullExit, Exit
+Gui, Main:Add, Button, x125 y856 w150 h35 gMinimizeMain, Minimize to Tray
+Gui, Main:Add, Button, x285 y856 w150 h35 gDoFullExit, Exit
 RefreshProfileActions()
 UpdateMainStatus()
 LoadWindowPos(wx, wy)
-ShowSettingsWindow("Main", MainHwnd, 560, 844, launchHidden, wx, wy)
+ShowSettingsWindow("Main", MainHwnd, 560, 908, launchHidden, wx, wy)
 
 ; ============================================================
 ;  STARTUP-LAUNCH FLOW
@@ -5585,6 +6393,10 @@ SetTimer, ScrambleTick, 2000
 
 ; Countdown overlay updater (light, no OCR)
 SetTimer, CdTick, 500
+
+; v5.3.0 screen watch: GSPro 4's relief list and the scramble cards
+; (a few pixels, no OCR until something shows up)
+SetTimer, ScreenWatchTick, 400
 
 ; One-shot OCR engine warm-up in the background
 SetTimer, OcrWarmup, -3000
@@ -5917,6 +6729,22 @@ OnFnCheatToggle:
         CheatHide()
 Return
 
+; v5.3.0: the sheet comes up by itself on the relief list and the
+; scramble cards; the buttons work there without FN.
+OnReliefSheetToggle:
+    Gui, Main:Submit, NoHide
+    ReliefAutoSheet := ReliefSheetCheck ? true : false
+    SaveSettings()
+    if (!ReliefAutoSheet && CheatAuto && !FnIsDown)
+        CheatHide()
+Return
+
+OnReliefNoFnToggle:
+    Gui, Main:Submit, NoHide
+    ReliefNoFn := ReliefNoFnCheck ? true : false
+    SaveSettings()
+Return
+
 ; ------------------------------------------------------------
 ;  Size and place the FN cheat sheet (main window button).  The
 ;  sheet is drawn over GSPro, live: the slider sizes it, dragging
@@ -5938,7 +6766,7 @@ OnCheatAdjust:
     Gui, CheatAdj:Font, s10 cWhite Bold, Segoe UI
     Gui, CheatAdj:Add, Text, x16 y12 w420, Drag the cheat sheet to where you want it.
     Gui, CheatAdj:Font, s9 cCCCCCC Normal, Segoe UI
-    adjNote := adjArea.screen ? "GSPro is not open: shown on the main screen. Open GSPro first to see it on the game." : "It is shown over GSPro, the size it will be when FN is held."
+    adjNote := adjArea.screen ? "GSPro is not open: shown on the main screen. Open GSPro first to see it on the game." : "It is shown over GSPro, the size it will be when FN is held or it comes up by itself."
     Gui, CheatAdj:Add, Text, x16 y36 w420 h34 vCheatAdjNote, %adjNote%
     Gui, CheatAdj:Font, s10 cWhite Normal, Segoe UI
     Gui, CheatAdj:Add, Text, x16 y80 w50, Size:
@@ -6826,7 +7654,17 @@ ShowHelp:
       On GSPro 4's relief list it follows the screen: the
       top line shows the choice picked and each button says
       what it does for it (ENTER: FLAG LINE, NEXT: 3 REHIT,
-      CLOSER (F) / FURTHER BACK (B) with Flag Line picked).
+      CLOSER / FURTHER BACK with Flag Line picked).
+    Screen watch (5.3.0, main window checkboxes): on GSPro 4's
+      relief list (water / OB) and on the scramble cards the
+      sheet comes up by itself and the buttons work WITHOUT
+      FN.  Relief: Aim Right takes the choice, Aim Left goes to
+      the next, Tee Left rehits, Aim Up / Down move a Flag Line
+      drop.  Scramble: Reset Aim (tap) / Tee Left / Tee Right /
+      Shot Cam pick card 1-4 (GSPro shows that ball), Aim Right
+      takes it; Auto-Pick takes the box's card at zero.  FN +
+      Club is still Clear View.  A quick pixel look finds the
+      screen (no screen reading until it shows up).
 
     BUILT-IN PRESET: "Basic Secondary"
     QUICK START: pick "Basic Secondary" in the profile dropdown and the
@@ -7010,8 +7848,43 @@ CheatShow:
     }
 Return
 
+ScreenWatchTick:
+    try {
+        ScreenWatchStep()
+    } catch appErr {
+        LogAppError("ScreenWatch", appErr)
+    }
+Return
+
+; FN let go on a screen that keeps the sheet up: same sheet, now
+; saying what the buttons do without FN.
+CheatAfterFn:
+    if (FnIsDown)
+        Return
+    if (CheatAutoWanted()) {
+        CheatDraw()
+        if (CheatVisible)
+            SetTimer, CheatTick, 250
+    } else {
+        CheatHide()
+    }
+Return
+
+; AIM right while Auto-Pick was reading the cards: take the box's
+; card once that read is done, unless Auto-Pick already picked.
+ScrambleBoxTakeLater:
+    if (ScrambleBusy) {
+        SetTimer, ScrambleBoxTakeLater, -60
+        Return
+    }
+    sbtCards := ScrambleBoxCardsNow()
+    if (ScrambleBoxPending && IsObject(sbtCards))
+        ScrambleBoxTake(ScrambleBoxPending, sbtCards)
+    ScrambleBoxPending := 0
+Return
+
 CheatTick:
-    if (!FnIsDown || !CheatVisible) {
+    if (!CheatVisible || !(FnIsDown || CheatAutoWanted())) {
         CheatHide()
         Return
     }
@@ -7026,7 +7899,14 @@ CheatTick:
     ; GSPro's own redraw never makes the sheet flicker.)
     if (CheatAdjusting)
         Return
-    cheatNowKey := CheatReliefState().key
+    cheatNowKey := CheatStateKey()
+    ; The watch has the relief list up but its read is being renewed
+    ; (after Enter): keep what is shown instead of a flash of the
+    ; normal sheet.
+    if (cheatNowKey = "off" && !FnIsDown && CheatAutoWanted()) {
+        CheatPendingKey := ""
+        Return
+    }
     if (cheatNowKey = CheatShownKey) {
         CheatPendingKey := ""
     } else if (cheatNowKey = CheatPendingKey) {
