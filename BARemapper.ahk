@@ -2585,9 +2585,10 @@ ReliefOnlyAction(actionId) {
 ;  front, about three times a second ReliefLook copies 64 x 24
 ;  pixels of GSPro's panel corner in one go - no OCR, no text.
 ;  GSPro 4's relief panel is a solid dark navy block (R11 G17 B31)
-;  with its cards on it; nothing in a round has that colour there
-;  (Bruce's water and OB screenshots: 27-32% of the look; his round
-;  screenshots: 0%).  When it shows up twice in a row, ONE OCR read
+;  with its cards on it; a round has little of that colour there
+;  (Bruce's water and OB screenshots: 22-45% of the look, also with
+;  the UI 20% smaller or bigger or 15% darker or brighter; his round
+;  screenshots: 10% at most).  Seen twice in a row -> ONE OCR read
 ;  of the panel (ReliefProbe - the same read an FN press makes)
 ;  confirms the list.  Then the cheat sheet comes up by itself and
 ;  the box's relief buttons work without FN.  The panel gone (two
