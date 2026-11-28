@@ -2906,13 +2906,11 @@ ScrambleBoxVote(k, n) {
 ScrambleBoxTake(k, c) {
     global ScrambleCoolDown, ScrambleArmedTick, ScrambleTries, ScrambleLastRead, ScrambleBoxCards
     global ScrambleBoxPick, ScrambleBoxRetry
-    if (c.hwnd && !WinActive("ahk_id " . c.hwnd)) {
-        h := c.hwnd
-        WinActivate, ahk_id %h%
-        Sleep, 150
-    }
     ScrambleHidePreview()
-    Send, %k%
+    ; A held keypress into the game window, like every box key GSPro
+    ; must not miss between frames (SendSecondaryKey).
+    if (!SendSecondaryKey(k . ""))
+        return
     if (c.auto) {
         ScrambleCoolDown := true
         ScrambleArmedTick := 0

@@ -4,7 +4,7 @@
 
 [Full how-to guide](HOW_TO_USE.txt) · [Scramble highlight with screenshots](docs/scramble-preview.md)
 
-BA Remapper is the companion app for the BA Custom Products wireless control box. Out of the box, every button sends its printed GSPro hotkey with no software at all. BA Remapper adds the FN secondary layer (the yellow print) with an on-screen FN cheat sheet, support for GSPro 4's relief list (including a one-press Mulligan when mulligans are on), on-screen Smart Clicks powered by built-in Windows OCR, your own custom layouts, and an automatic scramble shot picker. Free with your box; installs like any normal Windows program (a portable version is available too).
+BA Remapper is the companion app for the BA Custom Products wireless control box. Out of the box, every button sends its printed GSPro hotkey with no software at all. BA Remapper adds the FN secondary layer (the yellow print) with an on-screen cheat sheet that shows a picture of your box, support for GSPro 4's relief list (the buttons work there without FN, and a one-press Mulligan when mulligans are on), scramble card picking from the box, on-screen Smart Clicks powered by built-in Windows OCR, your own custom layouts, and an automatic scramble shot picker. Free with your box; installs like any normal Windows program (a portable version is available too).
 
 ---
 
@@ -32,7 +32,7 @@ The installer puts BA Remapper in Program Files, adds it to the Start Menu and *
 2. **Button Mapping** turns ON by itself every time BA Remapper opens (Ctrl+F12 or the button turns it off to type). Tap for a white function; hold Reset Aim (A) and tap another button for its yellow function. FN + either club button sends Camera Clip / Clear View (B).
 3. To change a function, choose **Customize a Copy**, give it a name, open the Builder, click a button, choose the action, and **Save**. The original preset and Windows Startup Profile stay unchanged. **New Blank** starts without secondary actions.
 4. Optional: choose **Use Current Profile at Windows Startup**, then check **Start with Windows**.
-5. Hold FN in GSPro to see the **FN cheat sheet**; **Size and Place...** on the main window sets its size and spot.
+5. Hold FN in GSPro to see the **cheat sheet**, a picture of your box with each button's job. On GSPro 4's water / OB relief list and on the scramble cards it comes up **by itself** and the buttons work **without FN** (FN + Club is still Clear View). **Size and Place...** on the main window sets its size and spot.
 
 **Button Mapping and Scramble Auto-Pick have separate status indicators.** Turning mapping off with Ctrl+F12 does not turn Auto-Pick off; use its own checkbox. **Reset Smart Click Spots** clears only learned OCR positions and temporary click caches so the next press reads the screen and learns again. Profiles, startup preferences, and Taught Screen Click positions are kept.
 
@@ -162,6 +162,8 @@ The main window, Builder and action editor can be resized and scrolled when they
 ---
 
 ## Version History
+
+**v5.3.0** — The cheat sheet is now a real picture of the V2.5 box (round buttons) with the yellow print on it. A light screen watch (a few pixels, no screen reading until something shows up) finds GSPro 4's relief list and the scramble cards: the sheet comes up by itself and says what each button does on that screen, and the buttons work there without FN. Scramble: Reset Aim (tap) / Tee Left / Tee Right / Shot Cam pick card 1-4 (GSPro shows that ball), Aim Right takes it; Auto-Pick takes the box's card at zero.
 
 **v5.2.2** — Mulligan button on GSPro 4's water relief list: it highlighted Mulligan but did not press Enter (the highlighted 4th card was not read: its number circle shifted its line out of the list's column). The highlighted card now always counts, a card without its detail line still counts, text beside the list can't hide a title, the list is read again while GSPro moves the map, and Enter alone takes a Mulligan that is already highlighted.
 
